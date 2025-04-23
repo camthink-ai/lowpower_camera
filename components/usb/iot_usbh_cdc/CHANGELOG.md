@@ -1,0 +1,53 @@
+# ChangeLog
+
+## v1.0.0 - 2024-10-31
+
+### Break Changes:
+
+* Remove the dependency on the `iot_usbh` component and use `usb_host_driver` instead.
+
+### API Break Changes:
+
+* Add `usbh_cdc_create()`
+* Add `usbh_cdc_delete()`
+* Add `usbh_cdc_desc_print()` to print CDC descriptor
+* Rename `usbh_cdc_get_itf_state()` to `usbh_cdc_get_state()`
+* Remove `usbh_cdc_wait_connect()`
+* Remove `usbh_cdc_itf_write_bytes()`
+* Remove `usbh_cdc_get_buffered_data_len()`
+* Remove `usbh_cdc_itf_get_buffered_data_len()`
+* Remove `usbh_cdc_itf_read_bytes()`
+
+## v0.2.2 - 2023-12-08
+
+* Add doc and example
+
+## v0.2.1 - 2023-11-23
+
+* Fix possible cmake_utilities dependency issue
+
+## v0.2.0 - 2023-10-09
+
+* add hardware test
+* decrease the stack priority to `usb base` level
+
+## v0.1.3 - 2023-04-17
+
+### Bug Fixes:
+
+* Update iot_usbh version to 0.1.2, fix build error with latest ESP-IDF `release/v4.4`
+
+## v0.1.2 - 2023-02-21
+
+### Bug Fixes:
+
+* Fix the multi-thread access error caused by `usbh_cdc_driver_delete()`
+
+## v0.1.1 - 2023-02-13
+
+* Support IDF5.0
+* Change dependency iot_usbh to public
+
+## v0.1.0 - 2023-02-02
+
+* initial version

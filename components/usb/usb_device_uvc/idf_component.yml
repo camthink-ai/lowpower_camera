@@ -1,0 +1,24 @@
+version: "1.1.2"
+targets:
+  - esp32s2
+  - esp32s3
+  - esp32p4
+
+description: USB Device UVC, Streaming Video to Host
+url: https://github.com/espressif/esp-iot-solution/tree/master/components/usb/usb_device_uvc
+documentation: https://docs.espressif.com/projects/esp-iot-solution/en/latest/usb/usb_device/usb_device_uvc.html
+repository: https://github.com/espressif/esp-iot-solution.git
+issues: https://github.com/espressif/esp-iot-solution/issues
+
+dependencies:
+  idf: ">=5.0"
+  espressif/tinyusb:
+    # Pinned to version 0.15.0~10 until https://github.com/espressif/tinyusb/pull/36 is merged.
+    version: "0.15.0~10"
+  cmake_utilities: "*"
+examples:
+  - path: ../../../examples/usb/device/usb_webcam
+  - path: ../../../examples/usb/device/usb_dual_uvc_device
+sbom:
+  supplier: 'Organization: Espressif Systems (Shanghai) CO LTD'
+  originator: 'Organization: Espressif Systems (Shanghai) CO LTD'

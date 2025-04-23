@@ -1,0 +1,150 @@
+menu "USB Stream"
+
+    config CTRL_TRANSFER_DATA_MAX_BYTES
+        int "Max control transfer data size (Bytes)"
+        range 64 2048
+        default 1024
+    config USB_STREAM_QUICK_START
+        bool "usb stream quick start"
+        default n
+    config UVC_GET_DEVICE_DESC
+        bool "Get device descriptor during emum"
+        depends on !USB_STREAM_QUICK_START
+        default y
+    config UVC_GET_CONFIG_DESC
+        bool "Get and parse config descriptor during emum"
+        depends on !USB_STREAM_QUICK_START
+        select UVC_GET_DEVICE_DESC
+        default y
+    config UVC_PRINT_DESC
+        bool "Print descriptor info"
+        depends on !USB_STREAM_QUICK_START
+        default y
+    config UVC_PRINT_DESC_VERBOSE
+        bool "Print descriptor info in verbose mode"
+        depends on UVC_PRINT_DESC
+        default n
+    config USB_PRE_ALLOC_CTRL_TRANSFER_URB
+        bool "Pre-allocate control transfer urb, set to n if you want to use dynamic alloc"
+        default y
+    config USB_PROC_TASK_PRIORITY
+        int "usb process task priority"
+        range 1 25
+        default 5
+    config USB_PROC_TASK_CORE
+        int "usb process task core id"
+        range 0 1
+        default 1 if IDF_TARGET_ESP32S3 && !FREERTOS_UNICORE
+        default 0 if IDF_TARGET_ESP32S2
+        default 0
+    config USB_PROC_TASK_STACK_SIZE
+        int "usb process task stack size (Bytes)"
+        default 3072
+    config USB_WAITING_AFTER_CONN_MS
+        int "usb enum delay time(ms) after device connection"
+        default 50
+    config USB_CTRL_XFER_TIMEOUT_MS
+        int "usb control transfer timeout(ms)"
+        default 1000
+    config USB_ENUM_FAILED_RETRY
+        bool "usb enum retry if device enum failed"
+        default y
+    config USB_ENUM_FAILED_RETRY_COUNT
+        int "usb enum retry max times, stop retry if times exceed"
+        depends on USB_ENUM_FAILED_RETRY
+        default 10
+    config USB_ENUM_FAILED_RETRY_DELAY_MS
+        int "usb enum retry delay time(ms)"
+        depends on USB_ENUM_FAILED_RETRY
+        default 200
+
+    menu "UVC Stream Config"
+        config SAMPLE_PROC_TASK_PRIORITY
+            int "uvc sample process task priority"
+            range 1 25
+            default 2
+        config SAMPLE_PROC_TASK_CORE
+            int "uvc sample process task core id"
+            range -1 1
+            default 0
+                help
+                    -1: not affinity, 0: APP_CPU, 1: PRO_CPU
+        config SAMPLE_PROC_TASK_STACK_SIZE
+            int "uvc sample process task stack size (Bytes)"
+            default 3072
+        config UVC_PRINT_PROBE_RESULT
+            bool "Print video cur probe result"
+            default y
+        config UVC_PRINT_PAYLOAD_HEX
+            bool "Print video payload in hex format"
+            default n
+        config UVC_CHECK_HEADER_EOH
+            bool "Check EOH bit in payload header"
+            default n
+        config UVC_CHECK_HEADER_EOF
+            bool "Check EOF bit in payload header"
+            default y
+            help
+                "If EOF(1 << 1) is set in the header, it means the current image frame has been completely received."
+        config UVC_CHECK_BULK_JPEG_HEADER
+            bool "Check JPEG (ff d8) header in bulk payload"
+            default y
+        config UVC_DROP_NO_EOF_FRAME
+            bool "Drop no EOF image frames"
+            depends on UVC_CHECK_HEADER_EOF
+            default n
+        config UVC_DROP_OVERFLOW_FRAME
+            bool "Drop overflow image frames"
+            default y
+        config NUM_BULK_STREAM_URBS
+            int "uvc bulk urb number"
+            default 2
+        config NUM_BULK_BYTES_PER_URB
+            int "uvc bulk segment size in each urb transfer"
+            default 2048
+        config NUM_ISOC_UVC_URBS
+            int "uvc isoc urb number"
+            default 3
+        config NUM_PACKETS_PER_URB
+            int "uvc isoc packet number in each urb"
+            default 4
+    endmenu
+
+    menu "UAC Stream Config"
+        config NUM_ISOC_SPK_URBS
+            int "uac speaker isoc urb number"
+            default 3
+        config NUM_ISOC_MIC_URBS
+            int "uac microphone isoc urb number"
+            default 3
+        config UAC_MIC_CB_MIN_MS_DEFAULT
+            int "uac microphone default cb interval (ms)"
+            default 16
+            range 1 32
+        config UAC_SPK_ST_MAX_MS_DEFAULT
+            int "uac speaker default max tx size (ms)"
+            default 16
+            range 1 32
+        config UAC_MIC_PACKET_COMPENSATION
+            bool "uac microphone packet compensation"
+            default n
+        config UAC_SPK_PACKET_COMPENSATION
+            bool "uac speaker packet compensation"
+            default y
+        config UAC_SPK_PACKET_COMPENSATION_CONTINUOUS
+            bool "speaker continuous compensation"
+            depends on UAC_SPK_PACKET_COMPENSATION
+            default y
+        config UAC_SPK_PACKET_COMPENSATION_TIMEOUT_MS
+            int "speaker compensation after buffer empty timeout(ms)"
+            depends on UAC_SPK_PACKET_COMPENSATION
+            default 80
+            range 10 1000
+        config UAC_SPK_PACKET_COMPENSATION_SIZE_MS
+            int "speaker compensation size (ms)"
+            depends on UAC_SPK_PACKET_COMPENSATION
+            default 10
+            range 1 32
+    endmenu
+
+endmenu

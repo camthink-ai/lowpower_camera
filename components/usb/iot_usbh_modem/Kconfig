@@ -1,0 +1,157 @@
+menu "IoT USB Host Modem"
+
+    choice MODEM_TARGET
+        prompt "Choose Modem Board"
+        default MODEM_TARGET_ML302_DNLM
+
+        config MODEM_TARGET_ML302_DNLM
+            bool "ML302-DNLM/CNLM"
+        config MODEM_TARGET_AIR724UG_NFM
+            bool "AIR724UG-NFM"
+        config MODEM_TARGET_AIR780_E
+            bool "AIR780E"
+        config MODEM_TARGET_EC600N_CNLA_N05
+            bool "EC600NCNLA-N05"
+        config MODEM_TARGET_EC600N_CNLC_N06
+            bool "EC600NCNLC-N06"
+        config MODEM_TARGET_A7600C1
+            bool "A7600C1"
+        config MODEM_TARGET_BG95_M3
+            bool "BG95M3"
+        config MODEM_TARGET_BG96_MA
+            bool "BG96MA"
+        config MODEM_TARGET_MC610_EU
+            bool "MC610_EU"
+        config MODEM_TARGET_USER
+            bool "User Defined"
+    endchoice
+
+    config MODEM_TARGET_NAME
+        string
+        default "ML302-DNLM/CNLM" if MODEM_TARGET_ML302_DNLM
+        default "AIR724UG-NFM" if MODEM_TARGET_AIR724UG_NFM
+        default "EC600NCNLA-N05" if MODEM_TARGET_EC600N_CNLA_N05
+        default "EC600NCNLC-N06" if MODEM_TARGET_EC600N_CNLC_N06
+        default "A7600C1" if MODEM_TARGET_A7600C1
+        default "AIR780E" if MODEM_TARGET_AIR780_E
+        default "BG95M3" if MODEM_TARGET_BG95_M3
+        default "BG96MA" if MODEM_TARGET_BG96_MA
+        default "MC610_EU" if MODEM_TARGET_MC610_EU
+        default "User Defined" if MODEM_TARGET_USER
+
+    config MODEM_SUPPORT_SECONDARY_AT_PORT
+        bool "Enable Dual CDC Mode"
+        depends on (MODEM_TARGET_MC610_EU || MODEM_TARGET_USER)
+        default y if MODEM_TARGET_MC610_EU
+        default n if MODEM_TARGET_USER
+
+    menu "USB CDC interface config"
+        config MODEM_USB_ITF
+            hex "Modem USB CDC interface"
+            default 0x00 if MODEM_TARGET_ML302_DNLM
+            default 0x04 if MODEM_TARGET_EC600N_CNLC_N06
+            default 0x06 if MODEM_TARGET_MC610_EU
+            default 0x05 if MODEM_TARGET_A7600C1
+            help
+                USB CDC interface (eg.0x00) used for send AT/data to device
+
+        config MODEM_USB_ITF2
+            hex "Modem USB CDC interface 2 (AT Only)"
+            depends on MODEM_SUPPORT_SECONDARY_AT_PORT
+            default 0x01 if MODEM_TARGET_USER
+            default 0x05 if MODEM_TARGET_MC610_EU
+            help
+                USB CDC interface 2 (eg.0x01) used for send AT/data to device
+    endmenu
+
+    config MODEM_DIAL_RETRY_TIMES
+        int "Retry Times During Dial-up"
+        default 5
+        help
+            Set retry times waiting for modem link with carrier base station
+
+    config MODEM_PPP_APN
+        string "Set Modem APN"
+        default "internet"
+        help
+            Set APN (Access Point Name), a logical name to choose data network
+
+    config MODEM_SIM_PIN_PWD
+        string "Set SIM PIN"
+        default "1234"
+        help
+            Set Pin of sim card if have
+
+    menu "GPIO Config"
+        config MODEM_POWER_GPIO
+            int "Modem power control gpio, set 0 if not use"
+            default 12
+        config MODEM_RESET_GPIO
+            int "Modem reset control gpio, set 0 if not use"
+            default 13
+        config MODEM_POWER_GPIO_INACTIVE_LEVEL
+            int "Power control gpio inactive level"
+            range 0 1
+            default 1
+        config MODEM_RESET_GPIO_INACTIVE_LEVEL
+            int "Reset control gpio inactive level"
+            range 0 1
+            default 1
+    endmenu
+
+    menu "Timeout Config"
+        config MODEM_COMMAND_TIMEOUT_DEFAULT
+            int "Timeout (ms) for common AT command"
+            default 2000
+        config MODEM_COMMAND_TIMEOUT_OPERATOR
+            int "Timeout (ms) for getting operator status"
+            default 6000
+        config MODEM_COMMAND_TIMEOUT_RESET
+            int "Timeout (ms) for reset command"
+            default 6000
+        config MODEM_COMMAND_TIMEOUT_MODE_CHANGE
+            int "Timeout (ms) for changing working mode"
+            default 10000
+        config MODEM_COMMAND_TIMEOUT_POWEROFF
+            int "Timeout (ms) for power down"
+            default 1000
+    endmenu
+
+    menu "Wi-Fi SoftAP"
+
+        config MODEM_WIFI_SSID
+            string "WiFi SSID"
+            default "esp_4g_router"
+            help
+                SSID (network name) for the example to connect to.
+        config MODEM_WIFI_PASSWORD
+            string "WiFi Password"
+            default "12345678"
+            help
+                WiFi password (WPA or WPA2) for the example to use.
+        config MODEM_WIFI_CHANNEL
+            int "WiFi Channel"
+            range 1 13
+            default 6
+            help
+                WiFi channel (network channel) for the example to use.
+        choice
+            prompt "WiFi Bandwidth"
+            default WIFI_BANDWIFTH_40
+
+            config WIFI_BANDWIFTH_20
+                bool "20MHz"
+            config WIFI_BANDWIFTH_40
+                bool "40MHz"
+        endchoice
+        config MODEM_WIFI_MAX_STA
+            int "Maximal STA connections"
+            default 10
+            help
+                Max number of the STA connects to AP.
+        config MODEM_WIFI_DEFAULT_DNS
+            string  "WiFi softap default DNS address"
+            default "8.8.8.8"
+    endmenu
+
+endmenu

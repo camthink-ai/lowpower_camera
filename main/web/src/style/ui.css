@@ -1,0 +1,569 @@
+@import url(./select.css);
+
+/* 默认的组件样式 */
+:root {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+
+    color-scheme: light dark;
+    color: rgba(255, 255, 255, 0.87);
+    background-color: #242424;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    /* display: flex; */
+    font-size: 15px;
+    place-items: center;
+    /* min-width: 320px; */
+    min-height: 100vh;
+    color: #333333;
+    background-color: #E8E8E8;
+}
+
+h1 {
+    font-size: 3.2em;
+    line-height: 1.1;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #e5e5e5;
+    border-radius: 35px;
+}
+
+/* 按钮 */
+button {
+    display: flex;
+    box-sizing: border-box;
+    width: 82px;
+    height: 32px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 4px;
+    padding: 0.6em 1.2em;
+    font-size: 16px;
+    font-family: inherit;
+    background: #fff;
+    cursor: pointer;
+    line-height: 10px;
+    /* Compatible with Safari */
+}
+
+button:hover {
+    transition: all .2s linear;
+}
+
+/* 按钮样式-朴素 */
+button.plain {
+    height: 32px;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+button.plain.long-char {
+    width: auto;
+}
+button.plain.disabled-btn {
+    cursor: not-allowed;
+    color: #B1B1B1;
+    border:1px solid #B1B1B1;
+}
+button.plain.disabled-btn:hover {
+    background-color: #fff;
+}
+
+button.plain:hover {
+    border: 1px solid var(--primary-color-light);
+    color: var(--primary-color-light);
+}
+button.plain:active {
+    border: 1px solid var(--primary-color-dark);
+    color: var(--primary-color-dark);
+}
+
+button.plain-yellow {
+    border: 1px solid #FFA43D;
+    color: #FFA43D;
+    width: 80px;
+}
+
+button.plain-yellow:hover {
+    background-color: #fef5e8;
+}
+
+button.primary {
+    width: 100%;
+    height: 40px;
+    color: #fff;
+    background: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+button.primary:hover, button.mini-primary:hover {
+    background: var(--primary-color-light);
+}
+button.primary:active, button.mini-primary:active {
+    background: var(--primary-color-dark);
+}
+
+button.mini-primary {
+    height: 32px;
+    width: 100%;
+    color: #fff;
+    background: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+button.mini-primary.disabled-btn {
+    cursor: not-allowed;
+    color: #fff;
+    border:1px solid #a0cfff;
+    background-color: #a0cfff;
+}
+button.mini-primary.disabled-btn:hover {
+    border:1px solid #a0cfff;
+    background-color: #a0cfff;
+}
+button.mini {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #e5e5e5;
+    color: #AEABAB;
+    padding: 0;
+    margin-left: 10px;
+    line-height: 1px;
+    /* Compatible with Safari */
+}
+
+button.mini:hover {
+    border: 1px solid #a8abb2;
+}
+
+button.icon {
+    width: 25px;
+    height: 30px;
+    border: 0;
+    color: #333333;
+    padding: 0;
+    display: inline-block;
+    background-color: transparent;
+}
+
+button.icon:hover svg g {
+    fill: #787878;
+    transition: all .2s linear;
+}
+
+input {
+    outline: none;
+    -webkit-appearance: none;
+    font-size: 15px;
+}
+
+/* 滑动条 */
+input[type="range"] {
+    appearance: none;
+    cursor: pointer;
+    width: 125px !important;
+    height: 6px;
+    background: #efefef;
+    border-radius: 3px;
+    outline: none;
+    margin: 0 0 0 5px;
+    /* 在滑动时不触发Android浏览器左右滑动切页 */
+    touch-action: none;
+}
+
+/* 滑动条-按钮-Chrome */
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    /*清除系统默认样式*/
+    height: 15px;
+    /*拖动块高度*/
+    width: 15px;
+    /*拖动块宽度*/
+    background: #fff;
+    /*拖动块背景*/
+    border-radius: 50%;
+    /*外观设置为圆形*/
+    border: 1px solid var(--primary-color);
+}
+
+/* 滑动条-滑轨-Chrome 不支持CSS 用JS计算 */
+/* 滑动条-按钮-Firefox */
+input[type="range"]::-moz-range-thumb {
+    appearance: none;
+    /*清除系统默认样式*/
+    height: 15px;
+    /*拖动块高度*/
+    width: 15px;
+    /*拖动块宽度*/
+    background: #fff;
+    /*拖动块背景*/
+    border-radius: 50%;
+    /*外观设置为圆形*/
+    border: 1px solid var(--primary-color);
+    /*设置边框*/
+}
+
+/* 滑动条-滑轨-Firefox */
+input[type="range"]::-moz-range-progress {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(
+        to right,
+        var(--primary-color),
+        var(--primary-color) 100%,
+        #f0f0f0);
+}
+
+/* 移动端滑动目标调大 */
+@media screen and (max-width: 767px) {
+    input[type="range"] {
+        height: 8px;
+    }
+
+    input[type="range"]::-moz-range-progress {
+        height: 8px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+        height: 16px;
+        width: 16px;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+        height: 16px;
+        width: 16px;
+    }
+}
+
+input {
+    position: relative;
+}
+
+.slider-box {
+    display: flex;
+    align-items: center;
+}
+
+.slider-box span {
+    margin-right: 8px;
+    display: inline-block;
+    width: 25px;
+}
+
+.slider-box span:nth-child(1) {
+    text-align: right;
+}
+
+.slider-box span:nth-child(2) {
+    text-align: left;
+}
+
+div.error-input {
+    display: inline-block;
+    z-index: 100;
+    min-width: 85px;
+    padding: 3px;
+    margin-top: 5px;
+    line-height: 1.5;
+    color: #fff;
+    background: var(--red-color);
+    border-radius: 4px;
+    border: 1px solid var(--red-color);
+    /* word-break: keep-all; 修复移动端超出问题*/
+    text-align: left;
+    position: absolute;
+    top: 36px;
+}
+
+div.error-input::after {
+    content: "";
+    width: 0;
+    height: 0;
+    font-size: 0;
+    overflow: hidden;
+    display: block;
+    border-width: 6px;
+    border-color: transparent transparent var(--red-color) transparent;
+    border-style: solid dashed dashed dashed;
+    position: absolute;
+    left: 20%;
+    top: -12px;
+    z-index: 200;
+    background: transparent;
+}
+
+textarea {
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    width: 164px;
+    height: 30px;
+    border-radius: 4px;
+    padding-left: 10px;
+    border: 1px solid #e5e5e5;
+    color: #333333;
+    background: #fff;
+    font-size: inherit;
+    font-family: inherit;
+    outline: none;
+    line-height: 1.5;
+    overflow: visible;
+    resize: none;
+    scrollbar-width: none;
+    word-break: break-all;
+}
+
+textarea::-webkit-scrollbar {
+    width: 0px;
+}
+
+
+/* 开关 */
+span.switch input {
+    display: none;
+}
+
+span.switch .switch-content {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 16px;
+    background: #e5e5e5;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s 0s;
+}
+
+/* 开关的白色圆形按钮 */
+span.switch .switch-content::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 14px;
+    height: 14px;
+    border-radius: 18px;
+    background-color: white;
+    transition: all 0.3s 0s;
+}
+
+input[type="checkbox"]:checked+.switch-content::after {
+    transform: translateX(20px);
+}
+
+input[type="checkbox"]:checked+.switch-content {
+    background-color: var(--primary-color);
+}
+
+/* 文本输入框 */
+input[type="text"],
+input[type="password"] {
+    box-sizing: border-box;
+    width: 164px;
+    height: 30px;
+    color: #333333;
+    border-radius: 4px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    padding-left: 10px;
+}
+
+/* 密码输入框 */
+.input-password {
+    position: relative;
+}
+
+.input-password input {
+    width: 180px !important;
+}
+
+.input-password input+.input-password-icon svg {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    position: absolute;
+    right: 0px;
+    margin: 3px;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        color: #213547;
+        background-color: #ffffff;
+    }
+}
+
+/* 弹窗样式 */
+.dialog-shade {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    /* 透明度应使用rgba()以便兼容 */
+    background-color: rgba(171, 171, 171, 0.51);
+    z-index: 2001;
+    transition: all 0.3 0s;
+}
+
+.dialog-box {
+    position: relative;
+    max-width: 400px;
+    margin: 15vh auto;
+    border-radius: 6px;
+    background-color: white;
+}
+
+.dialog-box .dialog-header {
+    height: 34px;
+    line-height: 34px;
+    text-align: center;
+    background-color: var(--primary-color);
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+}
+
+.dialog-header-title {
+    color: white;
+    font-size: 16px;
+}
+
+.dialog-header-close {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    color: white !important;
+}
+
+.dialog-box .dialog-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    padding: 10px;
+    background-color: white;
+    text-align: center;
+
+}
+
+.dialog-content .label {
+    margin-right: 10px;
+}
+
+
+.dialog-footer {
+    display: flex;
+    justify-content: center;
+    padding-bottom: 21px;
+}
+
+.dialog-footer button {
+    width: 82px;
+    height: 34px;
+}
+
+.dialog-footer button:nth-child(2) {
+    width: 82px;
+    height: 34px;
+    margin-left: 10px;
+}
+
+.dialog-footer .progress {
+    width: 80%;
+    height: 34px;
+    background-color: #e9e9e9;
+}
+
+.progress-bar {
+    height: 100%;
+}
+
+.progress-bar .progress-bar__outer {
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar__inner {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    color: white;
+    background-color: var(--primary-color);
+    text-align: right;
+    line-height: 34px;
+    white-space: nowrap;
+    transition: width .6s ease;
+}
+
+.footer {
+    width: 100%;
+    margin: 20px 0 70px 0;
+}
+
+/* 错误消息提示框 */
+.ms-message {
+    top: 20px;
+    z-index: 2004;
+    box-sizing: border-box;
+    border-radius: 4px;
+    border: 1px solid #ebeef5;
+    position: fixed;
+    left: 50%;
+    background-color: #edf2fc;
+    transform: translateX(-50%);
+    transition: opacity .3s, transform .4s, top .4s;
+    overflow: hidden;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    background-color: #fef0f0;
+    border-color: #fde2e2;
+}
+
+.ms-message i {
+    margin-right: 10px;
+    display: inline-flex;
+    width: 15px;
+    height: 15px;
+    background-color: var(--red-color);
+    border-radius: 50%;
+    color: white;
+    justify-content: center;
+    align-items: center;
+}
+
+.ms-message p {
+    margin: 8px;
+    color: var(--red-color)
+}
+
+/* Input placeholder color */
+::placeholder {
+    color: #AEABAB;
+    /* Firefox */
+    opacity: 1;
+}
+
+:-ms-input-placeholder {
+    /* Internet Explorer 10-11 */
+    color: #AEABAB;
+}
+
+::-ms-input-placeholder {
+    /* Microsoft Edge */
+    color: #AEABAB;
+}
