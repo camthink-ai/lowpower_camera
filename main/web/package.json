@@ -1,0 +1,23 @@
+{
+  "name": "ne101-web",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "rimraf dist && vite build && node addTimestamp.js",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vue/reactivity": "^3.2.27",
+    "@vue/shared": "^3.2.27",
+    "chalk": "^4.1.1",
+    "enquirer": "^2.3.6",
+    "execa": "^5.0.0",
+    "prettier": "^2.3.0",
+    "rimraf": "^5.0.1",
+    "semver": "^7.3.5",
+    "vite": "^2.7.12",
+    "vite-plugin-html-minifier-terser": "^2.0.3",
+    "vite-plugin-remove-console": "^1.1.0"
+  }
+}

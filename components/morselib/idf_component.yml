@@ -1,0 +1,8 @@
+## IDF Component Manager Manifest File
+dependencies:
+  idf:
+    version: "==5.1.1"
+description: Morselib WLAN component for the esp32s3
+targets:
+  - esp32s3
+version: "2.3.0+pre-esp32"

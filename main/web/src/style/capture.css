@@ -1,0 +1,79 @@
+/* Image Adjustment */
+.light-time-content input {
+    width: 38px
+}
+
+.light-time-content span {
+    font-weight: 700;
+    margin: 0 5px;
+}
+
+/* Timed Capture */
+.capture-card .card-list {
+    /* 列表数据为空仍显示四行的空间 */
+    height: 192px;
+}
+.capture-time-content .card-item-content {
+    display: flex;
+    justify-content: space-around;
+}
+.capture-time-content .card-item-label {
+    white-space: nowrap;
+}
+.capture-mode-select .ms-select{
+    width: 155px;
+}
+.capture-time-select .ms-select {
+    width: 82px;
+    margin-right: 4px;
+    flex: 1;
+}
+.capture-time-select .ms-select .ms-select-wrapper input {
+    width: 100% !important;
+    padding-left: 5px;
+}
+.capture-time-content .number input {
+    width: 32px !important;
+    box-sizing: border-box;
+    flex: 1;
+    padding-left: 0;
+    text-align: center;
+}
+/* 间隔冒号加粗 */
+.capture-time-content .number span {
+    font-weight: 700;
+}
+
+.capture-time-content .number + button.mini {
+    margin-left: 4px;
+}
+
+.card-time-list-item {
+    display: inline-block;
+    height: 48px;
+    line-height: 48px;
+    box-sizing: border-box;
+    width: 50%;
+    padding: 0 5px 0 7px;
+}
+
+.card-time-list-item .time-list-item-btn {
+    display: inline-block;
+    width: 20px;
+}
+
+/* Interval Capture */
+.capture-interval-input {
+    max-width: 50px;
+    margin-right: 10px;
+}
+
+.capture-interval-select {
+    width: 75px;
+}
+.capture-interval-select .ms-select {
+    width: 100% !important;
+}
+.capture-interval-select .ms-select .ms-select-dropdown{
+    width: 100% !important;
+}

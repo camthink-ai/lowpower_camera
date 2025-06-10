@@ -1,0 +1,93 @@
+/* 下拉选择框组件样式 */
+.ms-select {
+    position: relative;
+    width: 150px;
+    cursor: pointer;
+}
+
+.ms-select .ms-select-wrapper {
+    width: 100%;
+    background-color: transparent;
+}
+
+.ms-select .ms-select-wrapper input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 30px;
+    line-height: 30px;
+    padding-right: 30px;
+    border-radius: 4px;
+    border: 1px solid #e5e5e5;
+    color: #333333;
+    background-color: inherit;
+    cursor: inherit;
+    outline: none;
+}
+.ms-select .ms-select-wrapper:hover input {
+    border: 1px solid #a8abb2;
+    transition: all .2s linear;
+}
+
+.ms-select-suffix {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    margin: 5px;
+    position: absolute;
+    right: 5px;
+    top: 0;
+    text-align: center;
+}
+
+.icon-arrow {
+    display: inline-block;
+    width: 6px !important;
+    height: 6px;
+    border-bottom: 1.9px solid #858585;
+    border-right: 1.9px solid #858585;
+    transform: rotate(45deg);
+}
+
+.ms-select-suffix .icon-arrow {
+    top: 4px;
+    position: absolute;
+}
+
+.ms-select-dropdown {
+    position: absolute;
+    top: 33px;
+    box-sizing: border-box;
+    width: 100%;
+    border: 1px solid #ebebeb;
+    border-radius: 4px;
+    background: #fff;
+    z-index: 2000;
+}
+
+ul.ms-select-dropdown__list {
+    box-sizing: border-box;
+    width: 100% !important;
+    padding: 6px 0;
+    margin: 0;
+    list-style: none;
+}
+
+li.ms-select-dropdown__item {
+    box-sizing: border-box;
+    width: 100% !important;
+    height: 26px;
+    line-height: 26px;
+    padding-left: 10px;
+    font-size: 14px;
+    background: #fff;
+    color: #333333;
+    cursor: pointer;
+}
+
+li.ms-select-dropdown__item:hover {
+    background-color: #efefef;
+}
+
+li.ms-select-dropdown__item.selected {
+    color: var(--primary-color);
+}

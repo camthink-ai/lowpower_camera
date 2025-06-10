@@ -1,0 +1,79 @@
+menu "Morse Micro Shim Configuration"
+    config MM_RESET_N
+        int "RESET_N pin for MM chip"
+        default 3
+        help
+            Output gpio pin used to control the RESET_N line.
+
+    config MM_WAKE
+        int "WAKE pin for MM chip"
+        default 8
+        help
+            Output gpio pin used to control the WAKE line.
+
+    config MM_BUSY
+        int "BUSY pin for the MM chip"
+        default 9
+        help
+            Input pin used as a rising edge interrupt.
+
+    config MM_SPI_SCK
+        int "SCK pin for MM chip"
+        default 12
+        help
+            SPI clock pin.
+
+    config MM_SPI_MOSI
+        int "MOSI pin for MM chip"
+        default 11
+        help
+            SPI master out slave in pin.
+
+    config MM_SPI_MISO
+        int "MISO pin for MM chip"
+        default 13
+        help
+            SPI master in slave out pin.
+
+    config MM_SPI_CS
+        int "SPI CS pin for MM chip"
+        default 10
+        help
+            SPI chip select pin.
+
+    config MM_POWER
+        int "POWER pin for MM chip"
+        default 48
+        help
+            power control pin.
+
+    config MM_SPI_IRQ
+        int "SPI IRQ pin for MM chip"
+        default 21
+        help
+            Out of band interupt pin used to indicate that
+            the MM chip has data for the host.
+
+    choice MM_BCF
+        prompt "BCF to link when building the FW"
+        default MM_BCF_MF08551
+        help
+            The Board Configuration File (BCF) is a configuration file for the Morse Micro chip that provides
+            board-specific information and is required for the system to function properly. BCFs for Morse Micro
+            modules are included in the MM-IoT-SDK package. These modules can be identified by the part numbers
+            printed on their labels, which take the form MM6108-MFxxxxxx.
+
+        config MM_BCF_MF08651
+            bool  "mf08651"
+        config MM_BCF_MF08551
+            bool  "mf08551"
+        config MM_BCF_MF08251
+            bool  "mf08251"
+        config MM_BCF_MF08251_CE
+            bool  "mf08251-ce"
+        config MM_BCF_MF08251_FCC
+            bool  "mf08251-fcc"
+        config MM_BCF_MF03120
+            bool  "mf03120"
+    endchoice
+endmenu
