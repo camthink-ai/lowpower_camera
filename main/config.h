@@ -224,6 +224,7 @@ typedef struct mqttPlatformAttr {
     uint8_t qos;
     char username[MAX_LEN_64];
     char password[MAX_LEN_64];
+    uint8_t isConnected;
 } mqttPlatformAttr_t;
 
 /**

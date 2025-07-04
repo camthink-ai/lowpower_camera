@@ -37,7 +37,7 @@ static EventGroupHandle_t s_evt_handle;
 #define DEMO_UVC_FRAME_HEIGHT       720
 #endif
 
-#define DEMO_UVC_XFER_BUFFER_SIZE (300 * 1024)
+#define DEMO_UVC_XFER_BUFFER_SIZE (1024 * 1024)
 
 #define FRAME_XFER_DIV 3          /* Frame transfer interval divisor */
 #define FRAME_SAVE_CNT 1          /* Number of frames to buffer */
@@ -53,7 +53,8 @@ static int frame_index = 0;
  * @param buf Pointer to JPEG data buffer
  * @param size Size of JPEG data buffer
  */
-void readJPEGResolutionFromBuffer(const unsigned char *buf, size_t size) {
+int readJPEGResolutionFromBuffer(const unsigned char *buf, size_t size) 
+{
     int foundSOF = 0;
     size_t i = 0;
 
@@ -78,8 +79,10 @@ void readJPEGResolutionFromBuffer(const unsigned char *buf, size_t size) {
         int width = (buf[i] << 8) + buf[i + 1];
 
         ESP_LOGV(TAG,"Image resolution: %d x %d\n", width, height);
+        return 0;
     } else {
         ESP_LOGI(TAG,"No valid SOF0 marker found, invalid JPEG data\n");
+        return -1;
     }
 }
 
@@ -124,6 +127,7 @@ void uvc_camera_fb_return(camera_fb_t *fb)
  */
 static void uvc_frame_cb(uvc_frame_t *frame, void *ptr)
 {
+    static int retry = 0;
     ESP_LOGV(TAG, "uvc callback! frame_format = %d, seq = %"PRIu32", width = %"PRIu32", height = %"PRIu32", length = %u, ptr = %d",
              frame->frame_format, frame->sequence, frame->width, frame->height, frame->data_bytes, (int) ptr);
 
@@ -161,7 +165,13 @@ static void uvc_frame_cb(uvc_frame_t *frame, void *ptr)
         s_fb.height = frame->height;
         s_fb.format = PIXFORMAT_JPEG;
         s_fb.timestamp.tv_sec = frame->sequence;
-        readJPEGResolutionFromBuffer(s_fb.buf, s_fb.len);
+        if(readJPEGResolutionFromBuffer(s_fb.buf, s_fb.len) != 0){
+            if(retry < 3){
+                retry++;
+                return;
+            }
+        }
+        retry = 0;
         xEventGroupSetBits(s_evt_handle, BIT1_NEW_FRAME_START);
         ESP_LOGV(TAG, "send frame = %"PRIu32"", frame->sequence);
         xEventGroupWaitBits(s_evt_handle, BIT2_NEW_FRAME_END, true, true, portMAX_DELAY);

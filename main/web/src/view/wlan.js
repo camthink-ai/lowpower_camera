@@ -189,7 +189,7 @@ function Wlan() {
                     this.changeRegionLoading = false;
                 }
             } catch (error) {
-                this.alertErrMsg();
+                this.alertMessage("error");
             }
         },
     };

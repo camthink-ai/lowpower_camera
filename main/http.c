@@ -589,7 +589,7 @@ esp_err_t set_mqtt_param_handle(httpd_req_t *req)
         s2j_delete_struct_obj(mqtt);
         s2j_delete_json_obj(json);
         http_free_content(content);
-        if (wifi_sta_is_connected()) {
+        if (wifi_sta_is_connected() || netModule_is_cat1()) {
             mqtt_restart();
         }
         return ESP_OK;
@@ -608,6 +608,7 @@ esp_err_t get_platform_param_handle(httpd_req_t *req)
     platformParamAttr_t param;
     cfg_get_platform_param_attr(&param);
 
+    param.mqttPlatform.isConnected = mqtt_mip_is_connected(); 
     //
     s2j_create_json_obj(json_obj);
     s2j_json_set_basic_element(json_obj, &param, int, currentPlatformType);
@@ -629,6 +630,7 @@ esp_err_t get_platform_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_mqtt, mqttParam, int, qos);
     s2j_json_set_basic_element(json_mqtt, mqttParam, string, username);
     s2j_json_set_basic_element(json_mqtt, mqttParam, string, password);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, int, isConnected);
 
     char *str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -678,7 +680,7 @@ esp_err_t set_platform_param_handle(httpd_req_t *req)
         s2j_delete_struct_obj(param);
         s2j_delete_json_obj(json);
         http_free_content(content);
-        if (wifi_sta_is_connected()) {
+        if (wifi_sta_is_connected() || netModule_is_cat1()) {
             mqtt_restart();
         }
         return ESP_OK;
