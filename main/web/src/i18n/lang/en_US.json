@@ -60,7 +60,8 @@
     "otherMqttPlatform": "Other MQTT Platform",
     "httpPort": "HTTP Port",
     "qos": "QoS",
-    "clientId": "Client ID"
+    "clientId": "Client ID",
+    "status": "Status"
   },
   "sys": {
     "deviceMainte": "Device Maintenance",
@@ -99,6 +100,7 @@
   "vaildRange1-999": "Vaild range：1~999",
   "vaildTopicTips": "Valid content：1~127 characters",
   "networkError": "Network Error!",
+  "saveSuccess": "Save successfully!",
   "ok": "OK",
   "cancel": "Cancel",
   "cell": {

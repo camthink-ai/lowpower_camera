@@ -59,7 +59,7 @@ function Device() {
                         softVersion: this.firmwareVer,
                     });
                 } catch (error) {
-                    this.alertErrMsg();
+                    this.alertMessage("error");
                 }
                 
             }

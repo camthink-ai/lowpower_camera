@@ -127,7 +127,7 @@ function Capture() {
                     bButtonCap: Number(this.capButtonEnable),
                 });
             } catch (error) {
-                this.alertErrMsg();
+                this.alertMessage("error");
             }
             
             return;

@@ -14,20 +14,21 @@ import Cellular from './view/cellular';
 
 const App = {
     name: 'App',
-    showErrMsg: false,
-    alertErrMsg() {
-        this.showErrMsg = true;
+    showMsg: {
+        enable: false,
+        type: "error"
+    },
+    /**
+     * 全局提示消息框
+     * @param type "succes" | "error"
+     */
+    alertMessage(type = "error") {
+        this.showMsg.enable = true;
+        this.showMsg.type = type;
         setTimeout(() => {
-            this.showErrMsg = false;
+            this.showMsg.enable = false;
         }, 5000);
     },
-    // handleErrMsg() {
-    //     console.log("handleErrMsg")
-    //     const that = this;
-    //     const imgDom = document.getElementById("mjpeg");
-    //     imgDom.addEventListener("error", that.alertErrMsg);
-    // },
-
     /**
      * Init Request Data
      * 由于应用层目前httpserver无法支持异步，因此视频流独立一个server，其他配置请求独立一个server

@@ -44,10 +44,6 @@ static modeSel_e mode_selector(snapType_e *snapType)
         netModule_clear_check_flag();
         return MODE_SCHEDULE;
     }else if (rst == RST_SOFTWARE) {
-        if (sleep_is_alramin_goto_restart()) {
-            *snapType = SNAP_ALARMIN;
-            return MODE_WORK;
-        }
         return MODE_CONFIG;
     } else if (rst == RST_DEEP_SLEEP) {
         type = sleep_wakeup_case();
@@ -104,7 +100,6 @@ void app_main(void)
     }
     misc_open((uint8_t*)&main_mode);
     netModule_init(main_mode);
-    misc_led_blink(1, 1000);
 
     QueueHandle_t xQueueMqtt = xQueueCreate(3, sizeof(queueNode_t *));
     QueueHandle_t xQueueStorage = xQueueCreate(2, sizeof(queueNode_t *));
@@ -112,6 +107,7 @@ void app_main(void)
     mqtt_open(xQueueMqtt, xQueueStorage);
     // main_mode = MODE_WORK; //TODO: for test
     if (main_mode == MODE_WORK) {
+        misc_led_blink(1, 1000);
         ESP_LOGI(TAG, "work mode");
         camera_open(NULL, xQueueMqtt);
         camera_snapshot(snapType, 1);
@@ -120,6 +116,7 @@ void app_main(void)
         netModule_open(main_mode);
         sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | SLEEP_MIP_DONE_BIT, true);
     } else if (main_mode == MODE_CONFIG) {
+        misc_led_blink(2, 500);
         ESP_LOGI(TAG, "coinfig mode");
         camera_open(NULL, xQueueMqtt);
         netModule_open(main_mode);
@@ -127,6 +124,7 @@ void app_main(void)
         sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | SLEEP_NO_OPERATION_TIMEOUT_BIT |
                               SLEEP_MIP_DONE_BIT, true);
     } else if (main_mode == MODE_SCHEDULE) {
+        misc_led_blink(1, 1000);
         ESP_LOGI(TAG, "schedule mode");
         netModule_open(main_mode);
         system_schedule_todo();

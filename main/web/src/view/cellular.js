@@ -77,7 +77,7 @@ function Cellular() {
                 this.getCellularInfo();
                 this.saveLoading = false;
             } catch (error) {
-                this.alertErrMsg();
+                this.alertMessage("error");
             }
         },
         async getCellularStatus() {
@@ -94,7 +94,7 @@ function Cellular() {
                 this.sendLoading = false;
                 alert(message);
             } catch (error) {
-                this.alertErrMsg();
+                this.alertMessage("error");
                 this.sendLoading = false;
             }
         },

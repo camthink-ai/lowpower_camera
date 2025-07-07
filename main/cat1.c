@@ -930,6 +930,7 @@ esp_err_t cat1_restart(void)
     snprintf(g_cat1.status.ipv4Dns, sizeof(g_cat1.status.ipv4Dns), "%s", "0.0.0.0");
 
     ESP_LOGI(TAG, "cat1_restart 1/3");
+    mqtt_stop();
     g_cat1.cat1_status = CAT1_STATUS_STOPED;
     esp_modem_destroy(g_cat1.dce);
     g_cat1.dce = NULL;

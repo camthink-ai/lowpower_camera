@@ -33,7 +33,7 @@ modeSel_e system_get_mode(void)
 esp_err_t system_ntp_time(void)
 {
     int retry = 0;
-    const int retry_count = 10;  // Maximum retry attempts
+    const int retry_count = 7;  // Maximum retry attempts
     time_t sys_now;
 
     ESP_LOGI(TAG, "Initializing SNTP");

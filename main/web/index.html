@@ -460,7 +460,17 @@
                         <div class="card-title">
                             {{ $t("mqtt.dataReport") }}
                         </div>
-                        <!-- 两种平台类型共用相同的Host和Mqtt Port值 -->
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("mqtt.status") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span> 
+                                    {{ mqttPlatform.isConnected === 0 ? $t("cell.disconnected") : $t("cell.connected") }} 
+                                </span>
+                            </span>
+                        </div>
+                        
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.host") }}</span
@@ -1129,9 +1139,16 @@
                         </div>
                     </div>
                 </div>
-                <div class="ms-message" v-show="showErrMsg" >
-                    <i >x</i>
-                    <p>{{ $t("networkError") }}</p>
+                
+                <div class="ms-message" v-show="showMsg.enable" >
+                    <div v-show="showMsg.type === 'success'" class="success" >
+                        <i >√</i>
+                        <p>{{ $t("saveSuccess") }}</p>
+                    </div>
+                    <div v-show="showMsg.type === 'error'" class="error">
+                        <i >x</i>
+                        <p>{{ $t("networkError") }}</p>
+                    </div>
                 </div>
             </div>
         </div>

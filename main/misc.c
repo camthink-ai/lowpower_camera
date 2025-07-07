@@ -126,7 +126,7 @@ static void button_single_click_cb(void *arg, void *priv)
 {
     ESP_LOGI(TAG, "BUTTON_SINGLE_CLICK");
     if (system_get_mode() == MODE_CONFIG && camera_snapshot(SNAP_BUTTON, 1) == ESP_OK) {
-        misc_led_blink(2, 500);
+        misc_led_blink(1, 1000);
     }
 }
 
@@ -140,6 +140,10 @@ static void button_double_click_cb(void *arg, void *priv)
 static void button_long_press_start_cb(void *arg, void *priv)
 {
     ESP_LOGI(TAG, "BUTTON_LONG_PRESS_START");
+
+    if(system_get_mode() == MODE_CONFIG){
+        misc_led_blink(2, 500);
+    }
     g_misc.btn.event = BUTTON_LONG_PRESS_START;
 
     if(g_misc.isInit == 1 && system_get_mode() != MODE_CONFIG){

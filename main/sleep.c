@@ -388,6 +388,7 @@ void sleep_start(void)
     wifi_close();
     cat1_close();
 #if PIR_ENABLE
+    esp_log_level_set("gpio", ESP_LOG_WARN);
     pir_init(1);
 #endif
     ESP_LOGI(TAG, "Entering deep sleep");

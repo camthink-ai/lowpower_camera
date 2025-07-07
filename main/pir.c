@@ -308,7 +308,7 @@ void pir_init(uint8_t is_first)
         for(i = 0; i < PIR_INIT_RETRY; i++){
             err = CFG_CHK();
             if(err != 0){
-                printf("pir_init err:%d \r\n", err);
+                ESP_LOGD(TAG,"pir_init err:%d", err);
             }else{
                 break;
             }
@@ -329,7 +329,7 @@ void pir_int_trigger(void)
         pir_do_set(0);
         vTaskDelay(pdMS_TO_TICKS(10));
         pir_do_in();
-        printf("------pir int trigger---\r\n");
+        ESP_LOGD(TAG, "------pir int trigger---");
     }
 }
 

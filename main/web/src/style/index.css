@@ -8,7 +8,8 @@
     --primary-color-dark: #D93D00;
     --primary-color-light-4: #FF9452;
     --primary-color-light-2: #FFCDA3;
-    --red-color: #F13535
+    --red-color: #F13535;
+    --green-color: #00B34D
   }
 
 /* 解决切换语言时mustache数据闪烁 */

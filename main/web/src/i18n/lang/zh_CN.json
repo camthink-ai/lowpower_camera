@@ -60,7 +60,8 @@
     "otherMqttPlatform": "其他MQTT平台",
     "httpPort": "HTTP端口号",
     "qos": "QoS",
-    "clientId": "客户端ID"
+    "clientId": "客户端ID",
+    "status": "状态"
   },
   "sys": {
     "deviceMainte": "设备维护",
@@ -99,6 +100,7 @@
   "vaildRange1-999": "有效范围：1~999",
   "vaildTopicTips": "有效内容：1~127个字符",
   "networkError": "网络错误！",
+  "saveSuccess": "保存成功！",
   "ok": "确定",
   "cancel": "取消",
   "cell": {

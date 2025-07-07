@@ -37,8 +37,8 @@ function Image() {
         agcEnable: true,
         gainCeil: 3,
         gain: 15,
-        flipHorEnable: false,
-        flipVerEnable: false,
+        flipHorEnable: true,
+        flipVerEnable: true,
         MJPEG_URL: "",
         mountedVideo() {
             // "http://192.168.1.1:8080/api/v1/liveview/getJpegStream";

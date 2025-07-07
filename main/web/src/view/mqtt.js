@@ -1,5 +1,6 @@
 import { getData, postData, URL } from '../api';
 import { translate as $t } from '../i18n';
+let statusTimer = null;
 function Mqtt() {
     return {
         // --MQTT Post--
@@ -47,6 +48,8 @@ function Mqtt() {
             qos: 0,
             username: '',
             password: '',
+            /** 0未连接 1已连接 */
+            isConnected: 0,
         },
         dataReportMount: false,
         async getDataReport() {
@@ -55,7 +58,26 @@ function Mqtt() {
             // this.sensingPlatform = { ...res.sensingPlatform };
             this.mqttPlatform = { ...res.mqttPlatform };
             this.dataReportMount = true;
+            this.updateMqttStatus()
             return;
+        },
+        /** 定时器间隔2s更新mqtt连接状态 TODO未调用销毁 */
+        async updateMqttStatus() {
+            if (statusTimer) return;
+            const that = this;
+            async function loop() {
+                const res = await getData(URL.getDataReport);
+                that.mqttPlatform.isConnected = res.mqttPlatform.isConnected;
+                statusTimer = setTimeout(loop, 2000);
+            }
+            loop();
+        },
+        /** 销毁定时器 */
+        async destroyMqttTimer() {
+            if (statusTimer) {
+                clearTimeout(statusTimer);
+                statusTimer = null;
+            }
         },
         changePlatform({ detail }) {
             // this.currentPlatformType = detail.value;
@@ -196,8 +218,9 @@ function Mqtt() {
             // }
             try {
                 await postData(URL.setDataReport, data);
+                this.alertMessage("success");
             } catch (error) {
-                this.alertErrMsg();
+                this.alertMessage("error");
             }
         },
         // --end--

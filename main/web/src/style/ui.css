@@ -527,28 +527,44 @@ input[type="password"] {
     transform: translateX(-50%);
     transition: opacity .3s, transform .4s, top .4s;
     overflow: hidden;
+}
+.ms-message > div {
     padding: 0 20px;
     display: flex;
     align-items: center;
-    background-color: #fef0f0;
-    border-color: #fde2e2;
 }
-
 .ms-message i {
     margin-right: 10px;
     display: inline-flex;
-    width: 15px;
-    height: 15px;
-    background-color: var(--red-color);
+    width: 17px;
+    height: 17px;
     border-radius: 50%;
     color: white;
     justify-content: center;
     align-items: center;
 }
-
 .ms-message p {
     margin: 8px;
+}
+.ms-message .error {
+    background-color: #fef0f0;
+    border-color: #fde2e2;
+}
+.ms-message .error i {
+    background-color: var(--red-color);
+}
+.ms-message .error p {
     color: var(--red-color)
+}
+.ms-message .success {
+    background-color: #DAF2E0;
+    border-color: #DAF2E0;
+}
+.ms-message .success i {
+    background-color: var(--green-color);
+}
+.ms-message .success p {
+    color: var(--green-color)
 }
 
 /* Input placeholder color */

@@ -3,7 +3,7 @@
 
 #include "stdio.h"
 
-#define PIR_ENABLE          0
+#define PIR_ENABLE          1
 
 #define PIR_INTDOUT_IO      (2)//(20)
 #define PIR_SERIAL_IO       (41)//(41)
