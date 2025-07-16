@@ -678,7 +678,7 @@ static int set_aec_value(sensor_t *sensor, int value)
         return -1;
     }
     if (value > max_val) {
-        value =max_val;
+        value = max_val;
     }
 
     ret =  write_reg(sensor->slv_addr, 0x3500, (value >> 12) & 0x0F)

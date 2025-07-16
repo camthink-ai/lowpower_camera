@@ -270,7 +270,35 @@ static esp_err_t get_u8(nvs_handle_t handle, const char *key, uint8_t *value, ui
     return err;
 }
 
+static esp_err_t get_u16(nvs_handle_t handle, const char *key, uint16_t *value, uint16_t def)
+{
+    esp_err_t err = ESP_OK;
+    char out_value[32] = {0};
+    size_t len = sizeof(out_value);
+
+    err = nvs_get_str(handle, key, out_value, &len);
+    if (err != ESP_OK) {
+        *value = def;
+    } else {
+        *value = (uint16_t)strtoul(out_value, NULL, 10);
+    }
+    return err;
+}
+
 static esp_err_t set_u8(nvs_handle_t handle, const char *key, uint8_t value)
+{
+    esp_err_t err = ESP_OK;
+    char in_value[32] = {0};
+
+    snprintf(in_value, sizeof(in_value), "%u", value);
+    err = nvs_set_str(handle, key, in_value);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set key:%s value:%d failed", key, value);
+    }
+    return err;
+}
+
+static esp_err_t set_u16(nvs_handle_t handle, const char *key, uint16_t value)
 {
     esp_err_t err = ESP_OK;
     char in_value[32] = {0};
@@ -675,7 +703,7 @@ esp_err_t cfg_init(void)
         return err;
     }
     mutex_create();
-
+    
     char tz[32];
     cfg_get_timezone(tz);
     system_set_timezone(tz);
@@ -738,17 +766,41 @@ esp_err_t cfg_set_device_info(deviceInfo_t *device)
 
 esp_err_t cfg_get_image_attr(imgAttr_t *image)
 {
+    sensor_t *s = esp_camera_sensor_get();
+    if (s == NULL) {
+        ESP_LOGE(TAG, "Camera sensor not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
     mutex_lock();
     memset(image, 0, sizeof(imgAttr_t));
-    get_i8(g_userHandle, KEY_IMG_BRIGHTNESS, &image->brightness, 0);
-    get_i8(g_userHandle, KEY_IMG_CONTRAST, &image->contrast, 0);
-    get_i8(g_userHandle, KEY_IMG_SATURATION, &image->saturation, 0);
-    get_i8(g_userHandle, KEY_IMG_AELEVEL, &image->aeLevel, 0);
-    get_u8(g_userHandle, KEY_IMG_AGC, &image->bAgc, 1);
-    get_u8(g_userHandle, KEY_IMG_GAIN, &image->gain, 0);
-    get_u8(g_userHandle, KEY_IMG_GAINCEILING, &image->gainCeiling, 0);
-    get_u8(g_userHandle, KEY_IMG_HOR, &image->bHorizonetal, 1);
-    get_u8(g_userHandle, KEY_IMG_VER, &image->bVertical, 1);
+    get_i8(g_userHandle, KEY_IMG_BRIGHTNESS, &image->brightness, s->status.brightness);
+    get_i8(g_userHandle, KEY_IMG_CONTRAST, &image->contrast, s->status.contrast);
+    get_i8(g_userHandle, KEY_IMG_SATURATION, &image->saturation, s->status.saturation);
+    get_i8(g_userHandle, KEY_IMG_AELEVEL, &image->aeLevel, s->status.ae_level);
+    get_u8(g_userHandle, KEY_IMG_AGC, &image->bAgc, s->status.agc);
+    get_u8(g_userHandle, KEY_IMG_GAIN, &image->gain, s->status.agc_gain);
+    get_u8(g_userHandle, KEY_IMG_GAINCEILING, &image->gainCeiling, s->status.gainceiling);
+    get_u8(g_userHandle, KEY_IMG_HOR, &image->bHorizonetal, s->status.hmirror);
+    get_u8(g_userHandle, KEY_IMG_VER, &image->bVertical, s->status.vflip);
+    // additional attributes can be added here
+    get_i8(g_userHandle, KEY_IMG_SHARPNESS, &image->sharpness, s->status.sharpness);
+    get_u8(g_userHandle, KEY_IMG_QUALITY, &image->quality, s->status.quality);
+    get_u8(g_userHandle, KEY_IMG_DENOISE, &image->denoise, s->status.denoise);
+    get_u8(g_userHandle, KEY_IMG_EFFECT, &image->specialEffect, s->status.special_effect);
+    get_u8(g_userHandle, KEY_IMG_AWB, &image->bAwb, s->status.awb);
+    get_u8(g_userHandle, KEY_IMG_AWB_GAIN, &image->bAwbGain, s->status.awb_gain);
+    get_u8(g_userHandle, KEY_IMG_WB_MODE, &image->wbMode, s->status.wb_mode);
+    get_u8(g_userHandle, KEY_IMG_AEC, &image->bAec, s->status.aec);
+    get_u8(g_userHandle, KEY_IMG_AEC2, &image->bAec2, s->status.aec2);
+    get_u16(g_userHandle, KEY_IMG_AEC_VALUE, &image->aecValue, s->status.aec_value);
+    get_u8(g_userHandle, KEY_IMG_BPC, &image->bBpc, s->status.bpc);
+    get_u8(g_userHandle, KEY_IMG_WPC, &image->bWpc, s->status.wpc);
+    get_u8(g_userHandle, KEY_IMG_RAW_GMA, &image->bRawGma, s->status.raw_gma);
+    get_u8(g_userHandle, KEY_IMG_LENC, &image->bLenc, s->status.lenc);
+    get_u8(g_userHandle, KEY_IMG_DCW, &image->bDcw, s->status.dcw);
+    get_u8(g_userHandle, KEY_IMG_COLORBAR, &image->bColorbar, s->status.colorbar);
+
     mutex_unlock();
     return ESP_OK;
 }
@@ -765,6 +817,23 @@ esp_err_t cfg_set_image_attr(imgAttr_t *image)
     set_u8(g_userHandle, KEY_IMG_GAINCEILING, image->gainCeiling);
     set_u8(g_userHandle, KEY_IMG_HOR, image->bHorizonetal);
     set_u8(g_userHandle, KEY_IMG_VER, image->bVertical);
+    // additional attributes can be added here
+    set_i8(g_userHandle, KEY_IMG_SHARPNESS, image->sharpness);
+    set_u8(g_userHandle, KEY_IMG_QUALITY, image->quality);
+    set_u8(g_userHandle, KEY_IMG_DENOISE, image->denoise);
+    set_u8(g_userHandle, KEY_IMG_EFFECT, image->specialEffect);
+    set_u8(g_userHandle, KEY_IMG_AWB, image->bAwb);
+    set_u8(g_userHandle, KEY_IMG_AWB_GAIN, image->bAwbGain);
+    set_u8(g_userHandle, KEY_IMG_WB_MODE, image->wbMode);
+    set_u8(g_userHandle, KEY_IMG_AEC, image->bAec);
+    set_u8(g_userHandle, KEY_IMG_AEC2, image->bAec2);
+    set_u16(g_userHandle, KEY_IMG_AEC_VALUE, image->aecValue);
+    set_u8(g_userHandle, KEY_IMG_BPC, image->bBpc);
+    set_u8(g_userHandle, KEY_IMG_WPC, image->bWpc);
+    set_u8(g_userHandle, KEY_IMG_RAW_GMA, image->bRawGma);
+    set_u8(g_userHandle, KEY_IMG_LENC, image->bLenc);
+    set_u8(g_userHandle, KEY_IMG_DCW, image->bDcw);
+    set_u8(g_userHandle, KEY_IMG_COLORBAR, image->bColorbar);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;

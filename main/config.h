@@ -42,6 +42,24 @@ extern "C" {
 #define KEY_IMG_GAINCEILING "img:gceiling"
 #define KEY_IMG_HOR         "img:bHor"
 #define KEY_IMG_VER         "img:bVer"
+
+#define KEY_IMG_QUALITY     "img:quality"
+#define KEY_IMG_SHARPNESS   "img:sharpness"
+#define KEY_IMG_DENOISE     "img:denoise"
+#define KEY_IMG_EFFECT      "img:effect"
+#define KEY_IMG_AWB         "img:bAwb"
+#define KEY_IMG_AWB_GAIN    "img:bAwbGain"
+#define KEY_IMG_WB_MODE     "img:wbMode"
+#define KEY_IMG_AEC         "img:bAec"
+#define KEY_IMG_AEC2        "img:bAec2"
+#define KEY_IMG_AEC_VALUE   "img:aecValue"
+#define KEY_IMG_BPC         "img:bBpc"  
+#define KEY_IMG_WPC         "img:bWpc"
+#define KEY_IMG_RAW_GMA     "img:bRawGma"
+#define KEY_IMG_LENC        "img:bLenc"
+#define KEY_IMG_DCW         "img:bDcw"
+#define KEY_IMG_COLORBAR    "img:bColorbar"
+
 #define KEY_LIGHT_MODE      "light:mode"
 #define KEY_LIGHT_THRESHOLD "light:thr"
 #define KEY_LIGHT_STIME     "light:stime"
@@ -117,15 +135,31 @@ typedef struct lightAttr {
  * Image processing attributes structure
  */
 typedef struct imgAttr {
-    int8_t brightness; // -2 ~ 2
-    int8_t contrast; // -2 ~ 2
-    int8_t saturation; // -2 ~ 2
-    int8_t aeLevel; // -2 ~ 2
-    uint8_t bAgc; // 0，1
-    uint8_t gain; // 0 ~ 30 if agc = 0
-    uint8_t gainCeiling; // 0 ~ 6 (2x-128x) if agc = 1
-    uint8_t bHorizonetal; // 0
-    uint8_t bVertical; // 0
+    uint8_t quality;            // 图像质量（0 到 63）
+    int8_t brightness;          // 亮度调节（-2 到 2）#
+    int8_t contrast;            // 对比度调节（-2 到 2）#
+    int8_t saturation;          // 饱和度调节（-2 到 2）#
+    int8_t sharpness;           // 锐度调节（-2 到 2）
+    uint8_t denoise;            // 降噪等级（0 到 8）
+    uint8_t specialEffect;      // 特效模式（0-6，例如黑白、怀旧、负片等）
+    uint8_t bAwb;               // 自动白平衡开关（1: 开启，0: 关闭）
+    uint8_t bAwbGain;           // 自动白平衡增益开关
+    uint8_t wbMode;             // 白平衡模式（0-4，不同枚举值代表不同白平衡设置）
+    uint8_t bAec;               // 自动曝光控制开关
+    uint8_t bAec2;              // 二级自动曝光控制
+    int8_t aeLevel;             // 自动曝光等级调节（-2 到 2）#
+    uint16_t aecValue;          // 手动曝光值（0-1200）
+    uint8_t bAgc;               // 自动增益控制开关 #
+    uint8_t gain;               // 手动增益值（0-30 or 64）#
+    uint8_t gainCeiling;        // 最大允许增益（0-6）（2x-128x）#
+    uint8_t bBpc;               // 黑点校正开关
+    uint8_t bWpc;               // 白点校正开关
+    uint8_t bRawGma;            // Gamma校正开关
+    uint8_t bLenc;              // 镜头畸变矫正开关
+    uint8_t bHorizonetal;       // 水平镜像开关 #
+    uint8_t bVertical;          // 垂直翻转开关 #
+    uint8_t bDcw;               // 降采样开关
+    uint8_t bColorbar;          // 彩条测试图开关（用于调试）
 } imgAttr_t;
 
 /**
