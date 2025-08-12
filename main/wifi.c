@@ -684,3 +684,12 @@ esp_netif_t * wifi_get_Apnetif(void)
 {
     return g_wifi.netif;
 }
+
+/**
+ * Clear wifi timeout counter
+ */
+void wifi_clear_timeout(void)
+{
+    g_wifi.apTimeoutSeconds = 0;
+}
+

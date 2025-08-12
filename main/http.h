@@ -34,6 +34,11 @@ esp_err_t http_close(void);
  */
 bool http_hasClient(void);
 
+/**
+ * Clear web timeout counter
+ */
+void http_clear_timeout(void);
+
 #ifdef __cplusplus
 }
 #endif

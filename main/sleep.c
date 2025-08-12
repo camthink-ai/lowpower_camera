@@ -372,10 +372,12 @@ void sleep_start(void)
     esp_sleep_enable_ext0_wakeup(BTN_WAKEUP_PIN, BTN_WAKEUP_LEVEL);
 
 #if PIR_ENABLE
-    esp_sleep_enable_ext1_wakeup(BIT64(PIR_WAKEUP_PIN), PIR_IN_ACTIVE);
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-    rtc_gpio_pullup_dis(PIR_WAKEUP_PIN);
-    rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
+    if(capture.bAlarmInCap == true){
+        esp_sleep_enable_ext1_wakeup(BIT64(PIR_WAKEUP_PIN), PIR_IN_ACTIVE);
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+        rtc_gpio_pullup_dis(PIR_WAKEUP_PIN);
+        rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
+    }
 #else
     // if(capture.bAlarmInCap == true){
     //     rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
@@ -388,8 +390,10 @@ void sleep_start(void)
     wifi_close();
     cat1_close();
 #if PIR_ENABLE
-    esp_log_level_set("gpio", ESP_LOG_WARN);
-    pir_init(1);
+    if(capture.bAlarmInCap == true){
+        esp_log_level_set("gpio", ESP_LOG_WARN);
+        pir_init(1);
+    }
 #endif
     ESP_LOGI(TAG, "Entering deep sleep");
     esp_deep_sleep_start();
