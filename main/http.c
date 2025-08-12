@@ -215,6 +215,24 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &image, int, gainCeiling);
     s2j_json_set_basic_element(json_obj, &image, int, bHorizonetal);
     s2j_json_set_basic_element(json_obj, &image, int, bVertical);
+    // Apply camera settings
+    s2j_json_set_basic_element(json_obj, &image, int, quality);
+    s2j_json_set_basic_element(json_obj, &image, int, sharpness);
+    s2j_json_set_basic_element(json_obj, &image, int, denoise);
+    s2j_json_set_basic_element(json_obj, &image, int, specialEffect);
+    s2j_json_set_basic_element(json_obj, &image, int, bAwb);
+    s2j_json_set_basic_element(json_obj, &image, int, bAwbGain);
+    s2j_json_set_basic_element(json_obj, &image, int, wbMode);
+    s2j_json_set_basic_element(json_obj, &image, int, bAec);
+    s2j_json_set_basic_element(json_obj, &image, int, bAec2);
+    s2j_json_set_basic_element(json_obj, &image, int, aecValue);
+    s2j_json_set_basic_element(json_obj, &image, int, bBpc);
+    s2j_json_set_basic_element(json_obj, &image, int, bWpc);
+    s2j_json_set_basic_element(json_obj, &image, int, bRawGma);
+    s2j_json_set_basic_element(json_obj, &image, int, bLenc);
+    s2j_json_set_basic_element(json_obj, &image, int, bDcw);
+    s2j_json_set_basic_element(json_obj, &image, int, bColorbar);
+
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
     cJSON_free(str);
@@ -229,6 +247,7 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
     char *content = http_get_content_from_req(req);
     if (content) {
         s2j_create_struct_obj(image, imgAttr_t);
+        cfg_get_image_attr(image);
         /* deserialize data to Student structure object. */
         cJSON *json = cJSON_Parse(content);
         s2j_struct_get_basic_element(image, json, int, brightness);
@@ -240,8 +259,27 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, gainCeiling);
         s2j_struct_get_basic_element(image, json, int, bHorizonetal);
         s2j_struct_get_basic_element(image, json, int, bVertical);
+        // Apply camera settings
+        if (cJSON_HasObjectItem(json, "quality")) {
+            s2j_struct_get_basic_element(image, json, int, quality);
+            s2j_struct_get_basic_element(image, json, int, sharpness);
+            s2j_struct_get_basic_element(image, json, int, denoise);
+            s2j_struct_get_basic_element(image, json, int, specialEffect);
+            s2j_struct_get_basic_element(image, json, int, bAwb);
+            s2j_struct_get_basic_element(image, json, int, bAwbGain);
+            s2j_struct_get_basic_element(image, json, int, wbMode);
+            s2j_struct_get_basic_element(image, json, int, bAec);
+            s2j_struct_get_basic_element(image, json, int, bAec2);
+            s2j_struct_get_basic_element(image, json, int, aecValue);
+            s2j_struct_get_basic_element(image, json, int, bBpc);
+            s2j_struct_get_basic_element(image, json, int, bWpc);
+            s2j_struct_get_basic_element(image, json, int, bRawGma);
+            s2j_struct_get_basic_element(image, json, int, bLenc);
+            s2j_struct_get_basic_element(image, json, int, bDcw);
+            s2j_struct_get_basic_element(image, json, int, bColorbar);
+        }
 
-        if (camera_set_image(image) == ESP_OK) {
+        if (camera_set_image(image, false) == ESP_OK) {
             http_send_json_response(req, RES_OK);
             cfg_set_image_attr(image);
         } else {
@@ -1397,4 +1435,12 @@ esp_err_t http_close(void)
 bool http_hasClient(void)
 {
     return g_http.hasClient;
+}
+
+/**
+ * Clear web timeout counter
+ */
+void http_clear_timeout(void)
+{
+    g_http.webTimeoutSeconds = 0;
 }

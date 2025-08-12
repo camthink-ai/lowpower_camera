@@ -31,6 +31,8 @@
 #include "debug.h"
 #include "esp_sleep.h"
 #include "pir.h"
+#include "http.h"
+#include "wifi.h"
 
 #define TAG "-->MISC"
 
@@ -84,7 +86,6 @@ typedef struct miscLed {
 typedef struct miscBtn {
     button_handle_t handle;
     button_event_t  event;
-    bool is_wake;
     int64_t press_time;
 } miscBtn_t;
 /**
@@ -127,6 +128,12 @@ static void button_single_click_cb(void *arg, void *priv)
     ESP_LOGI(TAG, "BUTTON_SINGLE_CLICK");
     if (system_get_mode() == MODE_CONFIG && camera_snapshot(SNAP_BUTTON, 1) == ESP_OK) {
         misc_led_blink(1, 1000);
+        wifi_clear_timeout();
+        http_clear_timeout();
+    }else if(system_get_mode() != MODE_CONFIG){
+        sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG);
+        esp_sleep_enable_timer_wakeup(100000ULL);
+        esp_deep_sleep_start();
     }
 }
 
@@ -140,17 +147,7 @@ static void button_double_click_cb(void *arg, void *priv)
 static void button_long_press_start_cb(void *arg, void *priv)
 {
     ESP_LOGI(TAG, "BUTTON_LONG_PRESS_START");
-
-    if(system_get_mode() == MODE_CONFIG){
-        misc_led_blink(2, 500);
-    }
     g_misc.btn.event = BUTTON_LONG_PRESS_START;
-
-    if(g_misc.isInit == 1 && system_get_mode() != MODE_CONFIG){
-        sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG);
-        esp_sleep_enable_timer_wakeup(100000ULL);
-        esp_deep_sleep_start();
-    }
 }
 
 static void button_long_press_hold_cb(void *arg, void *priv)
@@ -162,29 +159,6 @@ static void button_long_press_hold_cb(void *arg, void *priv)
         g_misc.reset_flag = 1;
         g_misc.btn.press_time = esp_timer_get_time();
     }
-}
-
-static void button_mode_det(uint8_t* mode)
-{
-    if(g_misc.btn.is_wake == 1){
-        while(1){
-            vTaskDelay(pdMS_TO_TICKS(100));
-            if(g_misc.btn.event == BUTTON_NONE_PRESS || g_misc.btn.event == BUTTON_PRESS_UP){
-                *mode = MODE_WORK;
-                ESP_LOGI(TAG, "misc_btn_mode_det MODE_WORK\r\n");
-                return;
-            }else if(g_misc.btn.event == BUTTON_LONG_PRESS_START){
-                *mode = MODE_CONFIG;
-                ESP_LOGI(TAG, "misc_btn_mode_det MODE_CONFIG\r\n");
-                return;
-            }
-        }
-    }
-}
-
-void misc_set_btnWakeFlag(void)
-{
-    g_misc.btn.is_wake = 1;
 }
 
 static void button_start()
@@ -675,9 +649,6 @@ void misc_open(uint8_t* mode)
     button_start();
     pwm_config();
     xTaskCreatePinnedToCore((TaskFunction_t)misc_task, "misc_task", 3 * 1024, NULL, 4, NULL, 1);
-    if(*mode != MODE_SCHEDULE){
-        button_mode_det(mode);
-    }
     g_misc.isInit = 1;
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
 }

@@ -62,8 +62,7 @@ static modeSel_e mode_selector(snapType_e *snapType)
             return MODE_WORK;
         } else if (type == WAKEUP_BUTTON) {
             *snapType = SNAP_BUTTON;
-            misc_set_btnWakeFlag();
-            return MODE_WORK;
+            return MODE_CONFIG;
         }
     }
     ESP_LOGE(TAG, "unknown wakeup %d", rst);
@@ -116,9 +115,12 @@ void app_main(void)
         netModule_open(main_mode);
         sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | SLEEP_MIP_DONE_BIT, true);
     } else if (main_mode == MODE_CONFIG) {
-        misc_led_blink(2, 500);
+        misc_led_blink(1, 1000);
         ESP_LOGI(TAG, "coinfig mode");
         camera_open(NULL, xQueueMqtt);
+        if(snapType == SNAP_BUTTON){
+            camera_snapshot(snapType, 1);
+        }
         netModule_open(main_mode);
         http_open();
         sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | SLEEP_NO_OPERATION_TIMEOUT_BIT |

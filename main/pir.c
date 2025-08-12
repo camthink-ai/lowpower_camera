@@ -308,7 +308,7 @@ void pir_init(uint8_t is_first)
         for(i = 0; i < PIR_INIT_RETRY; i++){
             err = CFG_CHK();
             if(err != 0){
-                ESP_LOGD(TAG,"pir_init err:%d", err);
+                ESP_LOGW(TAG,"pir_init err:%d", err);
             }else{
                 break;
             }

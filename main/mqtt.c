@@ -224,6 +224,7 @@ static esp_err_t mqtt_send_by_json(mdMqtt_t *mqtt, queueNode_t *node)
     /* serialize data to JSON object. */
     cJSON_AddStringToObject(subJson, "devName", device.name);
     cJSON_AddStringToObject(subJson, "devMac", device.mac);
+    cJSON_AddStringToObject(subJson, "devSn", device.sn);
     cJSON_AddNumberToObject(subJson, "battery", misc_get_battery_voltage_rate());
     cJSON_AddStringToObject(subJson, "snapType", snapType);
     cJSON_AddStringToObject(subJson, "localtime", time);

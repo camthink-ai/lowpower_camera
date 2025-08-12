@@ -76,9 +76,10 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count);
 /**
  * Configure image capture settings
  * @param image Image attributes to apply
+ * @param is_force Force apply settings even if unchanged
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t camera_set_image(imgAttr_t *image);
+esp_err_t camera_set_image(imgAttr_t *image, bool is_force);
 
 /**
  * Control camera flash LED
