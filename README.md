@@ -19,7 +19,7 @@ This project is a low-power image acquisition solution based on the CamThink Eve
 1. CAT1 Cellular Communication Module
 2. Halow WIFI Module
 
-> For detailed hardware specifications, please refer to the [hardware introduction document](link).
+> For detailed hardware specifications, please refer to the [hardware introduction document](https://wiki.camthink.ai/docs/NeoEyes%20NE101%20Series/Overview).
 
 ## Software Environment Setup
 
@@ -52,7 +52,7 @@ cd lowpower_camera
 
 ### Step 1: Hardware Connection
 
-Please refer to the [hardware connection guide](link) to complete the device wiring.
+Please refer to the [hardware connection guide](https://wiki.camthink.ai/docs/NeoEyes%20NE101%20Series/Quick%20Start) to complete the device wiring.
 
 ### Step 2: Set Target Chip
 
