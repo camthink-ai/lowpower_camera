@@ -357,7 +357,7 @@
                         </div>
                         
                         <div
-                            class="card-list"
+                            class="card-list capture-interval-content"
                             v-show="scheduledCaptureEnable && captureMode == 0"
                         >
                             <div
@@ -388,7 +388,7 @@
                                 >{{ $t("cap.captureInterval") }}</span
                             >
                             <span
-                                class="card-item-content capture-interval-content"
+                                class="card-item-content"
                             >
                                 <input
                                     class="capture-interval-input"
@@ -413,6 +413,83 @@
                                 ></div>
                             </span>
                         </div>
+
+
+                        <!-- s 定时上传时间 -->
+                     <div class="card-item" v-show="scheduledCaptureEnable">
+                              <span class="card-item-label"
+                               >{{ $t("cap.uploadMode") }}</span>
+                          <span class="card-item-content">
+                             <div class="normal-select"
+                             v-if="uploadModeMount"
+                             v-scope="MsSelect({value: uploadMode, options: uploadModeOptions})" @change-select="changeUploadMode"></div>
+                         </span>
+                    </div>
+                        <div
+                        class="card-item capture-time-content"
+                        v-show="scheduledCaptureEnable && uploadMode == 1"
+                    >
+                        <span class="card-item-label"
+                            >{{ $t("cap.timeSet") }}</span
+                        >
+                        <span class="card-item-content">
+                            <div
+                                class="capture-time-select"
+                                v-scope="MsSelect({value: uploadTimeSetDay, options: timeDayOptions})"
+                                @change-select="changeUploadTimeSetDay"
+                            ></div>
+                            <span class="number">
+                                <input
+                                    type="text"
+                                    maxlength="2"
+                                    v-model="uploadTimeSetHour"
+                                    v-effect="inputNumLimit('uploadTimeSetHour')"
+                                    @blur="inputUploadTime('uploadTimeSetHour')"
+                                />
+                                <span>:</span>
+                                <input
+                                    type="text"
+                                    maxlength="2"
+                                    v-model="uploadTimeSetMinute"
+                                    v-effect="inputNumLimit('uploadTimeSetMinute')"
+                                    @blur="inputUploadTime('uploadTimeSetMinute')"
+                                />
+                            </span>
+
+                            <button
+                                class="mini"
+                                @click="addUploadTimeSetting"
+                                :disabled="timeUploadList.length>=10"
+                            >
+                                +
+                            </button>
+                        </span>
+                    </div>
+                    
+                    <div
+                        class="card-list upload-time-list"
+                        v-show="scheduledCaptureEnable && uploadMode == 1"
+                    >
+                        <div
+                            class="card-time-list-item"
+                            v-for="(item, index) in timeUploadList"
+                        >
+                            <span
+                                class="time-list-item-day"
+                                v-text="getTimeUploadDayLabel(item.day)"
+                            ></span>
+                            <span class="time-list-item-time"
+                                >{{ item.time.substr(0, item.time.length-3) }}</span
+                            >
+                            <button
+                                class="icon time-list-item-btn"
+                                @click="deleteUploadTimeSetting(index)"
+                            >
+                                X
+                            </button>
+                        </div>
+                    </div>
+                    <!-- end 定时上传时间 -->
 
                         <div class="card-item">
                             <span class="card-item-label"
@@ -475,25 +552,27 @@
                             <span class="card-item-label"
                                 >{{ $t("mqtt.host") }}</span
                             >
-                            <span class="card-item-content">
-                                <textarea
-                                    type="textarea"
-                                    v-model="mqttPlatform.host"
-                                    placeholder="192.168.1.1"
-                                    @input="justifyAreaHeight($el)"
-                                    @blur="inputMqttHost"
-                                    maxlength="127"
-                                    rows="1"
-                                ></textarea>
-                                <div
-                                    class="error-input"
-                                    name="error-tip"
-                                    v-show="mqttHostError"
-                                >
-                                    {{ $t("requiredField") }}
-                                </div>
+                            <span class="card-item-content host-input-group">
+                                <span class="prefix-box">{{ mqttPlatform.tlsEnable == 1 ? 'mqtts://' : 'mqtt://' }}</span>
+                               <div style="width: 100%; display: flex; align-items: center;">
+                                <input
+                                type="text"
+                                v-model="mqttPlatform.host"
+                                placeholder="broker.emqx.io"
+                                @blur="inputMqttHost"
+                                maxlength="127"
+                            />
+                            <div
+                                class="error-input"
+                                name="error-tip"
+                                v-show="mqttHostError"
+                            >
+                                {{ $t("requiredField") }}
+                            </div>
+                               </div>
                             </span>
                         </div>
+                        <!-- end select MQTTS or MQTT-->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.port") }}</span
@@ -502,7 +581,7 @@
                                 <input
                                     type="text"
                                     v-model:number="mqttPlatform.mqttPort"
-                                    placeholder="1883"
+                                    :placeholder="mqttPlatform.tlsEnable == 1 ? '8883' : '1883'"
                                     @blur="inputMqttPort"
                                     maxlength="5"
                                 />
@@ -592,6 +671,135 @@
                                     ></textarea>
                                 </span>
                             </div>
+                            <!-- ssl switch -->
+                             <div class="card-item">
+                                <span class="card-item-label">SSL</span>
+                                <span class="card-item-content">
+                                    <span class="switch">
+                                        <input type="checkbox" id="sslSwitch" v-model="mqttPlatform.tlsEnable" :true-value="1" :false-value="0" @change="changeSSLSwitch" />
+                                        <label for="sslSwitch" class="switch-content"></label>
+                                    </span>
+                                </span>
+                            </div>
+                            <!-- end ssl switch -->
+                             <!-- upload Certificate -->
+                              <div v-if="mqttPlatform.tlsEnable == 1">
+                           <div class="upload-box">
+                            <div class="card-item">
+                                <span class="card-item-label">{{ $t("mqtt.CaCert") }}</span>
+                                <span class="card-item-content">
+                                    <input
+                                        type="file"
+                                        id="cafile"
+                                        hidden
+                                        @change="caFileChange"
+                                    />
+                                    <input
+                                        type="text"
+                                        v-model="mqttPlatform.caName"
+                                        readonly
+                                    />
+                                </span>
+                             </div>
+                             <div class="card-item">
+                                <span class="card-item-label"></span>
+                                <span class="card-item-content">
+                                    <button
+                                        class="plain"
+                                        @click="handleBrowseCa"
+                                    >
+                                        {{ $t("sys.browse") }}
+                                    </button>
+                                    <button
+                                        class="plain"
+                                        style="color: #333333; border-color: #B1B1B1;"
+                                        @click="clearCa"
+                                    >
+                                        {{ $t("sys.clear") }}
+                                    </button>
+                                </span>
+                            </div>
+                           </div>
+                           <div class="upload-box">
+                            <div class="card-item">
+                                <span class="card-item-label">{{ $t("mqtt.cert") }}</span>
+                                <span class="card-item-content">
+                                    <input
+                                        type="file"
+                                        id="certfile"
+                                        hidden
+                                        @change="certFileChange"
+                                    />
+                                    <input
+                                        type="text"
+                                        v-model="mqttPlatform.certName"
+                                        readonly
+                                    />
+                                </span>
+                             </div>
+                             <div class="card-item">
+                                <span class="card-item-label"></span>
+                                <span class="card-item-content">
+                                    <button
+                                        class="plain"
+                                        @click="handleBrowseCert"
+                                    >
+                                        {{ $t("sys.browse") }}
+                                    </button>
+                                    <button
+                                        class="plain"
+                                        style="color: #333333; border-color: #B1B1B1;"
+                                        @click="clearCert"
+                                    >
+                                        {{ $t("sys.clear") }}
+                                    </button>
+                                </span>
+                            </div>
+                           </div>
+                           <div class="upload-box">
+                            <div class="card-item">
+                                <span class="card-item-label">{{ $t("mqtt.key") }}</span>
+                                <span class="card-item-content">
+                                    <input
+                                        type="file"
+                                        id="keyfile"
+                                        hidden
+                                        @change="keyFileChange"
+                                    />
+                                    <input
+                                        type="text"
+                                        v-model="mqttPlatform.keyName"
+                                        readonly
+                                    />
+                                </span>
+                             </div>
+                             <div class="card-item">
+                                <span class="card-item-label"></span>
+                                <span class="card-item-content">
+                                    <button
+                                        class="plain"
+                                        @click="handleBrowseKey"
+                                    >
+                                        {{ $t("sys.browse") }}
+                                    </button>
+                                    <button
+                                        class="plain"
+                                        style="color: #333333; border-color: #B1B1B1;"
+                                        @click="clearKey"
+                                    >
+                                        {{ $t("sys.clear") }}
+                                    </button>
+                                </span>
+                            </div>
+                           </div>
+                           </div>
+                             <!-- <div class="card-item">
+                                <span class="card-item-label">Upload Key</span>
+                                <span class="card-item-content">
+                                    <input type="file" v-model="mqttPlatform.keyPath" maxlength="255" />
+                                </span>
+                             </div> -->
+                           <!-- end upload Certificate -->
                         </div>
                         <div class="card-item">
                             <span class="card-item-label"></span>

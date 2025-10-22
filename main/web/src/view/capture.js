@@ -50,6 +50,17 @@ function Capture() {
                 value: 0,
             },
         ],
+        uploadMode: 0,
+        uploadModeOptions: [
+            {
+                label: $t('cap.immediatelyUpload'),
+                value: 0,
+            },
+            {
+                label: $t('cap.scheduleUpload'),
+                value: 1,
+            },
+        ],
         timeSetHour: '00',
         timeSetMinute: '00',
         timeSetSecond: '00',
@@ -59,6 +70,7 @@ function Capture() {
         timeIntervalNum: 8,
         capIntervalError: false,
         timeIntervalUnit: 1,
+        uploadTimeSetDay: 7,
         timeIntervalOptions: [
             {
                 label: $t('cap.min'),
@@ -77,6 +89,61 @@ function Capture() {
         capButtonEnable: true,
         captureMount: false,
         timeIntervalUnitMount: false,
+
+        // 定时上传
+        uploadTimeSetHour: '00',
+        uploadTimeSetMinute: '00',
+        uploadTimeSetSecond: '00',
+        timeUploadList: [],
+        uploadModeMount: false,
+        timeUploadOptions: [
+            {
+                label: $t('cap.min'),
+                value: 0,
+            },
+            {
+                label: $t('cap.h'),
+                value: 1,
+            },
+            {
+                label: $t('cap.d'),
+                value: 2,
+            },
+        ],
+        timeUploadUnitMount: false,
+        timeUploadRetryCount: 3,
+
+      async changeUploadMode({ detail }) {
+            this.uploadMode = detail.value;
+            if (this.uploadMode == 1) {
+                const ele = document.querySelector(
+                    '.upload-time-list .error-input'
+                );
+                if (ele) {
+                    ele.style.display = 'none';
+                    this.uploadIntervalNum = 10;
+                }
+            }
+            if (!detail.isInit) {
+                this.setUploadInfo();
+            }
+        },
+        addUploadTimeSetting() {
+            this.timeUploadList.push({
+                day: this.uploadTimeSetDay,
+                time: `${this.uploadTimeSetHour}:${this.uploadTimeSetMinute}:${this.uploadTimeSetSecond}`,
+            });
+            this.setUploadInfo();
+        },
+        deleteUploadTimeSetting(index) {
+            this.timeUploadList.splice(index, 1);
+            this.setUploadInfo();
+        },
+        getTimeUploadDayLabel(dayValue) {
+            return this.timeDayOptions.find((item) => item.value == dayValue)
+                .label;
+        },
+
         async getCaptureInfo() {
             const res = await getData(URL.getCapParam);
             this.scheduledCaptureEnable = res.bScheCap ? true : false;
@@ -89,6 +156,17 @@ function Capture() {
             this.capAlarmInEnable = res.bAlarmInCap ? true : false;
             this.capButtonEnable = res.bButtonCap ? true : false;
             return;
+        },
+        async getUploadInfo() {
+            const res = await getData(URL.getUploadParam);
+            this.uploadMode = res.uploadMode;
+            this.uploadModeMount = true;
+            this.timeUploadList = res.timedNodes;
+            this.timeUploadRetryCount = res.retryCount;
+            console.log('this.uploadMode: ', this.uploadMode);
+        },
+        changeUploadTimeSetDay({ detail }) {
+            this.uploadTimeSetDay = detail.value;
         },
 
         changeCapMode({ detail }) {
@@ -132,6 +210,18 @@ function Capture() {
             
             return;
         },
+        async setUploadInfo() {
+            try {
+                await postData(URL.setUploadParam, {
+                    uploadMode: Number(this.uploadMode),
+                    timedNodes: this.timeUploadList,
+                    timedCount: this.timeUploadList.length,
+                    retryCount: Number(this.timeUploadRetryCount),
+                });
+            } catch (error) {
+                this.alertMessage("error");
+            }
+        },
         getTimeCapDayLabel(dayValue) {
             return this.timeDayOptions.find((item) => item.value == dayValue)
                 .label;
@@ -160,6 +250,42 @@ function Capture() {
                 default:
                     break;
             }
+        },
+        inputUploadTime(type) {
+            switch (type) {
+                case 'uploadTimeSetHour':
+                    this.uploadTimeSetHour = this.formatTimeNumber(
+                        'hour',
+                        this.uploadTimeSetHour
+                    );
+                    break;
+                case 'uploadTimeSetMinute':
+                    this.uploadTimeSetMinute = this.formatTimeNumber(
+                        'minute',
+                        this.uploadTimeSetMinute
+                    );
+                    break;
+                case 'uploadTimeSetSecond':
+                    this.uploadTimeSetSecond = this.formatTimeNumber(
+                        'minute',
+                        this.uploadTimeSetSecond
+                    );
+                    break;
+                default:
+                    break;
+            }
+        },
+        formatTimeNumber(type, rawNum) {
+            let result = "";
+            let maxNum = type == "hour" ? 23 : 59;
+            if (rawNum == '' || rawNum <= 0) {
+                result = "00";
+            } else if (rawNum > maxNum) {
+                result = maxNum;
+            } else {
+                result = parseInt(rawNum).formatAddZero();
+            }
+            return result;
         },
         /** 校验间隔时间 */
         checkIntervalNum() {

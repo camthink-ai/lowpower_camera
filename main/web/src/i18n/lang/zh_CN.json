@@ -33,7 +33,10 @@
     "min": "分钟",
     "h": "小时",
     "d": "天",
-    "m": "月"
+    "m": "月",
+    "uploadMode": "上传模式",
+    "immediatelyUpload": "即拍即传",
+    "scheduleUpload": "定时上传"
   },
   "week": {
     "Daily": "每天",
@@ -49,8 +52,9 @@
     "mqttSetting": "MQTT设置",
     "enable": "启用",
     "host": "主机",
-    "port": "MQTT端口号",
+    "port": "端口",
     "topic": "主题",
+    "protocol": "协议",
     "username": "用户名",
     "password": "密码",
     "save": "保存",
@@ -61,7 +65,13 @@
     "httpPort": "HTTP端口号",
     "qos": "QoS",
     "clientId": "客户端ID",
-    "status": "状态"
+    "status": "状态",
+    "CaCert": "CA证书",
+    "cert": "证书",
+    "key": "密钥",
+    "confirmClear": "确定要清除已选择的文件吗？",
+    "needCaCert": "请先上传CA证书",
+    "needCertKeyPair": "客户端证书与私钥需成对上传"
   },
   "sys": {
     "deviceMainte": "设备维护",
@@ -75,6 +85,7 @@
     "upgradeFirmware": "升级文件",
     "browse": "浏览",
     "upgrade": "升级",
+    "clear": "清空",
     "noFirmSpecified": "请选择一个文件。",
     "unFileFormat": "文件格式不符合。",
     "reallyUpgradeFirmware": "确定更新固件吗？",
@@ -103,6 +114,11 @@
   "saveSuccess": "保存成功！",
   "ok": "确定",
   "cancel": "取消",
+  "file": {
+    "empty": "文件为空，请选择有效文件",
+    "tooLarge": "文件过大，不能超过 {size}MB",
+    "invalidExt": "文件格式不支持，请选择证书或密钥文件"
+  },
   "cell": {
     "cellular": "蜂窝",
     "cellularStatus": "蜂窝状态",

@@ -170,7 +170,7 @@ void debug_open(void)
     initialize_console();
     /* Register commands */
     esp_console_register_help_command();
-    xTaskCreatePinnedToCore((TaskFunction_t)taskfunc, TAG, 3 * 1024, NULL, 4, NULL, 1);
+    xTaskCreatePinnedToCore((TaskFunction_t)taskfunc, TAG, 8 * 1024, NULL, 4, NULL, 1);
     g_debug.isInit = true;
 }
 

@@ -32,6 +32,23 @@ function postData(url = "", data = {}) {
             return Promise.reject();
         });
 }
+
+// 上传MQTTS文件
+function postMqttFile(url = "",fileName = "", formData) {
+    return fetch(url, {
+        method: "POST",
+        body: formData,
+        headers: {
+            "Content-Type": "application/octet-stream",
+            "X-File-Name": fileName,
+        },
+    })
+        .then((response) => {
+            if (response.ok) return response.json();
+            else return Promise.reject(response.json());
+        })
+        .catch((error) => console.error(error));
+}
 // 传输文件
 function postFile(url = "", formData) {
     return fetch(url, {
@@ -93,6 +110,20 @@ const URL = {
     getCellularStatus: baseUrl + "/network/getCellularStatus",
     getIoTParam: baseUrl + "/network/getIoTParam",
     setIotParam: baseUrl + "/network/setIoTParam",
+
+    // 定时上传
+    setUploadParam: baseUrl + "/capture/setUploadParam",
+    getUploadParam: baseUrl + "/capture/getUploadParam",
+
+
+    // MQTTFiles
+    uploadMQTTCa: baseUrl + "/network/uploadMqttCa",
+    uploadMQTTCert: baseUrl + "/network/uploadMqttCert",
+    uploadMQTTKey: baseUrl + "/network/uploadMqttKey",
+    deleteMQTTCa: baseUrl + "/network/deleteMqttCa",
+    deleteMQTTCert: baseUrl + "/network/deleteMqttCert",
+    deleteMQTTKey: baseUrl + "/network/deleteMqttKey",
+
 };
 
-export { getData, postData, postFile, postFileBuffer, URL };
+export { getData, postData, postFile, postFileBuffer, URL, postMqttFile };

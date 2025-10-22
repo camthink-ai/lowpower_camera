@@ -17,9 +17,10 @@ extern "C" {
  */
 typedef enum modeSel {
     MODE_SLEEP = 0,    ///< Low-power sleep mode
-    MODE_WORK,         ///< Active work mode (capturing images)
+    MODE_SNAPSHOT,     ///< Snapshot mode
     MODE_CONFIG,       ///< Configuration mode
     MODE_SCHEDULE,     ///< Scheduled tasks mode
+    MODE_UPLOAD,       ///< Upload mode
 } modeSel_e;
 
 /**
@@ -149,6 +150,11 @@ void system_show_meminfo();
  * Execute scheduled tasks
  */
 void system_schedule_todo();
+
+/**
+ * Execute upload tasks
+ */
+void system_upload_todo();
 
 /**
  * Add ping command to console

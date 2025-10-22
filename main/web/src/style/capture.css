@@ -9,7 +9,7 @@
 }
 
 /* Timed Capture */
-.capture-card .card-list {
+.capture-card .capture-interval-content {
     /* 列表数据为空仍显示四行的空间 */
     height: 192px;
 }
@@ -39,6 +39,12 @@
     padding-left: 0;
     text-align: center;
 }
+
+ .capture-card  .upload-time-list{
+   height: 240px;
+}
+
+
 /* 间隔冒号加粗 */
 .capture-time-content .number span {
     font-weight: 700;

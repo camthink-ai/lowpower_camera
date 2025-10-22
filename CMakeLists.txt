@@ -8,5 +8,5 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 set(EXTRA_COMPONENT_DIRS components/usb/usb_stream)
 
 string(TIMESTAMP COMPILE_TIME %Y%m%d)        # 生成编译时间
-set(PROJECT_VER "NE_101.1.0.2")             # NE_101.2.x.x CE 版本 NE_101.1.x.x FCC 版本
+set(PROJECT_VER "NE_101.1.0.3")             # NE_101.2.x.x CE 版本 NE_101.1.x.x FCC 版本
 project(NE101_${COMPILE_TIME})            # 固件名称

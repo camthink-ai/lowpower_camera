@@ -33,7 +33,10 @@
     "min": "min",
     "h": "h",
     "d": "d",
-    "m": "m"
+    "m": "m",
+    "uploadMode": "Upload Mode",
+    "immediatelyUpload": "Instant Upload",
+    "scheduleUpload": "Scheduled Upload"
   },
   "week": {
     "Daily": "Daily",
@@ -49,8 +52,9 @@
     "mqttSetting": "MQTT Settings",
     "enable": "Enable",
     "host": "Host",
-    "port": "MQTT Port",
+    "port": "Port",
     "topic": "Topic",
+    "protocol": "Protocol",
     "username": "Username",
     "password": "Password",
     "save": "Save",
@@ -61,7 +65,13 @@
     "httpPort": "HTTP Port",
     "qos": "QoS",
     "clientId": "Client ID",
-    "status": "Status"
+    "status": "Status",
+    "CaCert": "CA Certificate",
+    "cert": "Client Certificate",
+    "key": "Client Key",
+    "confirmClear": "Confirm Clear",
+    "needCaCert": "Please upload CA certificate first",
+    "needCertKeyPair": "Client certificate and private key must be provided together"
   },
   "sys": {
     "deviceMainte": "Device Maintenance",
@@ -75,6 +85,7 @@
     "upgradeFirmware": "Upgrade Firmware",
     "browse": "Browse",
     "upgrade": "Upgrade",
+    "clear": "Clear",
     "noFirmSpecified": "No firmware specified.",
     "unFileFormat": "Unknown file format.",
     "reallyUpgradeFirmware": "Do you really want to upgrade the firmware?",
@@ -103,6 +114,11 @@
   "saveSuccess": "Save successfully!",
   "ok": "OK",
   "cancel": "Cancel",
+  "file": {
+    "empty": "File is empty. Please choose a valid file.",
+    "tooLarge": "File is too large. Max {size}MB.",
+    "invalidExt": "Unsupported format. Please choose a cert or key file."
+  },
   "cell": {
     "cellular": "Cellular",
     "cellularStatus": "Cellular Status",

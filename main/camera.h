@@ -18,7 +18,7 @@ typedef enum cameraEvent {
 } cameraEvent_e;
 
 
-#define CAMERA_USE_UVC  0
+#define CAMERA_USE_UVC  1
 
 /**
  * @brief Get frame buffer for streaming

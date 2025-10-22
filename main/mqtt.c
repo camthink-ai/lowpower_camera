@@ -1,6 +1,6 @@
 /**
  * MQTT Client Implementation
- * 
+ *
  * Handles MQTT connections, message publishing, and subscription management
  * Supports both standard MQTT and MIP (Mesh IP) protocols
  */
@@ -225,7 +225,10 @@ static esp_err_t mqtt_send_by_json(mdMqtt_t *mqtt, queueNode_t *node)
     cJSON_AddStringToObject(subJson, "devName", device.name);
     cJSON_AddStringToObject(subJson, "devMac", device.mac);
     cJSON_AddStringToObject(subJson, "devSn", device.sn);
+    cJSON_AddStringToObject(subJson, "hwVersion", device.hardVersion);
+    cJSON_AddStringToObject(subJson, "fwVersion", device.softVersion);
     cJSON_AddNumberToObject(subJson, "battery", misc_get_battery_voltage_rate());
+    cJSON_AddNumberToObject(subJson, "batteryVoltage", misc_get_battery_voltage());
     cJSON_AddStringToObject(subJson, "snapType", snapType);
     cJSON_AddStringToObject(subJson, "localtime", time);
     cJSON_AddNumberToObject(subJson, "imageSize", picSize + strlen(header));
@@ -290,29 +293,51 @@ static void task(mdMqtt_t *self)
             time_t now;
             struct tm timeinfo;
             time(&now);
-            if(node->from == FROM_CAMERA && node->ntp_sync_flag == 0){
+            if (node->from == FROM_CAMERA && node->ntp_sync_flag == 0) {
                 //If the timestamp of the image is greater than the next system wake-up time, it means that the time error is too large and the image is discarded.
-                if(node->type == SNAP_TIMER && 
-                ((node->pts / 1000) > (now + calc_wakeup_time_seconds() + CAPTURE_ERROR_THRESHOLD_S))){
+                if (node->type == SNAP_TIMER &&
+                    ((node->pts / 1000) > (now + calc_next_snapshot_time() + CAPTURE_ERROR_THRESHOLD_S))) {
                     localtime_r(&now, &timeinfo);
-                    ESP_LOGW(TAG, "Discard the currently captured image at: %s",asctime(&timeinfo));
+                    ESP_LOGW(TAG, "Discard the currently captured image at: %s", asctime(&timeinfo));
                     node->free_handler(node, EVENT_OK);
                     break;
-                }else{//Correct the timestamp of the captured image according to the actual time.
+                } else { //Correct the timestamp of the captured image according to the actual time.
                     node->pts = node->pts + (system_get_time_delta() * 1000);
                 }
                 node->ntp_sync_flag = system_get_ntp_sync_flag();
             }
-            ESP_LOGI(TAG, "PUSH ...");
-            if (mqtt_publish(self, node) != ESP_OK) {
-                if (self->out) {
-                    ESP_LOGI(TAG, "PUSH FAIL, Save to flash");
-                    xQueueSend(self->out, &node, portMAX_DELAY);
+            
+            // Check upload configuration and system mode to decide upload behavior
+            uploadAttr_t upload;
+            cfg_get_upload_attr(&upload);
+            modeSel_e currentMode = system_get_mode();
+            
+            if (upload.uploadMode == 0 || currentMode == MODE_UPLOAD) { //
+                // Instant upload mode, or upload mode - attempt immediate upload
+                ESP_LOGI(TAG, "PUSH ... (mode: %d, uploadMode: %d)", currentMode, upload.uploadMode);
+                if (mqtt_publish(self, node) != ESP_OK) {
+                    if (self->out) {
+                        ESP_LOGI(TAG, "PUSH FAIL, Save to flash");
+                        xQueueSend(self->out, &node, portMAX_DELAY);
+                    } else {
+                        // No storage queue available, free the node  
+                        ESP_LOGW(TAG, "PUSH FAIL, No storage queue available");
+                        node->free_handler(node, EVENT_FAIL);
+                    }
+                } else {
+                    ESP_LOGI(TAG, "PUSH SUCCESS");
+                    node->free_handler(node, EVENT_OK);
+                    g_sned_success += 1;
                 }
-            } else {
-                ESP_LOGI(TAG, "PUSH SUCCESS");
-                node->free_handler(node, EVENT_OK);
-                g_sned_success += 1;
+            } else { // Scheduled upload mode
+                ESP_LOGI(TAG, "PUSH SKIP (mode: %d, uploadMode: %d)", currentMode, upload.uploadMode);
+                if (self->out) {
+                    xQueueSend(self->out, &node, portMAX_DELAY);
+                } else {
+                    // No storage queue available, free the node
+                    ESP_LOGW(TAG, "No storage queue available for scheduled upload");
+                    node->free_handler(node, EVENT_FAIL);
+                }
             }
             g_sned_total += 1;
         }
@@ -352,12 +377,14 @@ static void free_mqtt_client_config(mdMqtt_t *m)
  * @param m MQTT state
  * @param c ESP MQTT client config to populate
  */
-static void mqtt_esp_config(mdMqtt_t *m, esp_mqtt_client_config_t *c)
+static void mqtt_esp_config(mdMqtt_t *m)
 {
+    esp_mqtt_client_config_t *c = &m->cfg;
+    memset(c, 0, sizeof(esp_mqtt_client_config_t));
     cfg_get_mqtt_attr(&m->mqtt);
     c->broker.address.hostname = m->mqtt.host;
     c->broker.address.port = m->mqtt.port;
-    c->broker.address.transport = MQTT_TRANSPORT_OVER_TCP;
+    c->broker.address.transport = m->mqtt.tlsEnable ? MQTT_TRANSPORT_OVER_SSL : MQTT_TRANSPORT_OVER_TCP;
     c->credentials.username = m->mqtt.user;
     c->credentials.client_id = m->mqtt.clientId;
     c->task.stack_size = 6 * 1024;
@@ -365,10 +392,38 @@ static void mqtt_esp_config(mdMqtt_t *m, esp_mqtt_client_config_t *c)
     if (strlen(m->mqtt.password)) {
         c->credentials.authentication.password = m->mqtt.password;
     }
-    ESP_LOGI(TAG, "HOST: %s, USER: %s PSW: %s, PORT: %ld",
-             m->mqtt.host, m->mqtt.user, m->mqtt.password, m->mqtt.port);
+    // TLS:
+    if (m->mqtt.tlsEnable) {
+        if (strlen(m->mqtt.caName)) {
+            c->broker.verification.skip_cert_common_name_check = true;
+            c->broker.verification.certificate = filesystem_read(MQTT_CA_PATH);
+        } else {
+            c->broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+        }
+        if (strlen(m->mqtt.certName) && strlen(m->mqtt.keyName)) {
+            c->credentials.authentication.certificate = filesystem_read(MQTT_CERT_PATH);
+            c->credentials.authentication.key = filesystem_read(MQTT_KEY_PATH);
+        }
+        c->network.timeout_ms = 15000;
+        c->broker.verification.use_global_ca_store = false;
+    }
+    ESP_LOGI(TAG, "HOST:%s, USER:%s PSW:%s, PORT:%ld, TLS:%d",
+             m->mqtt.host, m->mqtt.user, m->mqtt.password, m->mqtt.port, m->mqtt.tlsEnable);
 }
 
+static void mqtt_free_config(mdMqtt_t *m)
+{
+    esp_mqtt_client_config_t *c = &m->cfg;
+    if (c->broker.verification.certificate) {
+        free((void *)c->broker.verification.certificate);
+    }
+    if (c->credentials.authentication.certificate) {
+        free((void *)c->credentials.authentication.certificate);
+    }
+    if (c->credentials.authentication.key) {
+        free((void *)c->credentials.authentication.key);
+    }
+}
 /**
  * Start ESP MQTT client
  * @param m MQTT state
@@ -376,14 +431,12 @@ static void mqtt_esp_config(mdMqtt_t *m, esp_mqtt_client_config_t *c)
  */
 static int8_t mqtt_esp_start(mdMqtt_t *m)
 {
-    esp_mqtt_client_config_t cfg;
-    memset(&cfg, 0, sizeof(esp_mqtt_client_config_t));
     m->mip = NULL;
     m->status_cb = NULL;
     m->sub.notify_cb = NULL;
     m->sub.topic_cnt = 0;
-    mqtt_esp_config(m, &cfg);
-    m->client = esp_mqtt_client_init(&cfg);
+    mqtt_esp_config(m);
+    m->client = esp_mqtt_client_init(&m->cfg);
     esp_mqtt_client_register_event(g_MQ.client, ESP_EVENT_ANY_ID, mqtt_event_handler, &g_MQ);
     return esp_mqtt_client_start(g_MQ.client);
 }
@@ -401,6 +454,7 @@ static int8_t mqtt_esp_stop(mdMqtt_t *m)
     esp_mqtt_client_disconnect(m->client);
     esp_mqtt_client_stop(m->client);
     esp_mqtt_client_destroy(m->client);
+    mqtt_free_config(m);
     m->client = NULL;
     return 0;
 }

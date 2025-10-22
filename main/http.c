@@ -21,6 +21,8 @@
 #include "iot_mip.h"
 #include "cat1.h"
 #include "net_module.h"
+#include "storage.h"
+#include "utils.h"
 
 #define TAG "-->HTTP"  // Logging tag for HTTP module
 
@@ -203,6 +205,10 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
 
     cfg_get_image_attr(&image);
+    // 因为相机默认是开启水平翻转的，返回WEB时开关状态取反，来达到开关关闭时图像是正常的效果
+    // Because the camera defaults to horizontal flipping, when returning to WEB,
+    // the switch status is reversed to achieve the effect that the image is normal when the switch is turned off
+    image.bHorizonetal = !image.bHorizonetal;
     /* create Student JSON object */
     s2j_create_json_obj(json_obj);
     /* serialize data to JSON object. */
@@ -279,6 +285,9 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
             s2j_struct_get_basic_element(image, json, int, bColorbar);
         }
 
+        // 因为返回WEB时开关状态是取反的，再接收前端配置时需再次取反恢复
+        // Because the switch status is reversed when returning to WEB, it needs to be reversed again when receiving front-end configuration for restoration
+        image->bHorizonetal = !image->bHorizonetal;
         if (camera_set_image(image, false) == ESP_OK) {
             http_send_json_response(req, RES_OK);
             cfg_set_image_attr(image);
@@ -350,10 +359,10 @@ esp_err_t set_light_param_handle(httpd_req_t *req)
     return ESP_FAIL;
 }
 
-static cJSON *struct_to_json_timedCapNode_t(void *struct_obj)
+static cJSON *struct_to_json_timedNode_t(void *struct_obj)
 {
     s2j_create_json_obj(json_obj_);
-    timedCapNode_t *struct_obj_ = (timedCapNode_t *)struct_obj;
+    timedNode_t *struct_obj_ = (timedNode_t *)struct_obj;
     s2j_json_set_basic_element(json_obj_, struct_obj_, int, day);
     s2j_json_set_basic_element(json_obj_, struct_obj_, string, time);
     return json_obj_;
@@ -379,7 +388,7 @@ esp_err_t get_cap_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &capture, int, intervalValue);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalUnit);
     s2j_json_set_basic_element(json_obj, &capture, int, timedCount);
-    s2j_json_set_struct_array_element_by_func(json_obj, &capture, timedCapNode_t, timedNodes, capture.timedCount);
+    s2j_json_set_struct_array_element_by_func(json_obj, &capture, timedNode_t, timedNodes, capture.timedCount);
 
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -389,9 +398,9 @@ esp_err_t get_cap_param_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
-void *json_to_struct_timedCapNode_t(cJSON *json_obj)
+void *json_to_struct_timedNode_t(cJSON *json_obj)
 {
-    s2j_create_struct_obj(struct_obj_, timedCapNode_t);
+    s2j_create_struct_obj(struct_obj_, timedNode_t);
     s2j_struct_get_basic_element(struct_obj_, json_obj, int, day);
     s2j_struct_get_basic_element(struct_obj_, json_obj, string, time);
     return struct_obj_;
@@ -415,11 +424,65 @@ esp_err_t set_cap_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(capture, json, int, intervalValue);
         s2j_struct_get_basic_element(capture, json, int, intervalUnit);
         s2j_struct_get_basic_element(capture, json, int, timedCount);
-        s2j_struct_get_struct_array_element_by_func(capture, json, timedCapNode_t, timedNodes);
+        s2j_struct_get_struct_array_element_by_func(capture, json, timedNode_t, timedNodes);
         http_send_json_response(req, RES_OK);
         cfg_set_cap_attr(capture);
         sleep_set_last_capture_time(time(NULL));
         s2j_delete_struct_obj(capture);
+        s2j_delete_json_obj(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t get_upload_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    uploadAttr_t upload;
+    char *str = NULL;
+    clear_timeout();
+
+    httpd_resp_set_type(req, "application/json");
+
+    cfg_get_upload_attr(&upload);
+    /* create Student JSON object */
+    s2j_create_json_obj(json_obj);
+    /* serialize data to JSON object. */
+    s2j_json_set_basic_element(json_obj, &upload, int, uploadMode);
+    s2j_json_set_basic_element(json_obj, &upload, int, retryCount);
+    s2j_json_set_basic_element(json_obj, &upload, int, timedCount);
+    s2j_json_set_struct_array_element_by_func(json_obj, &upload, timedNode_t, timedNodes, upload.timedCount);
+    str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+    return ESP_OK;
+}
+
+esp_err_t set_upload_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        s2j_create_struct_obj(upload, uploadAttr_t);
+        /* deserialize data to Student structure object. */
+        cJSON *json = cJSON_Parse(content);
+        cfg_get_upload_attr(upload);
+        s2j_struct_get_basic_element(upload, json, int, uploadMode);
+        s2j_struct_get_basic_element(upload, json, int, retryCount);
+        s2j_struct_get_basic_element(upload, json, int, timedCount);
+        s2j_struct_get_struct_array_element_by_func(upload, json, timedNode_t, timedNodes);
+        http_send_json_response(req, RES_OK);
+        cfg_set_upload_attr(upload);
+        if (upload->uploadMode == 0) {
+            storage_upload_start();
+        } else {
+            storage_upload_stop();
+        }
+        s2j_delete_struct_obj(upload);
         s2j_delete_json_obj(json);
         http_free_content(content);
         return ESP_OK;
@@ -563,8 +626,10 @@ esp_err_t set_dev_info_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(device, json, string, model);
         s2j_struct_get_basic_element(device, json, string, countryCode);
 
-        if(netModule_is_mmwifi())
+        if (netModule_is_mmwifi()) {
             mm_wifi_set_country_code(device->countryCode);
+
+        }
 
         http_send_json_response(req, RES_OK);
         cfg_set_device_info(device);
@@ -599,6 +664,10 @@ esp_err_t get_mqtt_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &mqtt, string, password);
     s2j_json_set_basic_element(json_obj, &mqtt, string, topic);
     s2j_json_set_basic_element(json_obj, &mqtt, int, port);
+    s2j_json_set_basic_element(json_obj, &mqtt, int, tlsEnable);
+    s2j_json_set_basic_element(json_obj, &mqtt, string, caName);
+    s2j_json_set_basic_element(json_obj, &mqtt, string, certName);
+    s2j_json_set_basic_element(json_obj, &mqtt, string, keyName);
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
     cJSON_free(str);
@@ -622,6 +691,10 @@ esp_err_t set_mqtt_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(mqtt, json, string, password);
         s2j_struct_get_basic_element(mqtt, json, string, topic);
         s2j_struct_get_basic_element(mqtt, json, int, port);
+        s2j_struct_get_basic_element(mqtt, json, int, tlsEnable);
+        s2j_struct_get_basic_element(mqtt, json, string, caName);
+        s2j_struct_get_basic_element(mqtt, json, string, certName);
+        s2j_struct_get_basic_element(mqtt, json, string, keyName);
         http_send_json_response(req, RES_OK);
         cfg_set_mqtt_attr(mqtt);
         s2j_delete_struct_obj(mqtt);
@@ -637,9 +710,9 @@ esp_err_t set_mqtt_param_handle(httpd_req_t *req)
 
 esp_err_t get_platform_param_handle(httpd_req_t *req)
 {
-    ESP_LOGI(TAG, "%s", req->uri);
+    // ESP_LOGI(TAG, "%s", req->uri);
 
-    clear_timeout();
+    // clear_timeout(); //deleted!  web can connect to the server every 2 seconds
 
     httpd_resp_set_type(req, "application/json");
 
@@ -669,6 +742,10 @@ esp_err_t get_platform_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_mqtt, mqttParam, string, username);
     s2j_json_set_basic_element(json_mqtt, mqttParam, string, password);
     s2j_json_set_basic_element(json_mqtt, mqttParam, int, isConnected);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, int, tlsEnable);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, string, caName);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, string, certName);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, string, keyName);
 
     char *str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -707,6 +784,10 @@ esp_err_t set_platform_param_handle(httpd_req_t *req)
                 s2j_struct_get_basic_element(mqttParam, json_mqtt, int, qos);
                 s2j_struct_get_basic_element(mqttParam, json_mqtt, string, username);
                 s2j_struct_get_basic_element(mqttParam, json_mqtt, string, password);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, int, tlsEnable);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, string, caName);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, string, certName);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, string, keyName);
                 break;
             }
             default:
@@ -1082,6 +1163,203 @@ esp_err_t set_dev_upgrade_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t upload_to_path(httpd_req_t *req, const char *path)
+{
+    ESP_LOGI(TAG, "upload_to_path %s", path);
+    int remaining = req->content_len;
+    int received = 0;
+    int timeout = 0;
+    char *buf = malloc(HTTP_BUFF_MAX_SIZE);
+    if (!buf) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    
+    // 使用 filesystem_write 需要先收集完整数据
+    char *file_data = malloc(req->content_len);
+    if (!file_data) {
+        free(buf);
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    
+    char *ptr = file_data;
+    while (remaining > 0) {
+        if ((received = httpd_req_recv(req, buf, MIN(remaining, HTTP_BUFF_MAX_SIZE))) <= 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout++ < 3) {
+                continue;
+            }
+            free(buf);
+            free(file_data);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
+            return ESP_FAIL;
+        }
+        memcpy(ptr, buf, received);
+        ptr += received;
+        remaining -= received;
+    }
+    
+    int result = filesystem_write(path, file_data, req->content_len);
+    free(buf);
+    free(file_data);
+    
+    if (result != 0) {
+        ESP_LOGE(TAG, "Failed to write file: %s", path);
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "File uploaded successfully: %s (%d bytes)", path, req->content_len);
+    return ESP_OK;
+}
+
+static esp_err_t parse_req_filename(httpd_req_t *req, char *filename)
+{
+    size_t header_len = httpd_req_get_hdr_value_len(req, "X-File-Name");
+    if (header_len > 0) {
+        if (httpd_req_get_hdr_value_str(req, "X-File-Name", filename, header_len + 1) == ESP_OK) {          
+            return ESP_OK;
+        }
+    }
+    return ESP_FAIL;
+}
+
+static esp_err_t set_upload_mqtt_ca_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    char filename[128] = {0};
+    if (parse_req_filename(req, filename) == ESP_FAIL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    if (upload_to_path(req, MQTT_CA_PATH) == ESP_OK) {
+        cfg_get_mqtt_attr(&mqtt);
+        strncpy(mqtt.caName, filename, sizeof(mqtt.caName) - 1);
+        mqtt.caName[sizeof(mqtt.caName) - 1] = '\0';
+        cfg_set_mqtt_attr(&mqtt);
+        ESP_LOGI(TAG, "CA filename saved: %s", mqtt.caName);
+        http_send_json_response(req, RES_OK);
+    } else {
+        ESP_LOGE(TAG, "Failed to upload CA file or parse filename");
+        http_send_json_response(req, RES_FAIL);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t set_upload_mqtt_cert_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    char filename[128] = {0};
+    if (parse_req_filename(req, filename) == ESP_FAIL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    if (upload_to_path(req, MQTT_CERT_PATH) == ESP_OK) {
+        cfg_get_mqtt_attr(&mqtt);
+        strncpy(mqtt.certName, filename, sizeof(mqtt.certName) - 1);
+        mqtt.certName[sizeof(mqtt.certName) - 1] = '\0';
+        ESP_LOGI(TAG, "Cert filename saved: %s", mqtt.certName);
+        cfg_set_mqtt_attr(&mqtt);
+        http_send_json_response(req, RES_OK);
+    } else {
+        ESP_LOGE(TAG, "Failed to upload cert file or parse filename");
+        http_send_json_response(req, RES_FAIL);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t set_upload_mqtt_key_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    char filename[128] = {0};
+    if (parse_req_filename(req, filename) == ESP_FAIL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    if (upload_to_path(req, MQTT_KEY_PATH) == ESP_OK) {
+        cfg_get_mqtt_attr(&mqtt);
+        strncpy(mqtt.keyName, filename, sizeof(mqtt.keyName) - 1);
+        mqtt.keyName[sizeof(mqtt.keyName) - 1] = '\0';
+        ESP_LOGI(TAG, "Key filename saved: %s", mqtt.keyName);
+        cfg_set_mqtt_attr(&mqtt);
+        http_send_json_response(req, RES_OK);
+    } else {
+        ESP_LOGE(TAG, "Failed to upload key file or parse filename");
+        http_send_json_response(req, RES_FAIL);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t delete_cert_file(const char *cert_path)
+{
+    // delete certificate file
+    if (filesystem_is_exist(cert_path)) {
+        unlink(cert_path);
+    }
+    
+    return ESP_OK;
+}
+
+static esp_err_t delete_mqtt_ca_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    delete_cert_file(MQTT_CA_PATH);
+
+    cfg_get_mqtt_attr(&mqtt);
+    strcpy(mqtt.caName, "");
+    cfg_set_mqtt_attr(&mqtt);
+
+    http_send_json_response(req, RES_OK);
+
+    return ESP_OK;
+}
+
+static esp_err_t delete_mqtt_cert_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    delete_cert_file(MQTT_CERT_PATH);
+
+    cfg_get_mqtt_attr(&mqtt);
+    strcpy(mqtt.certName, "");
+    cfg_set_mqtt_attr(&mqtt);
+
+    http_send_json_response(req, RES_OK);
+    
+return ESP_OK;
+}
+
+static esp_err_t delete_mqtt_key_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    delete_cert_file(MQTT_KEY_PATH);
+
+    cfg_get_mqtt_attr(&mqtt);
+    strcpy(mqtt.keyName, "");
+    cfg_set_mqtt_attr(&mqtt);
+
+    http_send_json_response(req, RES_OK);
+    
+return ESP_OK;
+}
+
 /**
  * MJPEG stream handler
  * @param req HTTP request handle
@@ -1206,6 +1484,16 @@ static const httpd_uri_t g_webHandlers[] = {
         .handler = get_cap_param_handle,
     },
     {
+        .uri = "/api/v1/capture/setUploadParam",
+        .method = HTTP_POST,
+        .handler = set_upload_param_handle,
+    },
+    {
+        .uri = "/api/v1/capture/getUploadParam",
+        .method = HTTP_GET,
+        .handler = get_upload_param_handle,
+    },
+    {
         .uri = "/api/v1/network/getWifiParam",
         .method = HTTP_GET,
         .handler = get_wifi_param_handle,
@@ -1304,6 +1592,37 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/system/setDevUpgrade",
         .method = HTTP_POST,
         .handler = set_dev_upgrade_handle,
+    },
+    // 证书上传（三个静态路径，直接写入 LittleFS）
+    {
+        .uri = "/api/v1/network/uploadMqttCa",
+        .method = HTTP_POST,
+        .handler = set_upload_mqtt_ca_handle,
+    },
+    {
+        .uri = "/api/v1/network/uploadMqttCert",
+        .method = HTTP_POST,
+        .handler = set_upload_mqtt_cert_handle,
+    },
+    {
+        .uri = "/api/v1/network/uploadMqttKey",
+        .method = HTTP_POST,
+        .handler = set_upload_mqtt_key_handle,
+    },
+    {
+        .uri = "/api/v1/network/deleteMqttCa",
+        .method = HTTP_POST,
+        .handler = delete_mqtt_ca_handle,
+    },
+    {
+        .uri = "/api/v1/network/deleteMqttCert",
+        .method = HTTP_POST,
+        .handler = delete_mqtt_cert_handle,
+    },
+    {
+        .uri = "/api/v1/network/deleteMqttKey",
+        .method = HTTP_POST,
+        .handler = delete_mqtt_key_handle,
     },
 };
 

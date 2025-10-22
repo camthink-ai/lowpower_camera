@@ -86,24 +86,42 @@ static size_t storage_free_space()
 
 void storage_show_file()
 {
-    time_t pts;
+    uint64_t pts;
     char type;
     uint32_t num = 0;
     struct dirent *entry;
     struct stat fstat;
     char filename[32];
+    char time[32];
     DIR *dir = opendir(STORAGE_ROOT);
 
     while ((entry = readdir(dir)) != NULL) {
         if (sscanf(entry->d_name, "%c%lld.jpg", &type, &pts) == 2) {
+            time_t t = pts / 1000;
+            strftime(time, sizeof(time), "%Y-%m-%d %H:%M:%S", localtime(&t));
             sprintf(filename, "%s/%c%lld.jpg", STORAGE_ROOT, type, pts);
             stat(filename, &fstat);
-            ESP_LOGI(TAG, "------ %s(type %c, pts %lld size %ld)", entry->d_name, type, pts, fstat.st_size);
+            ESP_LOGI(TAG, "------ %s(type %c, time %s size %ld)", entry->d_name, type, time, fstat.st_size);
             num++;
         }
     }
     ESP_LOGI(TAG, "Total files: %ld", num);
     storage_free_space();
+    closedir(dir);
+}
+
+void storage_clear_jpg_file()
+{
+    struct dirent *entry;
+    char path[PATH_MAX_lEN];
+    DIR *dir = opendir(STORAGE_ROOT);
+    while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, ".jpg")) {
+            sprintf(path, "%s/%s", STORAGE_ROOT, entry->d_name);
+            unlink(path);
+            ESP_LOGI(TAG, "unlink file %s", path);
+        }
+    }
     closedir(dir);
 }
 
@@ -195,9 +213,9 @@ static esp_err_t storage_upload_file(char *filename, uint64_t pts, snapType_e ty
     return ESP_FAIL;
 }
 
-static void task(mdStorage_t *self)
+static void record(mdStorage_t *self)
 {
-    ESP_LOGI(TAG, "task Start");
+    ESP_LOGI(TAG, "record Start");
     while (true) {
         queueNode_t *node;
         if (xQueueReceive(self->in, &node, portMAX_DELAY)) {
@@ -259,7 +277,6 @@ static void upload(mdStorage_t *self)
         }
         ESP_LOGI(TAG, "upload nothing");
         closedir(dir);
-        xEventGroupSetBits(self->eventGroup, STORAGE_UPLOAD_STOP_BIT);
     }
     ESP_LOGI(TAG, "Stop");
     vTaskDelete(NULL);
@@ -271,8 +288,22 @@ static int do_tf_cmd(int argc, char **argv)
     return ESP_OK;
 }
 
+static int do_clear_cmd(int argc, char **argv)
+{
+    storage_clear_jpg_file();
+    return ESP_OK;
+}
+
+static int do_ls_cmd(int argc, char **argv)
+{
+    storage_show_file();
+    return ESP_OK;
+}
+
 static esp_console_cmd_t g_cmd[] = {
     {"tf", "show TF card status", NULL, do_tf_cmd, NULL},
+    {"ls", "show file list", NULL, do_ls_cmd, NULL},
+    {"clear", "remove all jpg file", NULL, do_clear_cmd, NULL},
 };
 
 void storage_upload_start()
@@ -328,7 +359,7 @@ void storage_open(QueueHandle_t in, QueueHandle_t out)
     g_mdStorage.out = out;
     g_mdStorage.eventGroup = xEventGroupCreate();
     g_mdStorage.mutex = xSemaphoreCreateMutex();
-    xTaskCreatePinnedToCore((TaskFunction_t)task, "record", 4 * 1024, &g_mdStorage, 4, NULL, 0);
+    xTaskCreatePinnedToCore((TaskFunction_t)record, "record", 4 * 1024, &g_mdStorage, 4, NULL, 0);
     xTaskCreatePinnedToCore((TaskFunction_t)upload, "upload", 4 * 1024, &g_mdStorage, 4, NULL, 1);
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
 }

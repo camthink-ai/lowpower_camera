@@ -53,7 +53,7 @@ extern "C" {
 #define KEY_IMG_AEC         "img:bAec"
 #define KEY_IMG_AEC2        "img:bAec2"
 #define KEY_IMG_AEC_VALUE   "img:aecValue"
-#define KEY_IMG_BPC         "img:bBpc"  
+#define KEY_IMG_BPC         "img:bBpc"
 #define KEY_IMG_WPC         "img:bWpc"
 #define KEY_IMG_RAW_GMA     "img:bRawGma"
 #define KEY_IMG_LENC        "img:bLenc"
@@ -72,6 +72,11 @@ extern "C" {
 #define KEY_CAP_TIME_COUNT  "cap:tCount"
 #define KEY_CAP_INTERVAL_V  "cap:iValue"
 #define KEY_CAP_INTERVAL_U  "cap:iUnit"
+#define KEY_UPLOAD_MODE     "upload:mode"
+#define KEY_UPLOAD_COUNT    "upload:count"
+#define KEY_UPLOAD_INTERVAL_V "upload:iValue"
+#define KEY_UPLOAD_INTERVAL_U "upload:iUnit"
+#define KEY_UPLOAD_RETRY    "upload:retry"
 #define KEY_PLATFORM_TYPE   "plat:type"
 #define KEY_SNS_HTTP_PORT   "sns:httpPort"
 #define KEY_MQTT_ENABLE     "mqtt:enable"
@@ -82,6 +87,10 @@ extern "C" {
 #define KEY_MQTT_QOS        "mqtt:qos"
 #define KEY_MQTT_USER       "mqtt:user"
 #define KEY_MQTT_PASSWORD   "mqtt:password"
+#define KEY_MQTT_TLS_ENABLE "mqtt:tlsEnable"
+#define KEY_MQTT_CA_NAME    "mqtt:caName"
+#define KEY_MQTT_CERT_NAME  "mqtt:certName"
+#define KEY_MQTT_KEY_NAME   "mqtt:keyName"
 #define KEY_WIFI_SSID       "wifi:ssid"
 #define KEY_WIFI_PASSWORD   "wifi:password"
 #define KEY_IOT_AUTOP       "iot:autop"
@@ -168,7 +177,7 @@ typedef struct imgAttr {
 typedef struct timedCapNode {
     uint8_t day; //0:sunday 1: monday, 2: tuesday, 3: wednesday ... 7: everyday,
     char time[MAX_LEN_32]; // xx:xx:xx
-} timedCapNode_t;
+} timedNode_t;
 
 /**
  * Capture attributes structure
@@ -179,10 +188,20 @@ typedef struct capAttr {
     uint8_t bButtonCap;
     uint8_t scheCapMode; // 0: timed 1: interval
     uint8_t timedCount; //use for timed mode
-    timedCapNode_t timedNodes[8]; //use for timed mode
+    timedNode_t timedNodes[8]; //use for timed mode
     uint32_t intervalValue; // use for interval mode
     uint8_t  intervalUnit; // use for interval mode. 0: minutes, 1: hours, 2:day
 } capAttr_t;
+
+/**
+ * Data upload management attributes structure
+ */
+typedef struct uploadAttr {
+    uint8_t uploadMode; // 0: instant upload, 1: scheduled upload
+    uint8_t timedCount; // number of scheduled upload times
+    timedNode_t timedNodes[10]; // scheduled upload times (max 10)
+    uint8_t retryCount; // retry count for failed uploads (default 3)
+} uploadAttr_t;
 
 /**
  * MQTT connection attributes structure
@@ -196,6 +215,10 @@ typedef struct mqttAttr {
     uint32_t port;
     uint8_t qos;
     uint32_t httpPort;
+    uint8_t tlsEnable;
+    char caName[MAX_LEN_128];
+    char certName[MAX_LEN_128];
+    char keyName[MAX_LEN_128];
 } mqttAttr_t;
 
 /**
@@ -259,6 +282,10 @@ typedef struct mqttPlatformAttr {
     char username[MAX_LEN_64];
     char password[MAX_LEN_64];
     uint8_t isConnected;
+    uint8_t tlsEnable; // 0: disable, 1: enable
+    char caName[MAX_LEN_128];
+    char certName[MAX_LEN_128];
+    char keyName[MAX_LEN_128];
 } mqttPlatformAttr_t;
 
 /**
@@ -338,6 +365,8 @@ esp_err_t cfg_get_light_attr(lightAttr_t *light);
 esp_err_t cfg_set_light_attr(lightAttr_t *light);
 esp_err_t cfg_get_cap_attr(capAttr_t *capture);
 esp_err_t cfg_set_cap_attr(capAttr_t *capture);
+esp_err_t cfg_get_upload_attr(uploadAttr_t *upload);
+esp_err_t cfg_set_upload_attr(uploadAttr_t *upload);
 esp_err_t cfg_get_mqtt_attr(mqttAttr_t *mqtt);
 esp_err_t cfg_set_mqtt_attr(mqttAttr_t *mqtt);
 esp_err_t cfg_get_wifi_attr(wifiAttr_t *wifi);

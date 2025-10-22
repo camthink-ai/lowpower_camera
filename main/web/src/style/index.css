@@ -213,6 +213,26 @@ img.logo {
 .mqtt-card .card-item .card-item-content .ms-select {
     width: 100% !important;
 }
+
+/* Host 输入组：协议前缀 + 主机 */
+.host-input-group {
+    display: flex;
+    align-items: center;
+}
+.host-input-group .prefix-box {
+    display: inline-block;
+    padding: 0 8px;
+    height: 30px;
+    line-height: 30px;
+    border: 1px solid #e2e2e2;
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+    background-color: #f7f7f7;
+    color: #666;
+}
+.host-input-group input[type="text"] {
+    border-radius: 0 4px 4px 0;
+}
 .mqtt-card .item-button {
     justify-content: flex-end;
 }
@@ -224,4 +244,16 @@ img.logo {
 /* tailwind style */
 .mr-5 {
     margin-right: 10px;
+}
+
+
+
+/* MQTTS 上传时间新需求 */
+.upload-box .card-item:first-child{
+    margin-bottom: 0;
+}
+.upload-box .card-item-content{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }

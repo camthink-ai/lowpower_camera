@@ -95,7 +95,7 @@ typedef struct mdMisc {
     bool isInit;                    ///< Initialization flag
     miscBtn_t btn;                  ///< Button handler
     miscLed_t led;                  ///< LED control state
-    uint8_t voltage;                ///< Last measured battery voltage
+    uint32_t voltage;                ///< Last measured battery voltage
     adc_oneshot_unit_handle_t adc1_unit_handle; ///< ADC1 unit handle
     adc_oneshot_unit_handle_t adc2_unit_handle; ///< ADC2 unit handle  
     adc_cali_handle_t adc1_cali_handle; ///< ADC1 calibration handle
@@ -131,7 +131,7 @@ static void button_single_click_cb(void *arg, void *priv)
         wifi_clear_timeout();
         http_clear_timeout();
     }else if(system_get_mode() != MODE_CONFIG){
-        sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG);
+        sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG, 0);
         esp_sleep_enable_timer_wakeup(100000ULL);
         esp_deep_sleep_start();
     }
@@ -288,14 +288,13 @@ static void adc_calibration_deinit(void)
     adc_oneshot_del_unit(g_misc.adc2_unit_handle);
 }
 
-static uint8_t  get_battery_voltage_rate()
+static int  get_adc_voltage_mv()
 {
     esp_err_t ret = ESP_OK;
     int voltage = 0;
-    uint32_t sum = 0;
+    int sum = 0;
     int raw;
     uint8_t n = ADC_SUM_N;
-    uint8_t rate;
 
     // misc_io_set(BATTERY_POWER_IO, BATTERY_POWER_ON);
     // vTaskDelay(pdMS_TO_TICKS(50));
@@ -312,16 +311,8 @@ static uint8_t  get_battery_voltage_rate()
     }
     // misc_io_set(BATTERY_POWER_IO, BATTERY_POWER_OFF);
     voltage = sum / ADC_SUM_N;
-    if (voltage < BATTERY_MIN_VOLTAGE / 2) {
-        // maybe typec inserted
-        rate = 100;
-    } else {
-        voltage = MIN(MAX(voltage, BATTERY_MIN_VOLTAGE), BATTERY_MAX_VOLTAGE);
-        rate = (uint8_t)((voltage - BATTERY_MIN_VOLTAGE) * 100 / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE));
-    }
-    ESP_LOGI(TAG, "battery voltage rate %d", rate);
 
-    return rate;
+    return voltage;
 }
 
 static void adc_start()
@@ -413,19 +404,27 @@ uint8_t misc_get_light_value_rate()
     return rate;
 }
 
-uint8_t misc_read_battery_voltage()
-{
-    g_misc.voltage = get_battery_voltage_rate();
-    return g_misc.voltage;
-}
 
 uint8_t  misc_get_battery_voltage_rate()
 {
-    // if (misc_io_get(TYPEC_DET_IO) == TYPEC_INSERT) {
-    //     return 100;
-    // }
+    int voltage_mv = 0;
+    uint8_t rate = 0;
+
+    voltage_mv = misc_get_battery_voltage() / 2;
+    if (voltage_mv < BATTERY_MIN_VOLTAGE) {
+        // maybe typec inserted
+        rate = 100;
+    } else {
+        voltage_mv = MIN(MAX(voltage_mv, BATTERY_MIN_VOLTAGE), BATTERY_MAX_VOLTAGE);
+        rate = (uint8_t)((voltage_mv - BATTERY_MIN_VOLTAGE) * 100 / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE));
+    }
+    return rate;
+}
+
+int misc_get_battery_voltage()
+{
     if (g_misc.voltage == 0) {
-        g_misc.voltage = get_battery_voltage_rate();
+        g_misc.voltage = get_adc_voltage_mv() * 2;
     }
     return g_misc.voltage;
 }
@@ -584,7 +583,7 @@ static int misc_test(int argc, char **argv)
             misc_led_blink(cnt, blink_interval);
         }
     }else if (strcmp(argv[1], "bat") == 0) {
-        get_battery_voltage_rate();
+        misc_get_battery_voltage();
     }else if (strcmp(argv[1], "pir") == 0) {
         if(strcmp(argv[2], "init") == 0){
             pir_init(1);

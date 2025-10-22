@@ -29,6 +29,15 @@ const App = {
             this.showMsg.enable = false;
         }, 5000);
     },
+    /** MJPEG加载错误提示 */
+    alertErrMsg(event) {
+        // 避免onerror死循环
+        if (event && event.target) {
+            event.target.onerror = null;
+        }
+        // 弹出网络错误提示
+        this.showTipsDialog($t('networkError'));
+    },
     /**
      * Init Request Data
      * 由于应用层目前httpserver无法支持异步，因此视频流独立一个server，其他配置请求独立一个server
@@ -39,6 +48,7 @@ const App = {
         await this.getDeviceInfo();
         await this.getImageInfo();
         await this.getCaptureInfo();
+        await this.getUploadInfo();
         await this.getDataReport();
         if (this.netmod === 'cat1') {
             await this.getCellularInfo();

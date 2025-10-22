@@ -220,6 +220,7 @@ static esp_err_t init_camera()
         imgAttr_t image;
         sensor_t *s = esp_camera_sensor_get();
         s->status.gainceiling = 0;
+        s->status.hmirror = 1;
         
         cfg_get_image_attr(&image);
         err = camera_set_image(&image, true);
@@ -267,7 +268,7 @@ esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
     if (CAMERA_USE_UVC) vTaskDelay(pdMS_TO_TICKS(5000));    // wait for sensor stable
     else vTaskDelay(pdMS_TO_TICKS(5000));                   // wait for sensor stable
     sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT);          //如果后续无截图任务，将进入休眠；
-    misc_read_battery_voltage();
+    misc_get_battery_voltage();
     
     return ESP_OK;
 }

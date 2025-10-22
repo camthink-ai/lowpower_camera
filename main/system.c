@@ -242,3 +242,40 @@ void system_schedule_todo()
     }
     sleep_set_event_bits(SLEEP_SCHEDULE_DONE_BIT);  // Signal completion
 }
+
+/**
+ * Execute upload tasks
+ * Triggers storage upload process for scheduled upload mode
+ */
+void system_upload_todo()
+{
+    uploadAttr_t upload;
+    esp_err_t ret = cfg_get_upload_attr(&upload);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get upload configuration: %s", esp_err_to_name(ret));
+        return;
+    }
+    
+    ESP_LOGI(TAG, "Upload task - Mode: %d, TimedCount: %d", 
+             upload.uploadMode, upload.timedCount);
+    
+    switch (upload.uploadMode) {
+        case 0:
+            // Instant upload mode - uploads happen immediately after capture
+            ESP_LOGI(TAG, "Instant upload mode - no scheduled action needed");
+            break;
+            
+        case 1:
+            // Scheduled upload mode - trigger storage upload
+            ESP_LOGI(TAG, "Triggering scheduled storage upload");
+            storage_upload_start();
+            // Update last upload time
+            sleep_set_last_upload_time(time(NULL));
+            break;
+            
+        default:
+            ESP_LOGW(TAG, "Unknown upload mode: %d", upload.uploadMode);
+            break;
+    }
+}

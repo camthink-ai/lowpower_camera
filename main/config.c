@@ -16,7 +16,7 @@
 
 // Handles for NVS namespaces
 static nvs_handle_t g_userHandle = 0;      ///< Handle for user configuration namespace
-static nvs_handle_t g_factoryHandle = 0;   ///< Handle for factory configuration namespace  
+static nvs_handle_t g_factoryHandle = 0;   ///< Handle for factory configuration namespace
 static SemaphoreHandle_t g_mutex = 0;      ///< Mutex for thread-safe access
 
 /**
@@ -49,7 +49,7 @@ static void mutex_lock(void)
 }
 
 /**
- * Unlock configuration mutex 
+ * Unlock configuration mutex
  * Releases the mutex after operations complete
  */
 static void mutex_unlock(void)
@@ -747,10 +747,10 @@ esp_err_t cfg_get_device_info(deviceInfo_t *device)
         strlen(device->countryCode) != 2) {
         get_str(g_factoryHandle, KEY_DEVICE_COUNTRY, device->countryCode, sizeof(device->countryCode), "US");
     }
-    if(CAMERA_USE_UVC){
-        strncpy(device->camera, "USB",sizeof(device->camera));
-    }else{
-        strncpy(device->camera, "CSI",sizeof(device->camera));
+    if (CAMERA_USE_UVC) {
+        strncpy(device->camera, "USB", sizeof(device->camera));
+    } else {
+        strncpy(device->camera, "CSI", sizeof(device->camera));
     }
     get_str(g_userHandle, KEY_DEVICE_NETMOD, device->netmod, sizeof(device->netmod), "");
     mutex_unlock();
@@ -923,6 +923,48 @@ esp_err_t cfg_set_cap_attr(capAttr_t *capture)
     return ESP_OK;
 }
 
+esp_err_t cfg_get_upload_attr(uploadAttr_t *upload)
+{
+    mutex_lock();
+    memset(upload, 0, sizeof(uploadAttr_t));
+    get_u8(g_userHandle, KEY_UPLOAD_MODE, &upload->uploadMode, 0);
+    get_u8(g_userHandle, KEY_UPLOAD_COUNT, &upload->timedCount, 0);
+    get_u8(g_userHandle, KEY_UPLOAD_RETRY, &upload->retryCount, 3);
+    char key[32];
+    for (size_t i = 0; i < upload->timedCount; i++) {
+        if (i >= sizeof(upload->timedNodes) / sizeof(upload->timedNodes[0])) {
+            break;
+        }
+        sprintf(key, "upload:t%d.day", i);
+        get_u8(g_userHandle, key, &upload->timedNodes[i].day, 0);
+        sprintf(key, "upload:t%d.time", i);
+        get_str(g_userHandle, key, upload->timedNodes[i].time, sizeof(upload->timedNodes[i].time), "00:00:00");
+    }
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_set_upload_attr(uploadAttr_t *upload)
+{
+    mutex_lock();
+    set_u8(g_userHandle, KEY_UPLOAD_MODE, upload->uploadMode);
+    set_u8(g_userHandle, KEY_UPLOAD_COUNT, upload->timedCount);
+    set_u8(g_userHandle, KEY_UPLOAD_RETRY, upload->retryCount);
+    char key[32];
+    for (size_t i = 0; i < upload->timedCount; i++) {
+        if (i >= sizeof(upload->timedNodes) / sizeof(upload->timedNodes[0])) {
+            break;
+        }
+        sprintf(key, "upload:t%d.day", i);
+        set_u8(g_userHandle, key, upload->timedNodes[i].day);
+        sprintf(key, "upload:t%d.time", i);
+        set_str(g_userHandle, key, upload->timedNodes[i].time);
+    }
+    commit_cfg(g_userHandle);
+    mutex_unlock();
+    return ESP_OK;
+}
+
 esp_err_t cfg_get_mqtt_attr(mqttAttr_t *mqtt)
 {
     platformParamAttr_t platformParam;
@@ -948,9 +990,13 @@ esp_err_t cfg_get_mqtt_attr(mqttAttr_t *mqtt)
             snprintf(mqtt->user, sizeof(mqtt->user), "%s", platformParam.mqttPlatform.username);
             snprintf(mqtt->password, sizeof(mqtt->password), "%s", platformParam.mqttPlatform.password);
             snprintf(mqtt->clientId, sizeof(mqtt->clientId), "%s", platformParam.mqttPlatform.clientId);
+            snprintf(mqtt->caName, sizeof(mqtt->caName), "%s", platformParam.mqttPlatform.caName);
+            snprintf(mqtt->certName, sizeof(mqtt->certName), "%s", platformParam.mqttPlatform.certName);
+            snprintf(mqtt->keyName, sizeof(mqtt->keyName), "%s", platformParam.mqttPlatform.keyName);
             mqtt->port = platformParam.mqttPlatform.mqttPort;
             mqtt->qos = platformParam.mqttPlatform.qos;
             mqtt->httpPort = 5220;
+            mqtt->tlsEnable = platformParam.mqttPlatform.tlsEnable;
             break;
         default:
             break;
@@ -967,6 +1013,10 @@ esp_err_t cfg_set_mqtt_attr(mqttAttr_t *mqtt)
     set_str(g_userHandle, KEY_MQTT_TOPIC, mqtt->topic);
     set_str(g_userHandle, KEY_MQTT_USER, mqtt->user);
     set_str(g_userHandle, KEY_MQTT_PASSWORD, mqtt->password);
+    set_u8(g_userHandle, KEY_MQTT_TLS_ENABLE, mqtt->tlsEnable);
+    set_str(g_userHandle, KEY_MQTT_CA_NAME, mqtt->caName);
+    set_str(g_userHandle, KEY_MQTT_CERT_NAME, mqtt->certName);
+    set_str(g_userHandle, KEY_MQTT_KEY_NAME, mqtt->keyName);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;
@@ -1054,6 +1104,10 @@ esp_err_t cfg_get_platform_param_attr(platformParamAttr_t *platform)
     get_u8(g_userHandle, KEY_MQTT_QOS, &platform->mqttPlatform.qos, 1);
     get_str(g_userHandle, KEY_MQTT_USER, platform->mqttPlatform.username, sizeof(platform->mqttPlatform.username), "");
     get_str(g_userHandle, KEY_MQTT_PASSWORD, platform->mqttPlatform.password, sizeof(platform->mqttPlatform.password), "");
+    get_u8(g_userHandle, KEY_MQTT_TLS_ENABLE, &platform->mqttPlatform.tlsEnable, 0);
+    get_str(g_userHandle, KEY_MQTT_CA_NAME, platform->mqttPlatform.caName, sizeof(platform->mqttPlatform.caName), "");
+    get_str(g_userHandle, KEY_MQTT_CERT_NAME, platform->mqttPlatform.certName, sizeof(platform->mqttPlatform.certName), "");
+    get_str(g_userHandle, KEY_MQTT_KEY_NAME, platform->mqttPlatform.keyName, sizeof(platform->mqttPlatform.keyName), "");
 
     mutex_unlock();
 
@@ -1085,6 +1139,10 @@ esp_err_t cfg_set_platform_param_attr(platformParamAttr_t *platform)
             set_u8(g_userHandle, KEY_MQTT_QOS, platform->mqttPlatform.qos);
             set_str(g_userHandle, KEY_MQTT_USER, platform->mqttPlatform.username);
             set_str(g_userHandle, KEY_MQTT_PASSWORD, platform->mqttPlatform.password);
+            set_u8(g_userHandle, KEY_MQTT_TLS_ENABLE, platform->mqttPlatform.tlsEnable);
+            set_str(g_userHandle, KEY_MQTT_CA_NAME, platform->mqttPlatform.caName);
+            set_str(g_userHandle, KEY_MQTT_CERT_NAME, platform->mqttPlatform.certName);
+            set_str(g_userHandle, KEY_MQTT_KEY_NAME, platform->mqttPlatform.keyName);
             break;
         }
         default:

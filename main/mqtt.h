@@ -8,6 +8,11 @@
 extern "C" {
 #endif
 
+
+#define MQTT_CERT_PATH      "/littlefs/mqtts_cert.pem"          // MQTT client certificate
+#define MQTT_KEY_PATH       "/littlefs/mqtts_key.pem"           // MQTT client private key
+#define MQTT_CA_PATH        "/littlefs/mqtts_ca.pem"    
+
 /**
  * Initialize MQTT client with input/output queues
  * @param in Input queue for receiving messages
