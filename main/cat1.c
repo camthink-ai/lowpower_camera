@@ -67,6 +67,12 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base, int32_t event
         esp_netif_t *netif = event_data;
         ESP_LOGI(TAG, "User interrupted event from netif:%p", netif);
     }
+    if (event_id == NETIF_PPP_ERRORNONE) {
+        if(system_get_mode() != MODE_SCHEDULE){
+            system_ntp_time();
+        }
+        mqtt_start();
+    }
 }
 
 /**
@@ -111,10 +117,10 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
         if (iot_mip_autop_is_enable()) {
             iot_mip_autop_async_start(NULL);
         }
-        if(system_get_mode() != MODE_SCHEDULE){
-            system_ntp_time();
-        }
-        mqtt_start();
+        // mqtt_start();
+        // if(system_get_mode() != MODE_SCHEDULE){
+        //     system_ntp_time();
+        // }
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
 

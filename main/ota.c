@@ -89,19 +89,19 @@ esp_err_t ota_vertify(char *header_data, size_t header_size, size_t ota_size)
         }
 
         // check current version with last invalid partition
-        if (last_invalid_app != NULL) {
-            if (memcmp(invalid_app_info.version, new_app_info.version, sizeof(new_app_info.version)) == 0) {
-                ESP_LOGW(TAG, "New version is the same as invalid version.");
-                ESP_LOGW(TAG, "Previously, there was an attempt to launch the firmware with %s version, but it failed.",
-                         invalid_app_info.version);
-                ESP_LOGW(TAG, "The firmware has been rolled back to the previous version.");
-                return ESP_FAIL;
-            }
-        }
-        if (memcmp(new_app_info.version, running_app_info.version, sizeof(new_app_info.version)) == 0) {
-            ESP_LOGW(TAG, "Current running version is the same as a new. We will not continue the update.");
-            return ESP_FAIL;
-        }
+        // if (last_invalid_app != NULL) {
+        //     if (memcmp(invalid_app_info.version, new_app_info.version, sizeof(new_app_info.version)) == 0) {
+        //         ESP_LOGW(TAG, "New version is the same as invalid version.");
+        //         ESP_LOGW(TAG, "Previously, there was an attempt to launch the firmware with %s version, but it failed.",
+        //                  invalid_app_info.version);
+        //         ESP_LOGW(TAG, "The firmware has been rolled back to the previous version.");
+        //         return ESP_FAIL;
+        //     }
+        // }
+        // if (memcmp(new_app_info.version, running_app_info.version, sizeof(new_app_info.version)) == 0) {
+        //     ESP_LOGW(TAG, "Current running version is the same as a new. We will not continue the update.");
+        //     return ESP_FAIL;
+        // }
         // // 判断硬件版本号
         // int running_hardware_version = get_hardware_version(running_app_info.version);
         // int new_hardware_version = get_hardware_version(new_app_info.version);

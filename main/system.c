@@ -37,12 +37,13 @@ esp_err_t system_ntp_time(void)
     time_t sys_now;
 
     ESP_LOGI(TAG, "Initializing SNTP");
-    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(3,
+                               ESP_SNTP_SERVER_LIST("pool.ntp.org", "ntp.aliyun.com", "time.windows.com"));
     esp_netif_sntp_init(&config);
     
     time(&sys_now);
     // Wait for time synchronization with retries
-    while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(1000)) != ESP_OK && ++retry < retry_count) {
+    while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(2000)) != ESP_OK && ++retry < retry_count) {
         ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
     }
 

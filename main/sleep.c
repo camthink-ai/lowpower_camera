@@ -542,11 +542,11 @@ void sleep_start(void)
         rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
     }
 #else
-    // if(capture.bAlarmInCap == true){
-    //     rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
-    //     rtc_gpio_pulldown_dis(ALARMIN_WAKEUP_PIN);
-    //     esp_sleep_enable_ext1_wakeup(BIT64(ALARMIN_WAKEUP_PIN), ALARMIN_WAKEUP_LEVEL);
-    // }
+    if(capture.bAlarmInCap == true){
+        rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
+        rtc_gpio_pulldown_dis(ALARMIN_WAKEUP_PIN);
+        esp_sleep_enable_ext1_wakeup(BIT64(ALARMIN_WAKEUP_PIN), ALARMIN_WAKEUP_LEVEL);
+    }
 #endif
 
     mqtt_stop();
