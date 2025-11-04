@@ -1,13 +1,14 @@
 # LowPower Camera
+![NE101](https://wiki.camthink.ai/assets/images/Module-e3b1464484e50a4d1b01294295f2b1d1.png)
 
 ## Project Overview
-
 This project is a low-power image acquisition solution based on the CamThink Event Camera NeoEyes NE101. The main features include:
 
 - Support for multiple trigger conditions to wake up autonomously
 - Low-power image acquisition
 - Transmission of image data to the cloud via MQTT protocol
-
+  
+[Quick Start](https://wiki.camthink.ai/docs/neoeyes-ne101-series/quick-start) 
 ## Hardware Preparation
 
 ### Required Equipment
@@ -78,6 +79,8 @@ idf.py -p /dev/ttyUSB0 flash
 ```bash
 idf.py monitor
 ```
+## Star History
+[![Star History Chart](https://api.star-history.com/svg?repos=camthink-ai/lowpower_camera&type=Date)](https://star-history.com/#camthink-ai/lowpower_camera&Date)
 
 ## Technical Support and Feedback
 
