@@ -747,11 +747,7 @@ esp_err_t cfg_get_device_info(deviceInfo_t *device)
         strlen(device->countryCode) != 2) {
         get_str(g_factoryHandle, KEY_DEVICE_COUNTRY, device->countryCode, sizeof(device->countryCode), "US");
     }
-    if (CAMERA_USE_UVC) {
-        strncpy(device->camera, "USB", sizeof(device->camera));
-    } else {
-        strncpy(device->camera, "CSI", sizeof(device->camera));
-    }
+    strncpy(device->camera, camera_get_backend_name(), sizeof(device->camera));
     get_str(g_userHandle, KEY_DEVICE_NETMOD, device->netmod, sizeof(device->netmod), "");
     mutex_unlock();
     return ESP_OK;

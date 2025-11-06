@@ -15,9 +15,8 @@ esp_err_t uvc_init(void);
 
 /**
  * @brief Deinitialize UVC subsystem
- * @return Always returns ESP_OK
  */
-esp_err_t uvc_deinit(void);
+void uvc_deinit(void);
 
 /**
  * @brief Get frame buffer for streaming

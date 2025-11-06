@@ -30,7 +30,6 @@
 
 #define TAG "-->CAMERA"  // Logging tag for camera module
 
-#define CAMERA_MODULE_NAME "ESP-S3-EYE"
 #define CAMERA_PIN_PWDN -1  // Not used
 #define CAMERA_PIN_RESET -1 // Not used
 
@@ -54,9 +53,15 @@
 #define CAMERA_PIN_D6 17     // Data bit 6
 #define CAMERA_PIN_D7 16     // Data bit 7
 
-/**
- * Camera module state structure
- */
+typedef struct camera_vtable {
+    const char *name;
+	camera_fb_t *(*fb_get)(void);
+	void (*fb_return)(camera_fb_t *fb);
+	esp_err_t (*init)(void);
+	void (*deinit)(void);
+	esp_err_t (*set_image)(imgAttr_t *image);
+} camera_vtable_t;
+
 typedef struct mdCamera {
     QueueHandle_t in;            // Input queue for commands
     QueueHandle_t out;           // Output queue for captured frames
@@ -67,6 +72,7 @@ typedef struct mdCamera {
     bool bInit;                  // Initialization flag
     bool bSnapShot;              // Snapshot in progress flag
     bool bSnapShotSuccess;       // Last snapshot success status
+	const camera_vtable_t *vt;   // Backend vtable
 } mdCamera_t;
 
 static mdCamera_t g_mdCamera = {0};  // Global camera state instance
@@ -95,28 +101,25 @@ static void camera_unlock(void)
  * @brief Get frame buffer for streaming
  * @return Pointer to frame buffer structure
  */
-camera_fb_t *camera_fb_get()
+static camera_fb_t *csi_fb_get(void)
 {
-    if(CAMERA_USE_UVC){
-        return uvc_stream_fb_get();
-    }else{
-        return esp_camera_fb_get();
-    }
+    return esp_camera_fb_get();
 }
 
 /**
  * @brief Return frame buffer after processing
  * @param fb Pointer to frame buffer structure
  */
-void camera_fb_return(camera_fb_t *fb)
+static void csi_fb_return(camera_fb_t *fb)
 {
-    if(CAMERA_USE_UVC){
-        uvc_camera_fb_return(fb);
-    }else{
-        esp_camera_fb_return(fb);
-    }
+    esp_camera_fb_return(fb);
 }
 
+/**
+ * @brief Free camera queue node
+ * @param node Pointer to queue node
+ * @param event Event type
+ */
 static void camera_queue_node_free(queueNode_t *node, nodeEvent_e event)
 {
     if (node && node->context) {
@@ -198,60 +201,132 @@ extern modeSel_e main_mode;
  * Initialize camera hardware with configured settings
  * @return ESP_OK on success, error code otherwise
  */
-static esp_err_t init_camera()
+static camera_fb_t *uvc_fb_get(void)
+{
+	return uvc_stream_fb_get();
+}
+
+static void uvc_fb_return(camera_fb_t *fb)
+{
+	uvc_camera_fb_return(fb);
+}
+
+static esp_err_t csi_init(void)
 {
     esp_err_t err;
-    //initialize the camera
-    if (CAMERA_USE_UVC) {
-        err = uvc_init();
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Camera Init Failed");
-            return err;
-        }
-    } else {
-        err = esp_camera_init(&camera_config);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Camera Init Failed");
-            return err;
-        }
-        // Get camera sensor and apply image settings
-        imgAttr_t image;
-        sensor_t *s = esp_camera_sensor_get();
-
-        cfg_get_image_attr(&image);
-        s->set_ae_level(s, image.aeLevel);
-        s->set_gain_ctrl(s, 1);
-        s->set_gainceiling(s, 0);
-        s->set_hmirror(s, !image.bHorizonetal);
-        s->set_vflip(s, image.bVertical);
-        s->set_contrast(s, image.contrast);
-        s->set_saturation(s, image.saturation);
-        s->set_brightness(s, image.brightness);
+    err = esp_camera_init(&camera_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "CSI Init Failed");
+        return err;
     }
+    imgAttr_t image;
+    sensor_t *s = esp_camera_sensor_get();
+
+    cfg_get_image_attr(&image);
+    s->set_ae_level(s, image.aeLevel);
+    s->set_gain_ctrl(s, 1);
+    s->set_gainceiling(s, 0);
+    s->set_hmirror(s, !image.bHorizonetal);
+    s->set_vflip(s, image.bVertical);
+    s->set_contrast(s, image.contrast);
+    s->set_saturation(s, image.saturation);
+    s->set_brightness(s, image.brightness);
 
     return ESP_OK;
 }
 
+static void csi_deinit(void)
+{
+    // esp_camera_deinit() intentionally omitted if not provided in SDK
+}
+
+static esp_err_t csi_set_image(imgAttr_t *image)
+{
+    imgAttr_t current;
+    sensor_t *s = esp_camera_sensor_get();
+    cfg_get_image_attr(&current);
+    if (current.bHorizonetal != image->bHorizonetal) {
+        s->set_hmirror(s, !image->bHorizonetal);
+        ESP_LOGI(TAG, "set_horizonetalt : %d", image->bHorizonetal);
+    }
+    if (current.bVertical != image->bVertical) {
+        s->set_vflip(s, image->bVertical);
+        ESP_LOGI(TAG, "set_vertical : %d", image->bVertical);
+    }
+    if (current.brightness != image->brightness) {
+        s->set_brightness(s, image->brightness);
+        ESP_LOGI(TAG, "set_brightness : %d", image->brightness);
+    }
+    if (current.contrast != image->contrast) {
+        s->set_contrast(s, image->contrast);
+        ESP_LOGI(TAG, "set_contrast : %d", image->contrast);
+    }
+    if (current.saturation != image->saturation) {
+        s->set_saturation(s, image->saturation);
+        ESP_LOGI(TAG, "set_saturation : %d", image->saturation);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t uvc_set_image(imgAttr_t *image)
+{
+    (void)image;
+    return ESP_OK;
+}
+
+static const camera_vtable_t VTABLE_CSI = {
+	.name = "CSI",
+	.fb_get = csi_fb_get,
+	.fb_return = csi_fb_return,
+	.init = csi_init,
+	.deinit = csi_deinit,
+	.set_image = csi_set_image,
+};
+
+static const camera_vtable_t VTABLE_UVC = {
+	.name = "USB",
+	.fb_get = uvc_fb_get,
+	.fb_return = uvc_fb_return,
+	.init = uvc_init,
+	.deinit = uvc_deinit,
+	.set_image = uvc_set_image,
+};
+
+static esp_err_t init_camera(mdCamera_t *handle)
+{
+    // Try CSI first, then UVC
+    if (VTABLE_CSI.init() == ESP_OK) {
+        handle->vt = &VTABLE_CSI;
+        return ESP_OK;
+    }
+
+    if (VTABLE_UVC.init() == ESP_OK) {
+        handle->vt = &VTABLE_UVC;
+        return ESP_OK;
+    }
+
+    handle->vt = NULL;
+    ESP_LOGE(TAG, "Camera Init Failed (no backend)");
+    return ESP_FAIL;
+}
+
 esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
 {
-    memset(&g_mdCamera, 0, sizeof(mdCamera_t));
-    // misc_io_cfg(CAMERA_POWER_IO, 0, 1);
-    // misc_io_set(CAMERA_POWER_IO,  CAMERA_POWER_ON);
-    // camera_flash_led_open();
+    struct mdCamera *handle = &g_mdCamera;
     if (system_get_mode() != MODE_CONFIG){
         lightAttr_t light;
         cfg_get_light_attr(&light);
         camera_flash_led_ctrl(&light);
     }
-    if (ESP_OK != init_camera()) {
+    if (ESP_OK != init_camera(handle)) {
         sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT); //如果后续无截图任务，将进入休眠；
         return ESP_FAIL;
     }
-    g_mdCamera.mutex = xSemaphoreCreateMutex();
-    g_mdCamera.in = in;
-    g_mdCamera.out = out;
-    g_mdCamera.eventGroup = xEventGroupCreate();
-    g_mdCamera.bInit = true;
+    handle->mutex = xSemaphoreCreateMutex();
+    handle->in = in;
+    handle->out = out;
+    handle->eventGroup = xEventGroupCreate();
+    handle->bInit = true;
     // wait for sensor stable with configurable delay
     capAttr_t capAttr;
     cfg_get_cap_attr(&capAttr);
@@ -265,44 +340,43 @@ esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
 
 esp_err_t camera_close()
 {
-    if (!g_mdCamera.bInit) {
+    mdCamera_t *h = &g_mdCamera;
+    if (!h->bInit) {
         return ESP_FAIL;
     }
-    if(CAMERA_USE_UVC){
-        uvc_deinit();
+    if (h->vt && h->vt->deinit) {
+        h->vt->deinit();
     }
     misc_io_set(CAMERA_POWER_IO,  CAMERA_POWER_OFF);
-
     return ESP_OK;
 }
+
+/* removed legacy no-handle close */
 
 esp_err_t camera_start()
 {
-    if (!g_mdCamera.bInit) {
+    mdCamera_t *h = &g_mdCamera;
+    if (!h->bInit) {
         return ESP_FAIL;
     }
-    xEventGroupClearBits(g_mdCamera.eventGroup, CAMERA_STOP_BIT);
-    xEventGroupSetBits(g_mdCamera.eventGroup, CAMERA_START_BIT);
+    xEventGroupClearBits(h->eventGroup, CAMERA_STOP_BIT);
+    xEventGroupSetBits(h->eventGroup, CAMERA_START_BIT);
     return ESP_OK;
 }
+
+/* removed legacy no-handle start */
 
 esp_err_t camera_stop()
 {
-    if (!g_mdCamera.bInit) {
+    mdCamera_t *h = &g_mdCamera;
+    if (!h->bInit) {
         return ESP_FAIL;
     }
-    xEventGroupClearBits(g_mdCamera.eventGroup, CAMERA_START_BIT);
-    xEventGroupSetBits(g_mdCamera.eventGroup, CAMERA_STOP_BIT);
+    xEventGroupClearBits(h->eventGroup, CAMERA_START_BIT);
+    xEventGroupSetBits(h->eventGroup, CAMERA_STOP_BIT);
     return ESP_OK;
 }
 
-void camera_wait(cameraEvent_e event, uint32_t timeout_ms)
-{
-    if (!g_mdCamera.bInit) {
-        return;
-    }
-    xEventGroupWaitBits(g_mdCamera.eventGroup, event, false, false, pdMS_TO_TICKS(timeout_ms));
-}
 
 static bool flash_led_is_time_open(char *startTime, char *endTime)
 {
@@ -342,6 +416,7 @@ static bool flash_led_is_time_open(char *startTime, char *endTime)
     return false;
 }
 
+/* Control API stays non-handle: keep original implementation */
 esp_err_t camera_flash_led_ctrl(lightAttr_t *light)
 {
     switch (light->lightMode) {
@@ -373,10 +448,7 @@ esp_err_t camera_flash_led_ctrl(lightAttr_t *light)
 
 esp_err_t camera_snapshot(snapType_e type, uint8_t count)
 {
-    if (!g_mdCamera.bInit) {
-        return ESP_FAIL;
-    }
-
+    mdCamera_t *h = &g_mdCamera;
     capAttr_t capture;
     cfg_get_cap_attr(&capture);
     if (type == SNAP_BUTTON && capture.bButtonCap == false) {
@@ -392,14 +464,14 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
     // camera_flash_led_ctrl(&light);
     ESP_LOGI(TAG, "camera_snapshot Start");
     // esp_camera_fb_return(esp_camera_fb_get());
-    g_mdCamera.bSnapShot = true;
+    h->bSnapShot = true;
     int try_count = 5;
     while (try_count--) {
-        camera_fb_t *frame = camera_fb_get();
+        camera_fb_t *frame = h->vt && h->vt->fb_get ? h->vt->fb_get() : NULL;
         if (frame) {
             queueNode_t *node = camera_queue_node_malloc(frame, type);
             if (node) {
-                if (pdTRUE == xQueueSend(g_mdCamera.out, &node, 0)) {
+                if (pdTRUE == xQueueSend(h->out, &node, 0)) {
                     count--;
                 } else {
                     ESP_LOGW(TAG, "device BUSY, wait to try again");
@@ -414,9 +486,9 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
     }
     if (count > 0) {
         ESP_LOGE(TAG, "snapshot fail, count=%d", count);
-        g_mdCamera.bSnapShotSuccess = false;
+        h->bSnapShotSuccess = false;
     } else {
-        g_mdCamera.bSnapShotSuccess = true;
+        h->bSnapShotSuccess = true;
     }
     // camera_flash_led_close();
     if (type == SNAP_TIMER) {
@@ -426,44 +498,36 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
     return ESP_OK;
 }
 
+/* removed legacy no-handle snapshot */
+
 esp_err_t camera_set_image(imgAttr_t *image)
 {
-    if (!g_mdCamera.bInit) {
-        return ESP_FAIL;
-
-    }
-
-    if(CAMERA_USE_UVC != 1){
-        imgAttr_t current;
-        sensor_t *s = esp_camera_sensor_get();
-    
-        cfg_get_image_attr(&current);
-        if (current.bHorizonetal != image->bHorizonetal) {
-            s->set_hmirror(s, !image->bHorizonetal);
-            ESP_LOGI(TAG, "set_horizonetalt : %d", image->bHorizonetal);
-        }
-        if (current.bVertical != image->bVertical) {
-            s->set_vflip(s, image->bVertical);
-            ESP_LOGI(TAG, "set_vertical : %d", image->bVertical);
-        }
-        if (current.brightness != image->brightness) {
-            s->set_brightness(s, image->brightness);
-            ESP_LOGI(TAG, "set_brightness : %d", image->brightness);
-        }
-        if (current.contrast != image->contrast) {
-            s->set_contrast(s, image->contrast);
-            ESP_LOGI(TAG, "set_contrast : %d", image->contrast);
-
-        }
-        if (current.saturation != image->saturation) {
-            s->set_saturation(s, image->saturation);
-            ESP_LOGI(TAG, "set_saturation : %d", image->saturation);
-        }
-    }
-    return ESP_OK;
+    mdCamera_t *h = &g_mdCamera;
+    return (h->vt && h->vt->set_image) ? h->vt->set_image(image) : ESP_OK;
 }
 
 bool camera_is_snapshot_fail()
 {
-    return g_mdCamera.bSnapShot && !g_mdCamera.bSnapShotSuccess;
+    mdCamera_t *h = &g_mdCamera;
+    return h->bSnapShot && !h->bSnapShotSuccess;
+}
+
+camera_fb_t *camera_fb_get()
+{
+    mdCamera_t *h = &g_mdCamera;
+    if (!h->bInit || !h->vt) return NULL;
+    return h->vt->fb_get();
+}
+
+void camera_fb_return(camera_fb_t *fb)
+{
+    mdCamera_t *h = &g_mdCamera;
+    if (!h->bInit || !h->vt) return;
+    h->vt->fb_return(fb);
+}
+
+const char *camera_get_backend_name()
+{
+    mdCamera_t *h = &g_mdCamera;
+    return h->vt ? h->vt->name : "UNKNOWN";
 }
