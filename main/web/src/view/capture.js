@@ -70,6 +70,8 @@ function Capture() {
         timeIntervalNum: 8,
         capIntervalError: false,
         timeIntervalUnit: 1,
+        // camera open stabilization delay (ms)
+        camWarmupMs: 5000,
         uploadTimeSetDay: 7,
         timeIntervalOptions: [
             {
@@ -155,6 +157,7 @@ function Capture() {
             this.timeIntervalUnitMount = true;
             this.capAlarmInEnable = res.bAlarmInCap ? true : false;
             this.capButtonEnable = res.bButtonCap ? true : false;
+            this.camWarmupMs = res.camWarmupMs || 5000;
             return;
         },
         async getUploadInfo() {
@@ -203,6 +206,7 @@ function Capture() {
                     intervalUnit: Number(this.timeIntervalUnit),
                     bAlarmInCap: Number(this.capAlarmInEnable),
                     bButtonCap: Number(this.capButtonEnable),
+                    camWarmupMs: Number(this.camWarmupMs),
                 });
             } catch (error) {
                 this.alertMessage("error");

@@ -280,3 +280,15 @@ void system_upload_todo()
             break;
     }
 }
+
+esp_err_t system_set_ntp_sync(ntpSync_t *ntp_sync)
+{
+    cfg_set_ntp_sync(ntp_sync->enable);
+    return ESP_OK;
+}
+
+esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync)
+{
+    cfg_get_ntp_sync(&ntp_sync->enable);
+    return ESP_OK;
+}

@@ -28,6 +28,8 @@
     "intervalCap": "间隔抓图",
     "timeSet": "时间设置",
     "captureInterval": "抓图间隔",
+    "openStableMs": "相机稳像延时",
+    "openStableTip": "相机开启后等待此延时以保证画面稳定（毫秒）。值过小可能出现画面抖动或曝光不稳定；过大将增加首次开流等待时间。",
     "enableAlarmInCap": "启用Alarm-In抓图",
     "enableCapButton": "启用抓图按键",
     "min": "分钟",
@@ -94,7 +96,8 @@
     "updateSuccess": "升级成功！",
     "upgradeFailedTryAgain": "升级失败！请重试。",
     "autoProvision": "自动预配置",
-    "DevelopPlatformTake": "开发者平台接管"
+    "DevelopPlatformTake": "开发者平台接管",
+    "ntpSync": "网络同步时间"
   },
   "wlan": {
     "gateWayConnect": "网关连接",

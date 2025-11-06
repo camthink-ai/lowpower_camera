@@ -150,13 +150,8 @@ void netModule_init(modeSel_e mode)
         netModule_check();
         return;
     }
-    if(g_NetModule.mode == NET_CAT1){
-        ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
-        
-        cat1_init(mode);
-        cat1_open();
-    }
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_LOGI(TAG, "netModule_init mode :%d .", g_NetModule.mode);
 }
 
@@ -176,6 +171,8 @@ void netModule_open(modeSel_e mode)
         if(mode == MODE_CONFIG){
             wifi_open(WIFI_MODE_AP);
         }
+        cat1_init(mode);
+        cat1_open();
         cat1_wait_open();
     }else{
         if(mode == MODE_CONFIG){

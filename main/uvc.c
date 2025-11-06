@@ -18,6 +18,7 @@
 #include "bsp/esp-bsp.h"
 #endif
 #include "uvc.h"
+#include "camera_uvc_controls.h"
 
 static const char *TAG = "UVC";
 
@@ -286,6 +287,17 @@ esp_err_t uvc_init(void)
         ESP_LOGE(TAG, "UVC connection timeout");
         return ESP_FAIL;
     }
+    
+    // Initialize UVC controls
+    // ESP_LOGI(TAG, "Initializing UVC controls...");
+    // vTaskDelay(pdMS_TO_TICKS(2000));  // Wait for camera to stabilize
+    
+    // extern esp_err_t camera_uvc_detect_capabilities(void);
+    // extern esp_err_t camera_uvc_apply_indoor_settings(void);
+    
+    // camera_uvc_detect_capabilities();
+    // camera_uvc_apply_indoor_settings();
+    
     return ESP_OK;
 }
 

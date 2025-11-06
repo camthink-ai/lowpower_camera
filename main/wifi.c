@@ -447,10 +447,6 @@ void wifi_open(wifi_mode_t mode)
     }
 
     ESP_ERROR_CHECK(esp_base_mac_addr_set(mac_hex));
-    if(!netModule_is_cat1()){
-        ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
-    }
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, &g_wifi));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &ip_event_handler, &g_wifi));

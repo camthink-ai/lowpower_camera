@@ -81,6 +81,13 @@ typedef struct timeAttr {
     uint64_t ts;       ///< UTC timestamp in seconds
 } timeAttr_t;
 
+/**
+ * NTP synchronization attributes structure
+ */
+typedef struct ntpSync {
+    uint8_t enable;
+} ntpSync_t;
+
 extern modeSel_e main_mode;
 /**
  * Set system time
@@ -166,6 +173,20 @@ void add_ping_cmd(void);
  * @return modeSel_e
  */
 modeSel_e system_get_mode(void);
+
+/**
+ * Set NTP synchronization
+ * @param ntp_sync NTP synchronization attributes
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t system_set_ntp_sync(ntpSync_t *ntp_sync);
+
+/**
+ * Get NTP synchronization
+ * @param ntp_sync NTP synchronization attributes
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync);
 
 #ifdef __cplusplus
 }

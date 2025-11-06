@@ -18,6 +18,8 @@ function Device() {
         countryCode: "",
         // 模组类型
         camera: "USB", // "USB" | "CSI"
+        // NTP同步开关
+        ntpSync: true,
         async getDeviceInfo() {
             const res = await getData(URL.getDevInfo);
             this.netmod = res.netmod;
@@ -41,6 +43,10 @@ function Device() {
                 this.battery = $t("sys.typecPowered");
             }
 
+            // 获取NTP同步开关状态
+            const ntpSyncRes = await getData(URL.getDevNtpSync);
+            this.ntpSync = ntpSyncRes.enable ? true : false;
+
             // const iotRes = await getData(URL.getIoTParam);
             // this.autoProEnable = iotRes.autop_enable ? true : false;
             // this.developEnable = iotRes.dm_enable ? true : false;
@@ -62,6 +68,15 @@ function Device() {
                     this.alertMessage("error");
                 }
                 
+            }
+        },
+        async setNtpSync() {
+            try {
+                await postData(URL.setDevNtpSync, {
+                    enable: this.ntpSync ? 1 : 0,
+                });
+            } catch (error) {
+                this.alertMessage("error");
             }
         },
         handleBrowse() {

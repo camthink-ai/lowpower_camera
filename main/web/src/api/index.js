@@ -97,6 +97,8 @@ const URL = {
     setDevInfo: baseUrl + "/system/setDevInfo",
     getDevBattery: baseUrl + "/system/getDevBattery",
     setDevUpgrade: baseUrl + "/system/setDevUpgrade",
+    getDevNtpSync: baseUrl + "/system/getDevNtpSync",
+    setDevNtpSync: baseUrl + "/system/setDevNtpSync",
     getWifiList: baseUrl + "/network/getWifiList",
     getWifiParam: baseUrl + "/network/getWifiParam",
     setWifiParam: baseUrl + "/network/setWifiParam",

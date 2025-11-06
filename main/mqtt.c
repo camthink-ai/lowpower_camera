@@ -39,7 +39,7 @@
 #define MQTT_PUBLISHED_TIMEOUT_MS (20000)      // Publish timeout
 
 // Buffer sizes
-#define MQTT_SEND_BUFFER_SIZE  (512000)  // Send buffer size
+#define MQTT_SEND_BUFFER_SIZE  (1024000)  // Send buffer size
 #define MQTT_RECV_BUFFER_SIZE 8192       // Receive buffer size
 
 #define TAG "-->MQTT"  // Logging tag
@@ -208,11 +208,23 @@ static esp_err_t mqtt_send_by_json(mdMqtt_t *mqtt, queueNode_t *node)
             break;
     }
     memcpy((char *)mqtt->sendBuf, header, strlen(header));
-    res = esp_crypto_base64_encode(mqtt->sendBuf + strlen(header), mqtt->sendBufSize +
-                                   strlen(header), &picSize, node->data, node->len);
-    // res = esp_crypto_base64_encode(mqtt->sendBuf, mqtt->sendBufSize, &picSize, node->data, node->len);
+    // Calculate available buffer size after header (must subtract, not add)
+    size_t header_len = strlen(header);
+    size_t available_size = mqtt->sendBufSize - header_len;
+    
+    // Check if buffer is large enough for base64 encoding (base64 is ~4/3 of original size)
+    size_t required_size = ((node->len + 2) / 3) * 4;
+    if (required_size > available_size) {
+        ESP_LOGE(TAG, "Buffer too small: required=%zu, available=%zu, header_len=%zu, node_len=%zu", 
+                 required_size, available_size, header_len, node->len);
+        return ESP_FAIL;
+    }
+    
+    res = esp_crypto_base64_encode(mqtt->sendBuf + header_len, available_size, 
+                                   &picSize, node->data, node->len);
     if (res < 0) {
-        ESP_LOGE(TAG, "esp_crypto_base64_encode failed");
+        ESP_LOGE(TAG, "esp_crypto_base64_encode failed: res=%d, node_len=%zu, available_size=%zu", 
+                 res, node->len, available_size);
         return ESP_FAIL;
     }
     cfg_get_device_info(&device);

@@ -414,6 +414,28 @@
                             </span>
                         </div>
 
+                        <!-- camera warm-up delay -->
+                        <div class="card-item" v-show="scheduledCaptureEnable">
+                            <span class="card-item-label">{{ $t("cap.openStableMs") }}
+                                <span class="icon" @click="showTipsDialog($t('cap.openStableTip'))">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#888">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm2 13h-4v-2h1v-4h-1v-2h3v6h1v2z"/>
+                                    </svg>
+                                </span>
+                            </span>
+                            <span class="card-item-content">
+                                <input
+                                    class="capture-interval-input"
+                                    type="text"
+                                    v-model="camWarmupMs"
+                                    maxlength="6"
+                                    v-effect="inputNumLimit('camWarmupMs')"
+                                    @blur="setCaptureInfo()"
+                                />
+                                <span style="margin-left:8px;">ms</span>
+                            </span>
+                        </div>
+
 
                         <!-- s 定时上传时间 -->
                      <div class="card-item" v-show="scheduledCaptureEnable">
@@ -840,6 +862,25 @@
                                 >
                                     {{ $t("requiredField") }}
                                 </div>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("sys.ntpSync") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span class="switch">
+                                    <input
+                                        id="ntpSyncSwitch"
+                                        type="checkbox"
+                                        v-model="ntpSync"
+                                        @change="setNtpSync()"
+                                    />
+                                    <label
+                                        for="ntpSyncSwitch"
+                                        class="switch-content"
+                                    ></label>
+                                </span>
                             </span>
                         </div>
                         <div class="card-item">

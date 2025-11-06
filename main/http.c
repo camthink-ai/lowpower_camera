@@ -205,10 +205,6 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
 
     cfg_get_image_attr(&image);
-    // 因为相机默认是开启水平翻转的，返回WEB时开关状态取反，来达到开关关闭时图像是正常的效果
-    // Because the camera defaults to horizontal flipping, when returning to WEB,
-    // the switch status is reversed to achieve the effect that the image is normal when the switch is turned off
-    image.bHorizonetal = !image.bHorizonetal;
     /* create Student JSON object */
     s2j_create_json_obj(json_obj);
     /* serialize data to JSON object. */
@@ -265,30 +261,8 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, gainCeiling);
         s2j_struct_get_basic_element(image, json, int, bHorizonetal);
         s2j_struct_get_basic_element(image, json, int, bVertical);
-        // Apply camera settings
-        if (cJSON_HasObjectItem(json, "quality")) {
-            s2j_struct_get_basic_element(image, json, int, quality);
-            s2j_struct_get_basic_element(image, json, int, sharpness);
-            s2j_struct_get_basic_element(image, json, int, denoise);
-            s2j_struct_get_basic_element(image, json, int, specialEffect);
-            s2j_struct_get_basic_element(image, json, int, bAwb);
-            s2j_struct_get_basic_element(image, json, int, bAwbGain);
-            s2j_struct_get_basic_element(image, json, int, wbMode);
-            s2j_struct_get_basic_element(image, json, int, bAec);
-            s2j_struct_get_basic_element(image, json, int, bAec2);
-            s2j_struct_get_basic_element(image, json, int, aecValue);
-            s2j_struct_get_basic_element(image, json, int, bBpc);
-            s2j_struct_get_basic_element(image, json, int, bWpc);
-            s2j_struct_get_basic_element(image, json, int, bRawGma);
-            s2j_struct_get_basic_element(image, json, int, bLenc);
-            s2j_struct_get_basic_element(image, json, int, bDcw);
-            s2j_struct_get_basic_element(image, json, int, bColorbar);
-        }
 
-        // 因为返回WEB时开关状态是取反的，再接收前端配置时需再次取反恢复
-        // Because the switch status is reversed when returning to WEB, it needs to be reversed again when receiving front-end configuration for restoration
-        image->bHorizonetal = !image->bHorizonetal;
-        if (camera_set_image(image, false) == ESP_OK) {
+        if (camera_set_image(image) == ESP_OK) {
             http_send_json_response(req, RES_OK);
             cfg_set_image_attr(image);
         } else {
@@ -387,6 +361,7 @@ esp_err_t get_cap_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &capture, int, scheCapMode);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalValue);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalUnit);
+    s2j_json_set_basic_element(json_obj, &capture, int, camWarmupMs);
     s2j_json_set_basic_element(json_obj, &capture, int, timedCount);
     s2j_json_set_struct_array_element_by_func(json_obj, &capture, timedNode_t, timedNodes, capture.timedCount);
 
@@ -423,6 +398,9 @@ esp_err_t set_cap_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(capture, json, int, scheCapMode);
         s2j_struct_get_basic_element(capture, json, int, intervalValue);
         s2j_struct_get_basic_element(capture, json, int, intervalUnit);
+        if (cJSON_HasObjectItem(json, "camWarmupMs")) {
+            s2j_struct_get_basic_element(capture, json, int, camWarmupMs);
+        }
         s2j_struct_get_basic_element(capture, json, int, timedCount);
         s2j_struct_get_struct_array_element_by_func(capture, json, timedNode_t, timedNodes);
         http_send_json_response(req, RES_OK);
@@ -1163,6 +1141,40 @@ esp_err_t set_dev_upgrade_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t set_dev_ntp_sync_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        cJSON *json = cJSON_Parse(content);
+        s2j_create_struct_obj(ntp_sync, ntpSync_t);
+        s2j_struct_get_basic_element(ntp_sync, json, int, enable);
+        system_set_ntp_sync(ntp_sync);
+        http_send_json_response(req, RES_OK);
+        s2j_delete_struct_obj(ntp_sync);
+        s2j_delete_json_obj(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+static esp_err_t get_dev_ntp_sync_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    ntpSync_t ntp_sync;
+    system_get_ntp_sync(&ntp_sync);
+    s2j_create_json_obj(json_obj);
+    s2j_json_set_basic_element(json_obj, &ntp_sync, int, enable);
+    char *str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+    return ESP_OK;
+}
+
 static esp_err_t upload_to_path(httpd_req_t *req, const char *path)
 {
     ESP_LOGI(TAG, "upload_to_path %s", path);
@@ -1592,6 +1604,16 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/system/setDevUpgrade",
         .method = HTTP_POST,
         .handler = set_dev_upgrade_handle,
+    },
+    {
+        .uri = "/api/v1/system/setDevNtpSync",
+        .method = HTTP_POST,
+        .handler = set_dev_ntp_sync_handle,
+    },
+    {
+        .uri = "/api/v1/system/getDevNtpSync",
+        .method = HTTP_GET,
+        .handler = get_dev_ntp_sync_handle,
     },
     // 证书上传（三个静态路径，直接写入 LittleFS）
     {

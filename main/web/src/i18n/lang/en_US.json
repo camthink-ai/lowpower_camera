@@ -28,6 +28,8 @@
     "intervalCap": "Interval Capture",
     "timeSet": "Time Setting",
     "captureInterval": "Capture Interval",
+    "openStableMs": "Camera Stabilization Delay ",
+    "openStableTip": "Delay after camera opens to ensure image stabilization (milliseconds). Too small may cause unstable exposure; too large increases initial wait time.",
     "enableAlarmInCap": "Enable Alarm-In Capture",
     "enableCapButton": "Enable Capture Button",
     "min": "min",
@@ -94,7 +96,8 @@
     "updateSuccess": "Update successed!",
     "upgradeFailedTryAgain": "Upgrade failed! Please try again.",
     "autoProvision": "Auto Provision",
-    "DevelopPlatformTake": "Development Platform Takeover"
+    "DevelopPlatformTake": "Development Platform Takeover",
+    "ntpSync": "Network Time Sync"
   },
   "wlan": {
     "gateWayConnect": "Gateway Connection",

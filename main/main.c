@@ -192,18 +192,39 @@ static void common_init(void)
  * @brief Handle snapshot mode operations (image capture)
  * @param snapType Type of snapshot trigger
  * @param xQueueMqtt MQTT queue handle
+ * @param xQueueStorage Storage queue handle
  */
-static void handle_snapshot_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
+static void handle_snapshot_mode(snapType_e snapType, QueueHandle_t xQueueMqtt, 
+                                  QueueHandle_t xQueueStorage)
 {
     misc_led_blink(STATUS_LED_BLINK_COUNT, STATUS_LED_BLINK_INTERVAL);
     ESP_LOGI(TAG, "snapshot mode");
+    uint8_t need_netModule = 0;
+    ntpSync_t ntp_sync;
+    uploadAttr_t upload;
+
+    system_get_ntp_sync(&ntp_sync);
+    cfg_get_upload_attr(&upload);
     
-    camera_open(NULL, xQueueMqtt);
+    need_netModule = ntp_sync.enable || upload.uploadMode == 0; //If the NTP synchronization is enabled or the upload mode is instant upload, the network module is needed.
+
+    ESP_LOGI(TAG,"ntp_sync.enable: %d", ntp_sync.enable);
+    ESP_LOGI(TAG, "upload.uploadMode: %d", upload.uploadMode);
+    ESP_LOGI(TAG, "need_netModule: %d", need_netModule);
+
+    if (need_netModule) {
+        camera_open(NULL, xQueueMqtt); //If the network module is needed, the camera send the image to the MQTT server.
+    } else {
+        camera_open(NULL, xQueueStorage); //If the network module is not needed, the camera send the image to the storage.
+    }
+
     camera_snapshot(snapType, 1);
     camera_close();
     misc_flash_led_close();
     
-    netModule_open(main_mode);
+    if (need_netModule) {
+        netModule_open(main_mode);
+    }
     
     sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | SLEEP_MIP_DONE_BIT, true);
 }
@@ -325,7 +346,7 @@ void app_main(void)
     // main_mode = MODE_SNAPSHOT; //TODO: for test
     switch (main_mode) {
         case MODE_SNAPSHOT:
-            handle_snapshot_mode(snapType, xQueueMqtt);
+            handle_snapshot_mode(snapType, xQueueMqtt, xQueueStorage);
             break;
             
         case MODE_CONFIG:

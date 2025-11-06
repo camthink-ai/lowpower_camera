@@ -72,6 +72,7 @@ extern "C" {
 #define KEY_CAP_TIME_COUNT  "cap:tCount"
 #define KEY_CAP_INTERVAL_V  "cap:iValue"
 #define KEY_CAP_INTERVAL_U  "cap:iUnit"
+#define KEY_CAP_CAM_WARMUP_MS "cap:camWarmupMs"
 #define KEY_UPLOAD_MODE     "upload:mode"
 #define KEY_UPLOAD_COUNT    "upload:count"
 #define KEY_UPLOAD_INTERVAL_V "upload:iValue"
@@ -102,6 +103,7 @@ extern "C" {
 #define KEY_SYS_SCHE_TIME   "sys:scheTime"
 #define KEY_SYS_TIME_ZONE   "sys:tz"
 #define KEY_SYS_TIME_ERR_RATE "sys:errRate"
+#define KEY_SYS_NTP_SYNC    "sys:bNtpSync"
 #define KEY_CFG_CRC32       "cfg:crc32"
 #define KEY_CAT1_IMEI       "cat1:imei"
 #define KEY_CAT1_APN        "cat1:apn"
@@ -191,6 +193,7 @@ typedef struct capAttr {
     timedNode_t timedNodes[8]; //use for timed mode
     uint32_t intervalValue; // use for interval mode
     uint8_t  intervalUnit; // use for interval mode. 0: minutes, 1: hours, 2:day
+    uint32_t camWarmupMs; // camera warm-up delay in milliseconds
 } capAttr_t;
 
 /**
@@ -379,6 +382,8 @@ esp_err_t cfg_get_cellular_param_attr(cellularParamAttr_t *cellularParam);
 esp_err_t cfg_set_cellular_param_attr(cellularParamAttr_t *cellularParam);
 esp_err_t cfg_get_cellular_baud_rate(uint32_t *baudRate);
 esp_err_t cfg_set_cellular_baud_rate(uint32_t baudRate);
+esp_err_t cfg_set_ntp_sync(uint8_t enable);
+esp_err_t cfg_get_ntp_sync(uint8_t *enable);
 bool cfg_is_undefined(char *value);
 
 #ifdef __cplusplus

@@ -214,6 +214,44 @@ enum uac_fu_ctrl_cs {
         (ctrl_req_ptr)->wLength = 1;   \
     })
 
+/*************************************** UVC Camera Control Helpers ********************************************/
+
+/** UVC Camera Terminal (CT) SET control macro */
+#define USB_CTRL_UVC_SET_CT(ctrl_req_ptr, cs, unit_id, vc_itf, len) ({  \
+        (ctrl_req_ptr)->bmRequestType = 0x21;   \
+        (ctrl_req_ptr)->bRequest = UVC_SET_CUR;    \
+        (ctrl_req_ptr)->wValue = ((cs) << 8); \
+        (ctrl_req_ptr)->wIndex = ((unit_id) << 8) | (0x00ff & (vc_itf));    \
+        (ctrl_req_ptr)->wLength = (len);   \
+    })
+
+/** UVC Camera Terminal (CT) GET control macro */
+#define USB_CTRL_UVC_GET_CT(ctrl_req_ptr, req, cs, unit_id, vc_itf, len) ({  \
+        (ctrl_req_ptr)->bmRequestType = 0xA1;   \
+        (ctrl_req_ptr)->bRequest = (req);    \
+        (ctrl_req_ptr)->wValue = ((cs) << 8); \
+        (ctrl_req_ptr)->wIndex = ((unit_id) << 8) | (0x00ff & (vc_itf));    \
+        (ctrl_req_ptr)->wLength = (len);   \
+    })
+
+/** UVC Processing Unit (PU) SET control macro */
+#define USB_CTRL_UVC_SET_PU(ctrl_req_ptr, cs, unit_id, vc_itf, len) ({  \
+        (ctrl_req_ptr)->bmRequestType = 0x21;   \
+        (ctrl_req_ptr)->bRequest = UVC_SET_CUR;    \
+        (ctrl_req_ptr)->wValue = ((cs) << 8); \
+        (ctrl_req_ptr)->wIndex = ((unit_id) << 8) | (0x00ff & (vc_itf));    \
+        (ctrl_req_ptr)->wLength = (len);   \
+    })
+
+/** UVC Processing Unit (PU) GET control macro */
+#define USB_CTRL_UVC_GET_PU(ctrl_req_ptr, req, cs, unit_id, vc_itf, len) ({  \
+        (ctrl_req_ptr)->bmRequestType = 0xA1;   \
+        (ctrl_req_ptr)->bRequest = (req);    \
+        (ctrl_req_ptr)->wValue = ((cs) << 8); \
+        (ctrl_req_ptr)->wIndex = ((unit_id) << 8) | (0x00ff & (vc_itf));    \
+        (ctrl_req_ptr)->wLength = (len);   \
+    })
+
 /*************************************** UVC Probe Helpers ********************************************/
 
 #define DEFAULT_UVC_STREAM_CTRL() {\
@@ -997,8 +1035,33 @@ static esp_err_t _update_config_from_descriptor(const usb_config_desc_t *cfg_des
             if (context_class == USB_CLASS_VIDEO && context_subclass == VIDEO_SUBCLASS_CONTROL) {
                 const desc_header_t *header = (const desc_header_t *)next_desc;
                 switch (header->bDescriptorSubtype) {
+                case VIDEO_CS_ITF_VC_HEADER:
+                    print_uvc_header_desc((const uint8_t *)next_desc, VIDEO_SUBCLASS_CONTROL);
+                    break;
+                case VIDEO_CS_ITF_VC_INPUT_TERMINAL: {
+                    // Check if it's a camera terminal (wTerminalType == 0x0201)
+                    const uint8_t *desc = (const uint8_t *)next_desc;
+                    uint16_t wTerminalType = desc[4] | (desc[5] << 8);
+                    if (wTerminalType == 0x0201) {
+                        print_vc_camera_terminal_desc((const uint8_t *)next_desc);
+                    } else {
+                        print_vc_input_terminal_desc((const uint8_t *)next_desc);
+                    }
+                    break;
+                }
+                case VIDEO_CS_ITF_VC_OUTPUT_TERMINAL:
+                    print_vc_output_terminal_desc((const uint8_t *)next_desc);
+                    break;
+                case VIDEO_CS_ITF_VC_PROCESSING_UNIT:
+                    print_vc_processing_unit_desc((const uint8_t *)next_desc);
+                    break;
+                case VIDEO_CS_ITF_VC_SELECTOR_UNIT:
+                case VIDEO_CS_ITF_VC_EXTENSION_UNIT:
+                case VIDEO_CS_ITF_VC_ENCODING_UNIT:
+                    ESP_LOGD(TAG, "Found VC unit subtype 0x%02x, skip", header->bDescriptorSubtype);
+                    break;
                 default:
-                    ESP_LOGD(TAG, "Found video control entity, skip");
+                    ESP_LOGD(TAG, "Found unknown video control entity 0x%02x, skip", header->bDescriptorSubtype);
                     break;
                 }
             } else if (context_class == USB_CLASS_VIDEO && context_subclass == VIDEO_SUBCLASS_STREAMING) {
@@ -1886,6 +1949,240 @@ free_urb_:
     if (need_free) {
         _usb_urb_free(urb_ctrl);
     }
+    return ret;
+}
+
+/*************************************** UVC Camera Control Functions ********************************************/
+
+/**
+ * @brief Set UVC Camera Terminal control
+ * 
+ * @param vc_itf Video Control interface number
+ * @param unit_id Camera Terminal unit ID
+ * @param cs Control Selector
+ * @param data Control data buffer
+ * @param len Data length
+ * @return esp_err_t 
+ */
+static esp_err_t _uvc_set_camera_terminal_control(uint16_t vc_itf, uint8_t unit_id, uint8_t cs, void *data, uint16_t len)
+{
+    UVC_CHECK(unit_id != 0, "invalid unit_id", ESP_ERR_INVALID_ARG);
+    UVC_CHECK(data != NULL, "invalid data", ESP_ERR_INVALID_ARG);
+    UVC_CHECK(_usb_device_get_state() == STATE_DEVICE_ACTIVE, "USB Device not active", ESP_ERR_INVALID_STATE);
+    
+    urb_t *urb_ctrl = s_usb_dev.ctrl_urb;
+    bool need_free = false;
+    if (urb_ctrl == NULL) {
+        urb_ctrl = _usb_urb_alloc(0, sizeof(usb_setup_packet_t) + 64, NULL);
+        UVC_CHECK(urb_ctrl != NULL, "alloc urb failed", ESP_ERR_NO_MEM);
+        need_free = true;
+    }
+    
+    ESP_LOGD(TAG, "SET_CUR Camera Terminal: vc_itf=%u, unit_id=%u, cs=0x%02x, len=%u", vc_itf, unit_id, cs, len);
+    xSemaphoreTake(s_usb_dev.xfer_mutex_hdl, portMAX_DELAY);
+    USB_CTRL_UVC_SET_CT((usb_setup_packet_t *)urb_ctrl->transfer.data_buffer, cs, unit_id, vc_itf, len);
+    unsigned char *p_data = urb_ctrl->transfer.data_buffer + sizeof(usb_setup_packet_t);
+    memcpy(p_data, data, len);
+    urb_ctrl->transfer.num_bytes = sizeof(usb_setup_packet_t) + len;
+    esp_err_t ret = _usb_ctrl_xfer(urb_ctrl, pdMS_TO_TICKS(TIMEOUT_USB_CTRL_XFER_MS));
+    xSemaphoreGive(s_usb_dev.xfer_mutex_hdl);
+    UVC_CHECK_GOTO(ESP_OK == ret, "SET_CUR Camera Terminal failed", free_urb_);
+    ESP_LOGD(TAG, "SET_CUR Camera Terminal Done");
+
+free_urb_:
+    if (need_free) {
+        _usb_urb_free(urb_ctrl);
+    }
+    return ret;
+}
+
+/**
+ * @brief Set UVC Processing Unit control
+ * 
+ * @param vc_itf Video Control interface number
+ * @param unit_id Processing Unit unit ID
+ * @param cs Control Selector
+ * @param data Control data buffer
+ * @param len Data length
+ * @return esp_err_t 
+ */
+static esp_err_t _uvc_set_processing_unit_control(uint16_t vc_itf, uint8_t unit_id, uint8_t cs, void *data, uint16_t len)
+{
+    UVC_CHECK(unit_id != 0, "invalid unit_id", ESP_ERR_INVALID_ARG);
+    UVC_CHECK(data != NULL, "invalid data", ESP_ERR_INVALID_ARG);
+    UVC_CHECK(_usb_device_get_state() == STATE_DEVICE_ACTIVE, "USB Device not active", ESP_ERR_INVALID_STATE);
+    
+    urb_t *urb_ctrl = s_usb_dev.ctrl_urb;
+    bool need_free = false;
+    if (urb_ctrl == NULL) {
+        urb_ctrl = _usb_urb_alloc(0, sizeof(usb_setup_packet_t) + 64, NULL);
+        UVC_CHECK(urb_ctrl != NULL, "alloc urb failed", ESP_ERR_NO_MEM);
+        need_free = true;
+    }
+    
+    ESP_LOGD(TAG, "SET_CUR Processing Unit: vc_itf=%u, unit_id=%u, cs=0x%02x, len=%u", vc_itf, unit_id, cs, len);
+    xSemaphoreTake(s_usb_dev.xfer_mutex_hdl, portMAX_DELAY);
+    USB_CTRL_UVC_SET_PU((usb_setup_packet_t *)urb_ctrl->transfer.data_buffer, cs, unit_id, vc_itf, len);
+    unsigned char *p_data = urb_ctrl->transfer.data_buffer + sizeof(usb_setup_packet_t);
+    memcpy(p_data, data, len);
+    urb_ctrl->transfer.num_bytes = sizeof(usb_setup_packet_t) + len;
+    esp_err_t ret = _usb_ctrl_xfer(urb_ctrl, pdMS_TO_TICKS(TIMEOUT_USB_CTRL_XFER_MS));
+    xSemaphoreGive(s_usb_dev.xfer_mutex_hdl);
+    UVC_CHECK_GOTO(ESP_OK == ret, "SET_CUR Processing Unit failed", free_urb_);
+    ESP_LOGD(TAG, "SET_CUR Processing Unit Done");
+
+free_urb_:
+    if (need_free) {
+        _usb_urb_free(urb_ctrl);
+    }
+    return ret;
+}
+
+/**
+ * @brief High-level UVC camera control function
+ * 
+ * @param ctrl_type Control type from stream_ctrl_t enum
+ * @param ctrl_value Control value
+ * @return esp_err_t 
+ */
+static esp_err_t uvc_camera_control(stream_ctrl_t ctrl_type, void *ctrl_value)
+{
+    UVC_CHECK(s_usb_dev.uvc, "UVC not configured", ESP_ERR_INVALID_STATE);
+    
+    // For now, we use interface 0 and unit ID 1 as defaults
+    // In a production system, these should be parsed from the device descriptors
+    uint16_t vc_itf = 0;
+    uint8_t unit_id = 1;  // Usually CT is 1, PU is 2 or 3
+    uint8_t pu_id = 2;    // Processing Unit typically has ID 2
+    
+    uint8_t data_1byte;
+    uint16_t data_2byte;
+    uint32_t data_4byte;
+    esp_err_t ret = ESP_OK;
+    
+    switch (ctrl_type) {
+    /* Camera Terminal Controls */
+    case CTRL_UVC_AUTO_EXPOSURE_MODE:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_camera_terminal_control(vc_itf, unit_id, UVC_CT_AE_MODE_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Auto Exposure Mode: %u", data_1byte);
+        break;
+        
+    case CTRL_UVC_AUTO_EXPOSURE_PRIORITY:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_camera_terminal_control(vc_itf, unit_id, UVC_CT_AE_PRIORITY_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Auto Exposure Priority: %u", data_1byte);
+        break;
+        
+    case CTRL_UVC_EXPOSURE_TIME_ABSOLUTE:
+        data_4byte = (uint32_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_camera_terminal_control(vc_itf, unit_id, UVC_CT_EXPOSURE_TIME_ABSOLUTE_CONTROL, &data_4byte, 4);
+        ESP_LOGI(TAG, "Set Exposure Time Absolute: %"PRIu32, data_4byte);
+        break;
+        
+    case CTRL_UVC_FOCUS_ABSOLUTE:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_camera_terminal_control(vc_itf, unit_id, UVC_CT_FOCUS_ABSOLUTE_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Focus Absolute: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_FOCUS_AUTO:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_camera_terminal_control(vc_itf, unit_id, UVC_CT_FOCUS_AUTO_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Auto Focus: %u", data_1byte);
+        break;
+        
+    case CTRL_UVC_ZOOM_ABSOLUTE:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_camera_terminal_control(vc_itf, unit_id, UVC_CT_ZOOM_ABSOLUTE_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Zoom Absolute: %u", data_2byte);
+        break;
+        
+    /* Processing Unit Controls */
+    case CTRL_UVC_BACKLIGHT_COMPENSATION:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_BACKLIGHT_COMPENSATION_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Backlight Compensation (HDR): %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_BRIGHTNESS:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_BRIGHTNESS_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Brightness: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_CONTRAST:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_CONTRAST_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Contrast: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_GAIN:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_GAIN_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Gain: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_POWER_LINE_FREQUENCY:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_POWER_LINE_FREQUENCY_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Power Line Frequency: %u", data_1byte);
+        break;
+        
+    case CTRL_UVC_HUE:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_HUE_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Hue: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_SATURATION:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_SATURATION_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Saturation: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_SHARPNESS:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_SHARPNESS_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Sharpness: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_GAMMA:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_GAMMA_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set Gamma: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_WHITE_BALANCE_TEMPERATURE:
+        data_2byte = (uint16_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_WHITE_BALANCE_TEMPERATURE_CONTROL, &data_2byte, 2);
+        ESP_LOGI(TAG, "Set White Balance Temperature: %u", data_2byte);
+        break;
+        
+    case CTRL_UVC_WHITE_BALANCE_TEMP_AUTO:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_WHITE_BALANCE_TEMPERATURE_AUTO_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Auto White Balance: %u", data_1byte);
+        break;
+        
+    case CTRL_UVC_HUE_AUTO:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_HUE_AUTO_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Auto Hue: %u", data_1byte);
+        break;
+        
+    case CTRL_UVC_CONTRAST_AUTO:
+        data_1byte = (uint8_t)(uintptr_t)ctrl_value;
+        ret = _uvc_set_processing_unit_control(vc_itf, pu_id, UVC_PU_CONTRAST_AUTO_CONTROL, &data_1byte, 1);
+        ESP_LOGI(TAG, "Set Auto Contrast: %u", data_1byte);
+        break;
+        
+    default:
+        ESP_LOGW(TAG, "Unsupported UVC control type: %d", ctrl_type);
+        ret = ESP_ERR_NOT_SUPPORTED;
+        break;
+    }
+    
     return ret;
 }
 
@@ -3940,6 +4237,34 @@ esp_err_t usb_streaming_control(usb_stream_t stream, stream_ctrl_t ctrl_type, vo
     case CTRL_UAC_MUTE:
     case CTRL_UAC_VOLUME:
         ret = uac_feature_control(stream, ctrl_type, ctrl_value);
+        break;
+    /* UVC Camera Terminal Controls */
+    case CTRL_UVC_AUTO_EXPOSURE_MODE:
+    case CTRL_UVC_AUTO_EXPOSURE_PRIORITY:
+    case CTRL_UVC_EXPOSURE_TIME_ABSOLUTE:
+    case CTRL_UVC_FOCUS_ABSOLUTE:
+    case CTRL_UVC_FOCUS_AUTO:
+    case CTRL_UVC_ZOOM_ABSOLUTE:
+    /* UVC Processing Unit Controls */
+    case CTRL_UVC_BACKLIGHT_COMPENSATION:
+    case CTRL_UVC_BRIGHTNESS:
+    case CTRL_UVC_CONTRAST:
+    case CTRL_UVC_GAIN:
+    case CTRL_UVC_POWER_LINE_FREQUENCY:
+    case CTRL_UVC_HUE:
+    case CTRL_UVC_SATURATION:
+    case CTRL_UVC_SHARPNESS:
+    case CTRL_UVC_GAMMA:
+    case CTRL_UVC_WHITE_BALANCE_TEMPERATURE:
+    case CTRL_UVC_WHITE_BALANCE_TEMP_AUTO:
+    case CTRL_UVC_HUE_AUTO:
+    case CTRL_UVC_CONTRAST_AUTO:
+        if (stream != STREAM_UVC) {
+            ESP_LOGW(TAG, "UVC controls only work with STREAM_UVC");
+            ret = ESP_ERR_INVALID_ARG;
+        } else {
+            ret = uvc_camera_control(ctrl_type, ctrl_value);
+        }
         break;
     default:
         break;

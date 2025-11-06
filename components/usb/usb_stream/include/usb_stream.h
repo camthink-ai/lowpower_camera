@@ -83,6 +83,27 @@ typedef enum {
     CTRL_RESUME,       /*!< streaming resume control. ctrl_data NULL */
     CTRL_UAC_MUTE,     /*!< mute control. ctrl_data (false/true) */
     CTRL_UAC_VOLUME,   /*!< volume control. ctrl_data (0~100) */
+    /* UVC Camera Terminal Controls */
+    CTRL_UVC_AUTO_EXPOSURE_MODE,        /*!< Auto exposure mode control. ctrl_data: 1=manual, 2=auto, 4=shutter priority, 8=aperture priority */
+    CTRL_UVC_AUTO_EXPOSURE_PRIORITY,    /*!< Auto exposure priority control. ctrl_data (0/1) */
+    CTRL_UVC_EXPOSURE_TIME_ABSOLUTE,    /*!< Absolute exposure time control. ctrl_data (device-specific units) */
+    CTRL_UVC_FOCUS_ABSOLUTE,            /*!< Absolute focus control. ctrl_data (device-specific units) */
+    CTRL_UVC_FOCUS_AUTO,                /*!< Auto focus control. ctrl_data (0/1) */
+    CTRL_UVC_ZOOM_ABSOLUTE,             /*!< Absolute zoom control. ctrl_data (device-specific units) */
+    /* UVC Processing Unit Controls */
+    CTRL_UVC_BACKLIGHT_COMPENSATION,    /*!< Backlight compensation control (similar to HDR). ctrl_data (0~max) */
+    CTRL_UVC_BRIGHTNESS,                /*!< Brightness control. ctrl_data (min~max) */
+    CTRL_UVC_CONTRAST,                  /*!< Contrast control. ctrl_data (min~max) */
+    CTRL_UVC_GAIN,                      /*!< Gain control. ctrl_data (min~max) */
+    CTRL_UVC_POWER_LINE_FREQUENCY,      /*!< Power line frequency control. ctrl_data: 0=disabled, 1=50Hz, 2=60Hz */
+    CTRL_UVC_HUE,                       /*!< Hue control. ctrl_data (min~max) */
+    CTRL_UVC_SATURATION,                /*!< Saturation control. ctrl_data (min~max) */
+    CTRL_UVC_SHARPNESS,                 /*!< Sharpness control. ctrl_data (min~max) */
+    CTRL_UVC_GAMMA,                     /*!< Gamma control. ctrl_data (min~max) */
+    CTRL_UVC_WHITE_BALANCE_TEMPERATURE, /*!< White balance temperature control. ctrl_data (min~max) */
+    CTRL_UVC_WHITE_BALANCE_TEMP_AUTO,   /*!< White balance temperature auto control. ctrl_data (0/1) */
+    CTRL_UVC_HUE_AUTO,                  /*!< Hue auto control. ctrl_data (0/1) */
+    CTRL_UVC_CONTRAST_AUTO,             /*!< Contrast auto control. ctrl_data (0/1) */
     CTRL_MAX,          /*!< max type value */
 } stream_ctrl_t;
 
