@@ -86,3 +86,8 @@ idf.py monitor
 
 If you encounter any issues during usage, please submit relevant [issues](https://github.com/camthink-ai/lowpower_camera/issues), and we will respond as soon as possible.
 
+## License
+This software is released under a **Dual-License** model.  
+- *Community Edition License*   
+- *Commercial Edition License* 
+Please see the full terms in [LICENSE](./LICENSE)  
