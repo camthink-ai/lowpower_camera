@@ -1,0 +1,58 @@
+© 2025 CamThink. All Rights Reserved.  
+© 2025 CamThink。保留所有权利。
+
+Dual-License Terms / 双许可证条款
+
+本项目采用双许可证模式。根据您使用场景，请参阅下列两种许可条款之一。  
+This project is released under a Dual-License model. Please refer to one of the two license options below based on your intended use.
+
+---
+
+A. 社区版许可（Community Edition License）  
+适用范围 / Scope  
+- 软件仅能运行或部署在由 CamThink 生产或授权的硬件设备上。  
+- 不得在第三方硬件设备上用于商业化用途（包括但不限于销售、收费服务、OEM/ODM 等）。  
+- The software may only be run or deployed on hardware devices manufactured or authorized by CamThink.  
+- It must not be used for commercial purposes on non-CamThink hardware (including but not limited to product sales, paid services, OEM/ODM, etc.).
+
+授权条款 / Grant of License  
+1. CamThink hereby grants you a worldwide, non-exclusive, non-transferable, royalty-free license to use, reproduce, modify and distribute the Software subject to the above Scope.  
+   公司（CamThink）授予您全球、非独占、不可转让、免版税许可，用于使用、复制、修改、分发本软件，前提为上述适用范围。  
+2. If you distribute modified or derivative works, you must retain all copyright and license notices and mark your changes accordingly.  
+   若您分发修改版本或派生作品，必须保留版权声明、许可证引用及注明您的修改。  
+3. The Software is provided “AS IS”. CamThink disclaims all warranties, whether express or implied.  
+   本软件按“AS IS／现状”提供，CamThink 不承担任何明示或暗示担保。  
+4. The license granted under this section will terminate automatically if you fail to comply with these terms.  
+   若您违反本条款，则本许可自动终止。
+
+---
+
+B. 商业版许可（Commercial Edition License）  
+适用范围 / Scope  
+- 软件运行或部署在 非 CamThink 硬件设备上，或用于商业化产品/服务、OEM/ODM、销售等用途。  
+- The Software is deployed on non-CamThink hardware, or is used in a commercial product/service, OEM/ODM, or resale context.  
+- In these cases, you must enter into a separate Commercial License Agreement with CamThink.  
+  在此类情形下，必须与 CamThink 签署 单独商业授权协议。
+
+授权条款 / Grant of License  
+1. Upon payment of the applicable license fee and compliance with the agreement, CamThink grants you a worldwide, non-exclusive, non-transferable, perpetual (or term) license to use, reproduce, modify and distribute the Software as defined in your separate license.  
+   在您签署商业授权协议并支付适用费用后，CamThink 授予您全球、非独占、不可转让、（永久或限期）使用、复制、修改、分发本软件的权利。  
+2. The Commercial License Agreement will specify authorized devices, redistribution rights, whether derivative works may be closed-source, support/maintenance terms, license fees, and other commercial terms.  
+   商业授权协议将明确设备范围、再分发权限、闭源或开源要求、支持服务、许可费用等条款。  
+3. The Software is provided “AS IS”. To the maximum extent permitted by applicable law, CamThink shall not be liable for any indirect, special, consequential or incidental damages arising out of your use of the Software.  
+   软件按“AS IS／现状”提供，CamThink 对于因使用或无法使用软件所导致的任何间接、特殊、附带或结果性损害，在法律允许的最大范围内不承担责任。  
+4. CamThink may terminate your license per the agreement, upon which you must cease use and distribution.  
+   若您违反商业授权协议，CamThink 有权终止许可，并要求您停止使用与分发。
+
+---
+
+选择指南 / How to Choose  
+- 如果您 **仅在 CamThink 硬件上使用且非商用目的**，请选择 **A. 社区版许可**。  
+- If you intend to deploy the software on non-CamThink hardware or for commercial product/service use, please contact <contact-email> for a Commercial License (Section B).  
+- 若您对是否属于“商用用途”或“非 CamThink 硬件”存疑，请提前与 CamThink 联系。  
+- If you are unsure whether your use constitutes “commercial use” or “non-CamThink hardware”, please contact CamThink in advance.
+
+---
+
+感谢您使用 CamThink 的开源软件项目。  
+Thank you for using CamThink’s open-source software project.
