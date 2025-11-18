@@ -13,7 +13,7 @@ on:
 env:
   ESP_IDF_VERSION: "5.1.6"
   ESP_IDF_TARGET: "esp32s3"
-  DOCKER_IMAGE: "espressif/idf:release-v5.1.6"
+  DOCKER_IMAGE: "espressif/idf:v5.1.6"
 
 jobs:
   build:
@@ -117,7 +117,7 @@ jobs:
           -e BUILD_VERSION=${{ env.BUILD_VERSION }} \
           ${{ env.DOCKER_IMAGE }} \
           bash -c "
-            . \$HOME/esp/esp-idf/export.sh && \
+            . \$IDF_PATH/export.sh && \
             idf.py set-target ${{ env.ESP_IDF_TARGET }} && \
             idf.py build
           "
@@ -159,18 +159,6 @@ jobs:
         ls -lh release/$ZIP_NAME
         echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
         echo "::endgroup::"
-
-    - name: Upload build artifacts
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.build_version.name }}-firmware
-        path: |
-          build/*.bin
-          build/*.elf
-          build/bootloader/bootloader.bin
-          build/partition_table/partition-table.bin
-        retention-days: 30
 
     - name: Upload firmware package
       if: success() && github.event_name != 'pull_request'

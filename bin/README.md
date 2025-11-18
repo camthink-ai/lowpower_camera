@@ -1,11 +1,9 @@
-## Firmware Version Usage Range
+This release includes the following firmware versions:
 
-NE_101.1.0.x: Supports the basic development board, development board + CAT1 module, development board + 915M HalowWiFi. Only supports standard cameras and supports PIR.
-
-NE_101.2.0.x: Supports the basic development board, development board + CAT1 module, development board + 868M HalowWiFi. Only supports standard cameras and supports PIR.
-
-NE_101.3.0.x: Supports the basic development board, development board + CAT1 module. Only supports USB cameras and supports PIR.
-
-## Notes for Programming
-
-When programming, please set the partitions according to the partition information in the [partinfo.txt] file.
+NE101_vx.y_FCC_PIR.zip - FCC version with PIR support
+NE101_vx.y_CE_PIR.zip - CE version with PIR support
+NE101_vx.y_FCC_ALARMIN.zip - FCC version with ALARMIN support
+NE101_vx.y_CE_ALARMIN.zip - CE version with ALARMIN support
+Build Information
+ESP-IDF Version: 5.1.6
+Target: esp32s3
