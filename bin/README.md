@@ -1,4 +1,4 @@
-## 迁移告知
+## Migration Notice
 The current bin file has been removed and migrated to release
 
 ## release includes the following firmware versions:
