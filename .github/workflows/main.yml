@@ -1,0 +1,248 @@
+name: Build ESP32 Project
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'V*'
+      - 'v*'
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  ESP_IDF_VERSION: "5.1.6"
+  ESP_IDF_TARGET: "esp32s3"
+  DOCKER_IMAGE: "espressif/idf:release-v5.1.6"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_version:
+          - name: "FCC_PIR"
+            config_fcc: true
+            config_ce: false
+            pir_enable: 1
+          - name: "CE_PIR"
+            config_fcc: false
+            config_ce: true
+            pir_enable: 1
+          - name: "FCC_ALARMIN"
+            config_fcc: true
+            config_ce: false
+            pir_enable: 0
+          - name: "CE_ALARMIN"
+            config_fcc: false
+            config_ce: true
+            pir_enable: 0
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Get version from git tag
+      id: get_version
+      run: |
+        if [ "${{ github.ref_type }}" = "tag" ]; then
+          VERSION_TAG="${{ github.ref_name }}"
+        else
+          VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "V1.5")
+        fi
+        echo "version=$VERSION_TAG" >> $GITHUB_OUTPUT
+        echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+        echo "Detected version tag: $VERSION_TAG"
+
+    - name: Configure build settings
+      run: |
+        set -e
+        VERSION="${{ steps.get_version.outputs.version }}"
+        BUILD_NAME="${{ matrix.build_version.name }}"
+        
+        echo "::group::Configuring for $BUILD_NAME"
+        echo "Version: $VERSION"
+        
+        # Set PROJECT_VER using tag name (format: NE101_V1.5_FCC_PIR)
+        PROJECT_VER="NE101_${VERSION}_${BUILD_NAME}"
+        sed -i "s|set(PROJECT_VER \".*\")|set(PROJECT_VER \"${PROJECT_VER}\")|" CMakeLists.txt
+        echo "✓ PROJECT_VER: ${PROJECT_VER}"
+        
+        # Configure sdkconfig
+        update_config() {
+          local file=$1
+          local config_name=$2
+          local enable=$3
+          
+          [ ! -f "$file" ] && return 0
+          
+          # Disable config first
+          sed -i "s/^${config_name}=.*/# ${config_name} is not set/" "$file" 2>/dev/null || true
+          sed -i "s/^# ${config_name} is not set/${config_name}=y/" "$file" 2>/dev/null || true
+          
+          if [ "$enable" = "true" ]; then
+            sed -i "s/# ${config_name} is not set/${config_name}=y/" "$file"
+            echo "✓ Enabled ${config_name} in $(basename "$file")"
+          fi
+        }
+        
+        # Update sdkconfig settings
+        update_config "sdkconfig.defaults" "CONFIG_MM_BCF_MF08251_FCC" "${{ matrix.build_version.config_fcc }}"
+        update_config "sdkconfig.defaults" "CONFIG_MM_BCF_MF08251_CE" "${{ matrix.build_version.config_ce }}"
+        update_config "sdkconfig" "CONFIG_MM_BCF_MF08251_FCC" "${{ matrix.build_version.config_fcc }}"
+        update_config "sdkconfig" "CONFIG_MM_BCF_MF08251_CE" "${{ matrix.build_version.config_ce }}"
+        
+        # Update PIR_ENABLE
+        if [ ! -f main/pir.h ]; then
+          echo "::error::main/pir.h not found"
+          exit 1
+        fi
+        sed -i "s/^#define PIR_ENABLE[[:space:]]*[0-9]*/#define PIR_ENABLE          ${{ matrix.build_version.pir_enable }}/" main/pir.h
+        echo "✓ PIR_ENABLE: ${{ matrix.build_version.pir_enable }}"
+        
+        echo "::endgroup::"
+
+    - name: Build with ESP-IDF ${{ env.ESP_IDF_VERSION }}
+      env:
+        BUILD_VERSION: ${{ matrix.build_version.name }}
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/project \
+          -w /project \
+          -e IDF_TARGET=${{ env.ESP_IDF_TARGET }} \
+          -e BUILD_VERSION=${{ env.BUILD_VERSION }} \
+          ${{ env.DOCKER_IMAGE }} \
+          bash -c "
+            . \$HOME/esp/esp-idf/export.sh && \
+            idf.py set-target ${{ env.ESP_IDF_TARGET }} && \
+            idf.py build
+          "
+
+    - name: Verify build artifacts
+      if: success()
+      run: |
+        echo "::group::Build artifacts for ${{ matrix.build_version.name }}"
+        ls -lh build/*.bin build/*.elf 2>/dev/null || true
+        ls -lh build/bootloader/bootloader.bin 2>/dev/null || true
+        ls -lh build/partition_table/partition-table.bin 2>/dev/null || true
+        echo "::endgroup::"
+
+    - name: Create firmware package
+      if: success()
+      id: package
+      run: |
+        set -e
+        VERSION="${{ steps.get_version.outputs.version }}"
+        ZIP_NAME="NE101_${VERSION}_${{ matrix.build_version.name }}.zip"
+        
+        echo "::group::Creating package: $ZIP_NAME"
+        mkdir -p release
+        
+        cd build
+        zip -r ../release/$ZIP_NAME \
+          *.bin \
+          *.elf \
+          bootloader/bootloader.bin \
+          partition_table/partition-table.bin 2>/dev/null || true
+        cd ..
+        
+        if [ ! -f "release/$ZIP_NAME" ]; then
+          echo "::error::Failed to create package"
+          exit 1
+        fi
+        
+        echo "✓ Package created: $ZIP_NAME"
+        ls -lh release/$ZIP_NAME
+        echo "zip_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
+
+    - name: Upload build artifacts
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.build_version.name }}-firmware
+        path: |
+          build/*.bin
+          build/*.elf
+          build/bootloader/bootloader.bin
+          build/partition_table/partition-table.bin
+        retention-days: 30
+
+    - name: Upload firmware package
+      if: success() && github.event_name != 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.package.outputs.zip_name }}
+        path: release/${{ steps.package.outputs.zip_name }}
+        retention-days: 30
+
+    - name: Upload build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.build_version.name }}-build-logs
+        path: |
+          build/**/*.log
+        retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/V') || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get version from git tag
+      id: get_version
+      run: |
+        VERSION_TAG="${{ github.ref_name }}"
+        echo "version=$VERSION_TAG" >> $GITHUB_OUTPUT
+        echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+        echo "Creating release for tag: $VERSION_TAG"
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release_assets
+        find artifacts -name "*.zip" -type f -exec cp {} release_assets/ \;
+        echo "::group::Release assets"
+        ls -lh release_assets/
+        echo "::endgroup::"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.version_tag }}
+        name: Release ${{ steps.get_version.outputs.version }}
+        body: |
+          ## NE101 Firmware Release ${{ steps.get_version.outputs.version }}
+          
+          This release includes the following firmware versions:
+          
+          - **NE101_${{ steps.get_version.outputs.version }}_FCC_PIR.zip** - FCC version with PIR support
+          - **NE101_${{ steps.get_version.outputs.version }}_CE_PIR.zip** - CE version with PIR support
+          - **NE101_${{ steps.get_version.outputs.version }}_FCC_ALARMIN.zip** - FCC version with ALARMIN support
+          - **NE101_${{ steps.get_version.outputs.version }}_CE_ALARMIN.zip** - CE version with ALARMIN support
+          
+          ### Build Information
+          - ESP-IDF Version: ${{ env.ESP_IDF_VERSION }}
+          - Target: ${{ env.ESP_IDF_TARGET }}
+          - Build Date: ${{ github.event.head_commit.timestamp || github.run_started_at }}
+        files: |
+          release_assets/*.zip
+        draft: false
+        prerelease: false
