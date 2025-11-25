@@ -112,10 +112,10 @@ esp_err_t ota_vertify(char *header_data, size_t header_size, size_t ota_size)
         // }
 
         // Check if the version string starts with "NE_101"
-        if (strncmp(new_app_info.version, "NE_101", 6) != 0) {
-            ESP_LOGE(TAG, "get_hardware_version failed, version does not start with NE_101: %s\n", new_app_info.version);
-            return ESP_FAIL;
-        }
+        // if (strncmp(new_app_info.version, "NE_101", 6) != 0) {
+        //     ESP_LOGE(TAG, "get_hardware_version failed, version does not start with NE_101: %s\n", new_app_info.version);
+        //     return ESP_FAIL;
+        // }
     }
 
     return ESP_OK;

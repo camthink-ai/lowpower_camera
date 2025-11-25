@@ -67,8 +67,8 @@ jobs:
         echo "::group::Configuring for $BUILD_NAME"
         echo "Version: $VERSION"
         
-        # Set PROJECT_VER using tag name (format: NE101_V1.5_FCC_PIR)
-        PROJECT_VER="NE101_${VERSION}_${BUILD_NAME}"
+        # Set PROJECT_VER using tag name (format: NE_101_V1.5_FCC_PIR)
+        PROJECT_VER="NE_101_${VERSION}_${BUILD_NAME}"
         sed -i "s|set(PROJECT_VER \".*\")|set(PROJECT_VER \"${PROJECT_VER}\")|" CMakeLists.txt
         echo "✓ PROJECT_VER: ${PROJECT_VER}"
         
@@ -137,7 +137,7 @@ jobs:
       run: |
         set -e
         VERSION="${{ steps.get_version.outputs.version }}"
-        ZIP_NAME="NE101_${VERSION}_${{ matrix.build_version.name }}.zip"
+        ZIP_NAME="NE_101_${VERSION}_${{ matrix.build_version.name }}.zip"
         
         echo "::group::Creating package: $ZIP_NAME"
         mkdir -p release
@@ -217,14 +217,14 @@ jobs:
         tag_name: ${{ steps.get_version.outputs.version_tag }}
         name: Release ${{ steps.get_version.outputs.version }}
         body: |
-          ## NE101 Firmware Release ${{ steps.get_version.outputs.version }}
+          ## NE_101 Firmware Release ${{ steps.get_version.outputs.version }}
           
           This release includes the following firmware versions:
           
-          - **NE101_${{ steps.get_version.outputs.version }}_FCC_PIR.zip** - WIFI/CAT1/HALOW 915M version with PIR support
-          - **NE101_${{ steps.get_version.outputs.version }}_CE_PIR.zip** - WIFI/CAT1/HALOW 868M version with PIR support
-          - **NE101_${{ steps.get_version.outputs.version }}_FCC_ALARMIN.zip** - WIFI/CAT1/HALOW 915M version with ALARMIN support
-          - **NE101_${{ steps.get_version.outputs.version }}_CE_ALARMIN.zip** - WIFI/CAT1/HALOW 868M version with ALARMIN support
+          - **NE_101_${{ steps.get_version.outputs.version }}_FCC_PIR.zip** - WIFI/CAT1/HALOW 915M version with PIR support
+          - **NE_101_${{ steps.get_version.outputs.version }}_CE_PIR.zip** - WIFI/CAT1/HALOW 868M version with PIR support
+          - **NE_101_${{ steps.get_version.outputs.version }}_FCC_ALARMIN.zip** - WIFI/CAT1/HALOW 915M version with ALARMIN support
+          - **NE_101_${{ steps.get_version.outputs.version }}_CE_ALARMIN.zip** - WIFI/CAT1/HALOW 868M version with ALARMIN support
           
           ### Build Information
           - ESP-IDF Version: ${{ env.ESP_IDF_VERSION }}
