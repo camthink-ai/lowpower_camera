@@ -6,10 +6,10 @@ function Wlan() {
         // --WLAN--
         wlanData: [
             // {
-            //     status: 0, // -1未连接 0连接中 1已连接
-            //     ssid: "WIFI", // Wifi名称
-            //     rssi: -54, // 信号强度 负值
-            //     bAuthenticate: 1, // 是否加密 0未加密 1加密
+            //     status: 0, // -1 not connected 0 connecting 1 connected
+            //     ssid: "WIFI", // Wifi name
+            //     rssi: -54, // signal strength negative value
+            //     bAuthenticate: 1, // whether encrypted 0 unencrypted 1 encrypted
             // }
         ],
         isSignalActive: "signal-active",
@@ -55,13 +55,13 @@ function Wlan() {
             this.wlanLoading = true;
             const res = await getData(URL.getWifiList);
             this.wlanData = res.nodes;
-            // 获取上次连接信息，在当前列表中查找对应对象
+            // get last connection info, find corresponding object in current list
             const lastConRes = await getData(URL.getWifiParam);
             this.wlanLoading = false;
             const lastItem = this.wlanData.find(
                 (item) => item.ssid == lastConRes.ssid
             );
-            // 如果存在上次连接信息则更新wifi，否则不处理
+            // if last connection info exists, update wifi, otherwise do nothing
             if (lastItem) {
                 this.curConnectItem = lastItem;
                 if (lastConRes.isConnected) {
@@ -73,8 +73,8 @@ function Wlan() {
             return;
         },
         /**
-         * 转换wifi信号强度等级
-         * @param {number} rssiLevel 负数的信号强度值
+         * convert wifi signal strength level
+         * @param {number} rssiLevel negative signal strength value
          * @return {number} 0 1 2 3 4
          */
         transRssiLevel(rssiLevel) {
@@ -92,7 +92,7 @@ function Wlan() {
             }
         },
         /**
-         * 返回Wifi信号样式
+         * return Wifi signal style
          * @param {number} rssi
          * @param {*} colIndex
          */
@@ -107,11 +107,11 @@ function Wlan() {
 
         tmpWlanItem: null,
         /**
-         * 点击wifi事件
-         * @param {*} item 引用对象，修改后视图更新
+         * click wifi event
+         * @param {*} item reference object, view updates after modification
          */
         async handleConnectWlan(item) {
-            // 点击已连接的wifi不会再次连接
+            // clicking already connected wifi will not reconnect
             if (item.status == 1) {
                 return;
             }
@@ -120,19 +120,19 @@ function Wlan() {
                 ssid: item.ssid,
                 password: "",
             };
-            // 判断是否加密
+            // check if encrypted
             if (item.bAuthenticate) {
-                // 弹窗输入密码
+                // show dialog to input password
                 this.showFormDialog(item, this.sendWlanParam);
             } else {
-                // 直接连接
+                // connect directly
                 await this.sendWlanParam(wlanParam);
             }
             return;
         },
         /**
-         * 发送连接Wifi请求，并更新列表状态
-         * 当真正准备发起连接请求时才能更新状态
+         * send wifi connection request and update list status
+         * status can only be updated when actually ready to initiate connection request
          * @param {*} wlanParam {password: ""}
          */
         async sendWlanParam(wlanParam) {
@@ -142,10 +142,10 @@ function Wlan() {
                     this.showFormDialog(wlanParam, this.sendWlanParam);
                 });
             } else {
-                // 先清除原连接项的状态值
+                // first clear status value of original connection item
                 this.curConnectItem.status = -1;
                 this.curConnectItem = this.tmpWlanItem;
-                // 连接时显示加载图标
+                // show loading icon when connecting
                 this.curConnectItem.status = 0;
                 try {
                     const res = await postData(URL.setWifiParam, wlanParam);
@@ -153,9 +153,9 @@ function Wlan() {
                     if (res.result == 1001) {
                         this.curConnectItem.status = 1;
                     } else if (res.result == 1002) {
-                        // 连接失败
+                        // connection failed
                         this.curConnectItem.status = -1;
-                        // 判断是否加密
+                        // check if encrypted
                         if (this.curConnectItem.bAuthenticate) {
                             wlanParam.showError = true;
                             this.showFormDialog(wlanParam, this.sendWlanParam);
@@ -172,9 +172,9 @@ function Wlan() {
             return;
         },
         /**
-         * region 下拉框更改事件
-         * @param 下拉选中值
-         * 更新region，重新更新wlan列表
+         * region dropdown change event
+         * @param dropdown selected value
+         * update region, refresh wlan list
          */
         async changeRegion({ detail }) {
             if(this.changeRegionLoading) return;

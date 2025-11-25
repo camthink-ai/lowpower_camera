@@ -72,6 +72,7 @@ typedef struct mdMqtt {
     connect_status_cb status_cb;       // Connection status callback
     mqtt_t *mip;                       // MIP configuration
     esp_mqtt_client_config_t cfg;      // ESP MQTT client config
+    bool isOpen;                        // MQTT client opened flag
 } mdMqtt_t;
 
 static RTC_DATA_ATTR int g_sned_total = 0;
@@ -275,7 +276,7 @@ static esp_err_t mqtt_publish(mdMqtt_t *mqtt, queueNode_t *node)
         if (mqtt_send_by_json(mqtt, node) < 0) {
             return ESP_FAIL;
         }
-        if (mqtt->mqtt.qos == 0 || mqtt->mip != NULL) { // mqtt qos 0 or mip http上传到云平台无需异步等待；
+        if (mqtt->mqtt.qos == 0 || mqtt->mip != NULL) { // mqtt qos 0 or mip http upload to cloud platform does not need async wait;
             return ESP_OK;
         }
     } else {
@@ -302,23 +303,22 @@ static void task(mdMqtt_t *self)
     while (true) {
         queueNode_t *node;
         if (xQueueReceive(self->in, &node, portMAX_DELAY)) {
-            time_t now;
-            struct tm timeinfo;
-            time(&now);
+            // time_t now, next_snapshot_time;
+            // time(&now);
+            // next_snapshot_time = now + calc_next_snapshot_time();
+            // // If the timestamp of the image is greater than the next system wake-up time discard the image.
+            // if (node->type == SNAP_TIMER &&
+            //     ((node->pts / 1000) > next_snapshot_time + CAPTURE_ERROR_THRESHOLD_S)) {
+            //     misc_show_time("Next snapshot time is:", next_snapshot_time);
+            //     misc_show_time("Discard the image pts is:", node->pts / 1000);
+            //     node->free_handler(node, EVENT_OK);
+            //     continue;
+            // }
+            // Correct the timestamp of the captured image according to the actual time.
             if (node->from == FROM_CAMERA && node->ntp_sync_flag == 0) {
-                //If the timestamp of the image is greater than the next system wake-up time, it means that the time error is too large and the image is discarded.
-                if (node->type == SNAP_TIMER &&
-                    ((node->pts / 1000) > (now + calc_next_snapshot_time() + CAPTURE_ERROR_THRESHOLD_S))) {
-                    localtime_r(&now, &timeinfo);
-                    ESP_LOGW(TAG, "Discard the currently captured image at: %s", asctime(&timeinfo));
-                    node->free_handler(node, EVENT_OK);
-                    break;
-                } else { //Correct the timestamp of the captured image according to the actual time.
-                    node->pts = node->pts + (system_get_time_delta() * 1000);
-                }
+                node->pts = node->pts + (system_get_time_delta() * 1000);
                 node->ntp_sync_flag = system_get_ntp_sync_flag();
             }
-            
             // Check upload configuration and system mode to decide upload behavior
             uploadAttr_t upload;
             cfg_get_upload_attr(&upload);
@@ -504,10 +504,15 @@ void mqtt_open(QueueHandle_t in, QueueHandle_t out)
     xEventGroupClearBits(g_MQ.eventGroup, MQTT_TASK_STOP_BIT);
     xTaskCreatePinnedToCore((TaskFunction_t)task, TAG, 8 * 1024, &g_MQ, 4, NULL, 1);
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
+    g_MQ.isOpen = true;
 }
 
 void mqtt_start()
 {
+    if (!g_MQ.isOpen) {
+        return;
+    }
+
     if (g_MQ.isConnected) {
         return;
     }
@@ -522,6 +527,9 @@ void mqtt_start()
 
 void mqtt_stop()
 {
+    if (!g_MQ.isOpen) {
+        return;
+    }
     xEventGroupSetBits(g_MQ.eventGroup, MQTT_TASK_STOP_BIT);
     xSemaphoreTake(g_MQ.mutex, portMAX_DELAY);
     if (iot_mip_dm_is_enable()) {
@@ -581,7 +589,7 @@ static void mqtt_mip_config(mdMqtt_t *m)
     ESP_LOGI(TAG, "ca:%s, cert:%s, key:%s", mqtt->ca_cert_path ? mqtt->ca_cert_path : "NULL",
              mqtt->cert_path ? mqtt->cert_path : "NULL", mqtt->key_path ? mqtt->key_path : "NULL");
     if (!strncmp(mqtt->host, "ws", 2) || !strncmp(mqtt->host, "mqtt", 4)) {
-        //带了协议头部
+        // protocol header included
         snprintf(uri, sizeof(uri), "%s", mqtt->host);
         if (!strncmp(uri, "wss", 3) || !strncmp(uri, "mqtts", 5)) {
             if (mqtt->ca_cert_path && strlen(mqtt->ca_cert_path)) {

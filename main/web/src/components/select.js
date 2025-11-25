@@ -1,5 +1,5 @@
 /**
- * // 下拉框组件
+ * // dropdown component
  * @param {*} param0
  * @returns
  */
@@ -16,11 +16,11 @@ function MsSelect({ value, options }) {
         },
         toggleMenu() {
             this.visible = !this.visible;
-            // 假如打开则添加事件监听
+            // if opened, add event listener
             if (this.visible) {
                 document.addEventListener('click', this.handleBlur);
             } else {
-                // 否则移除事件监听
+                // otherwise remove event listener
                 document.removeEventListener('click', this.handleBlur);
             }
         },
@@ -28,7 +28,7 @@ function MsSelect({ value, options }) {
             const item = this.options.find(
                 (item) => item.value == this.selectValue
             );
-            // 初始化时手动触发change选择时间更新值
+            // manually trigger change on initialization to update value
             this.handleOptionSelect(null, item, true);
             this.selectedLabel = item.label;
         },
@@ -40,10 +40,10 @@ function MsSelect({ value, options }) {
             }
         },
         /**
-         * 选择选项触发更新
+         * select option triggers update
          * @param {*} $event 
          * @param {*} option 
-         * @param {boolean} isInit 初始化时仅更新值，不发送配置
+         * @param {boolean} isInit only update value on initialization, do not send configuration
          */
         handleOptionSelect($event, option, isInit = false) {
             this.visible = false;

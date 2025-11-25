@@ -61,7 +61,7 @@ function Mqtt() {
             qos: 0,
             username: '',
             password: '',
-            /** 0未连接 1已连接 */
+            /** 0 not connected 1 connected */
             isConnected: 0,
             tlsEnable: 0,
             caName: '',
@@ -70,9 +70,9 @@ function Mqtt() {
         },
         dataReportMount: false,
 
-        // 文件上传相关
-        fileType: 'ca', // 文件类型: ca, cert, key
-        // 原始文件对象保存（用于后续上传）
+        // file upload related
+        fileType: 'ca', // file type: ca, cert, key
+        // save original file object (for subsequent upload)
         caFile: null,
         certFile: null,
         keyFile: null,
@@ -84,7 +84,7 @@ function Mqtt() {
         changeSSLSwitch(event) {
             console.log('SSL switch changed:', event.target.checked);
             this.mqttPlatform.tlsEnable = event.target.checked ? 1 : 0;
-            // 根据TLS开启与否，建议端口（不强制覆盖用户已填）
+            // suggest port based on whether TLS is enabled (do not force override user input)
             if (!this.mqttPlatform.mqttPort || this.mqttPlatform.mqttPort === 0) {
                 this.mqttPlatform.mqttPort = this.mqttPlatform.tlsEnable == 1 ? 8883 : 1883;
             }
@@ -198,13 +198,13 @@ function Mqtt() {
             }
         },
 
-        // 文件选择处理（带校验）
+        // file selection handling (with validation)
         handleFileInput(event) {
             const file = event && event.target && event.target.files && event.target.files[0];
             if (!file) return;
 
-            const maxSizeMB = 512; // 最大512MB，实际可按需调整
-            // 根据类型限制后缀
+            const maxSizeMB = 512; // maximum 512MB, can be adjusted as needed
+            // limit extension by type
             const extMap = {
                 ca: ['.pem', '.crt', '.cer'],
                 cert: ['.pem', '.crt', '.cer', '.cert'],
@@ -215,19 +215,19 @@ function Mqtt() {
             const lower = fileName.toLowerCase();
             const hasAllowedExt = allowedExt.some(ext => lower.endsWith(ext));
 
-            // 空文件
+            // empty file
             if (file.size === 0) {
                 this.showTipsDialog($t('file.empty'), false);
                 if (event && event.target) event.target.value = '';
                 return false;
             }
-            // 超大
+            // file too large
             if (file.size > maxSizeMB * 1024 * 1024) {
                 this.showTipsDialog($t('file.tooLarge', { size: maxSizeMB }), false);
                 if (event && event.target) event.target.value = '';
                 return false;
             }
-            // 扩展名
+            // extension
             if (!hasAllowedExt) {
                 this.showTipsDialog($t('file.invalidExt'), false);
                 if (event && event.target) event.target.value = '';
@@ -244,7 +244,7 @@ function Mqtt() {
         clearKey() {
             this.handleClearWithConfirm('key');
         },
-        // 检查文件是否存在
+        // check if file exists
         hasFile(type) {
             switch (type) {
                 case 'ca':
@@ -257,10 +257,10 @@ function Mqtt() {
                     return false;
             }
         },
-        // 带确认对话框的清除文件处理
+        // clear file handling with confirmation dialog
         handleClearWithConfirm(type) {
             if (this.hasFile(type)) {
-                // 获取文件类型的中文描述
+                // get file type description
                 let fileTypeName = '';
                 switch (type) {
                     case 'ca':
@@ -274,10 +274,10 @@ function Mqtt() {
                         break;
                 }
 
-                // 显示确认对话框
+                // show confirmation dialog
                 this.showTipsDialog(
                     $t('mqtt.confirmClear'),
-                    true, // 显示取消按钮
+                    true, // show cancel button
                     () => {
                         try {
                             if (type == 'ca') {
@@ -323,7 +323,7 @@ function Mqtt() {
                 this.handleClear(type);
             }
         },
-        // 清除文件处理
+        // clear file handling
         handleClear(type) {
             switch (type) {
                 case 'ca':
@@ -347,7 +347,7 @@ function Mqtt() {
             // this.currentPlatformType = res.currentPlatformType;
             // this.sensingPlatform = { ...res.sensingPlatform };
             this.mqttPlatform = { ...res.mqttPlatform };
-            // 兼容后端ssl为0/1，前端使用tlsEnable字段
+            // compatible with backend ssl 0/1, frontend uses tlsEnable field
             if (res.mqttPlatform && res.mqttPlatform.ssl !== undefined) {
                 this.mqttPlatform.tlsEnable = res.mqttPlatform.ssl;
             }
@@ -355,7 +355,7 @@ function Mqtt() {
             this.updateMqttStatus()
             return;
         },
-        /** 定时器间隔2s更新mqtt连接状态 TODO未调用销毁 */
+        /** timer interval 2s update mqtt connection status TODO not called destroy */
         async updateMqttStatus() {
             if (statusTimer) return;
             const that = this;
@@ -366,7 +366,7 @@ function Mqtt() {
             }
             loop();
         },
-        /** 销毁定时器 */
+        /** destroy timer */
         async destroyMqttTimer() {
             if (statusTimer) {
                 clearTimeout(statusTimer);
@@ -431,7 +431,7 @@ function Mqtt() {
             }
         },
         checkTopic(val) {
-            // 数字、字母和字符“/"
+            // numbers, letters and character "/"
             if (/^[\dA-Za-z\/]+$/.test(val)) {
                 return true;
             } else {
@@ -440,9 +440,9 @@ function Mqtt() {
         },
 
         /**
-         * 文本输入框判断必填项，并控制非法提示的显示
+         * text input box validate required fields and control illegal tip display
          * @param {*} $el
-         * @returns 校验合法true 非法false
+         * @returns valid true invalid false
          */
         validateEmpty($el) {
             const elError = $el.parentElement.children.namedItem('error-tip');
@@ -455,7 +455,7 @@ function Mqtt() {
             }
         },
         /**
-         * 关闭MQTT推送
+         * close MQTT push
          * @param {*} val
          */
         changeMqttSwitch(val) {
@@ -465,8 +465,8 @@ function Mqtt() {
             }
         },
         /**
-         * 对MQTT表单内的文本输入框触发失焦校验
-         * @returns {Boolean} 合法true
+         * trigger blur validation for text input boxes in MQTT form
+         * @returns {Boolean} valid true
          */
         validateMqttForm() {
             const list = document.querySelectorAll('.mqtt-card input[type=text], .mqtt-card textarea');
@@ -474,7 +474,7 @@ function Mqtt() {
                 element.focus();
                 element.blur();
             });
-            // 只要存在一个非法，则返回false
+            // if any invalid exists, return false
             const errEl = document.querySelectorAll('.mqtt-card div.error-input');
             for (const element of errEl) {
                 if (element.style.display != 'none') {
@@ -484,7 +484,7 @@ function Mqtt() {
             return true;
         },
         /**
-         * 清除MQTT表单校验结果
+         * clear MQTT form validation results
          */
         clearMqttValidate() {
             this.mqttHostError = false;
@@ -492,11 +492,11 @@ function Mqtt() {
             this.mqttTopicError = false;
         },
         async setDataReport() {
-            // 校验MQTT表单合法性
+            // validate MQTT form legality
             if (!this.validateMqttForm()) {
                 return;
             }
-            // 当开启TLS时做文件必填校验
+            // when TLS is enabled, validate required files
             // if (this.mqttPlatform.tlsEnable == 1) {
             //     const hasCA = !!(this.caFile || (this.mqttPlatform.caName && this.mqttPlatform.caName.trim()))
             //     const hasCert = !!(this.certFile || (this.mqttPlatform.certName && this.mqttPlatform.certName.trim()))
@@ -511,7 +511,7 @@ function Mqtt() {
             //     }
             // }
             this.mqttPlatform.mqttPort = Number(this.mqttPlatform.mqttPort);
-            // 提交时将tlsEnable映射为ssl
+            // map tlsEnable to ssl when submitting
             const submitPlatform = { ...this.mqttPlatform };
             submitPlatform.ssl = this.mqttPlatform.tlsEnable;
             let data = {
@@ -522,7 +522,7 @@ function Mqtt() {
             //     this.sensingPlatform.httpPort = Number(this.sensingPlatform.httpPort);
             //     data.sensingPlatform = { ...this.sensingPlatform };
             // } else if (this.currentPlatformType == 1) {
-            // Host和Mqtt Port值共用一个
+            // Host and Mqtt Port values share one
             // this.mqttPlatform.host = this.sensingPlatform.host;
             // this.mqttPlatform.mqttPort = this.sensingPlatform.mqttPort;
             // data.mqttPlatform = { ...this.mqttPlatform };

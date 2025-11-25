@@ -5,7 +5,7 @@ function Cellular() {
     return {
         /** Connect | Disconnect */
         cellularStatus: false,
-        /** 是否显示详情页面 */
+        /** whether to show detail page */
         goDetail: false,
         cellParam: {
             apn: '',
@@ -85,7 +85,7 @@ function Cellular() {
             this.cellState = { ...state };
         },
         async sendCellularCommand() {
-            // at指令是空时不调用接口
+            // do not call interface when AT command is empty
             if(!this.command || this.sendLoading || this.saveLoading ) return;
             this.sendLoading = true;
             try {
@@ -98,10 +98,10 @@ function Cellular() {
                 this.sendLoading = false;
             }
         },
-        // 返回主界面，并滚动至cellular卡片
+        // return to main interface and scroll to cellular card
         goBackCell() {
             this.goDetail = false;
-            // 存在渲染问题，需异步
+            // rendering issue exists, need async
             setTimeout(() => {
                 const el = document.querySelector('.cellular-card');
                 el.scrollIntoView();

@@ -28,10 +28,16 @@ modeSel_e system_get_mode(void)
 
 /**
  * Synchronize system time with NTP server
+ * @param force_sync If true, force synchronization even if NTP synchronization is disabled  
  * @return ESP_OK on success, ESP_FAIL on timeout
  */
-esp_err_t system_ntp_time(void)
+esp_err_t system_ntp_time(bool force_sync)
 {
+    if(!force_sync && !system_is_ntp_sync_enable()){
+        ESP_LOGI(TAG, "NTP synchronization is disabled, skip synchronization");
+        return ESP_OK;
+    }
+
     int retry = 0;
     const int retry_count = 7;  // Maximum retry attempts
     time_t sys_now;
@@ -222,25 +228,26 @@ void system_schedule_todo()
             
             // Fallback to NTP if cloud platform not connected
             if (!mqtt_mip_is_connected()) {
-                system_ntp_time();
+                system_ntp_time(true);
             }
             ESP_LOGI(TAG, "Pending DM Done");
         } else if (platformParam.currentPlatformType == PLATFORM_TYPE_SENSING) {
             // Operations for Sensing platform
             // 1. Time synchronization
             if (http_client_sync_server_time() == ESP_FAIL) {
-                system_ntp_time();  // Fallback to NTP
+                system_ntp_time(true);  // Fallback to NTP
             }
             // 2. Firmware/config updates
             http_client_check_update();
         } else if (platformParam.currentPlatformType == PLATFORM_TYPE_MQTT) {
             // Operations for MQTT platform
             ESP_LOGI(TAG, "NTP Synchronizing");
-            if (system_ntp_time() == ESP_FAIL) {
+            if (system_ntp_time(true) == ESP_FAIL) {
                 ESP_LOGI(TAG, "NTP Failed");
             }
         }
     }
+    sleep_set_last_schedule_time(time(NULL));
     sleep_set_event_bits(SLEEP_SCHEDULE_DONE_BIT);  // Signal completion
 }
 
@@ -291,4 +298,11 @@ esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync)
 {
     cfg_get_ntp_sync(&ntp_sync->enable);
     return ESP_OK;
+}
+
+bool system_is_ntp_sync_enable()
+{
+    ntpSync_t ntp_sync;
+    system_get_ntp_sync(&ntp_sync);
+    return ntp_sync.enable == 1;
 }

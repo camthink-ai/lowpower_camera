@@ -5,8 +5,8 @@ function Image() {
         // --Image Adjustment--
         supLight: 0,
         luminoSensity: 60,
-        threshold: 58, // 光照阈值
-        duty: 50, // 补光亮度
+        threshold: 58, // light threshold
+        duty: 50, // fill light brightness
         startTimeHour: "23",
         startTimeMinute: "00",
         endTimeHour: "07",
@@ -30,6 +30,51 @@ function Image() {
             },
         ],
 
+        frameSize: 14, // default FRAMESIZE_FHD (1920x1080)
+        frameSizeMount: false, // whether resolution data has been loaded
+        frameSizeOption: [
+            {
+                label: "320×240",
+                value: 5, // FRAMESIZE_QVGA
+            },
+            {
+                label: "640×480",
+                value: 8, // FRAMESIZE_VGA
+            },
+            {
+                label: "800×600",
+                value: 9, // FRAMESIZE_SVGA
+            },
+            {
+                label: "1024×768",
+                value: 10, // FRAMESIZE_XGA
+            },
+            {
+                label: "1280×720",
+                value: 11, // FRAMESIZE_HD
+            },
+            {
+                label: "1280×1024",
+                value: 12, // FRAMESIZE_SXGA
+            },
+            {
+                label: "1600×1200",
+                value: 13, // FRAMESIZE_UXGA
+            },
+            {
+                label: "1920×1080",
+                value: 14, // FRAMESIZE_FHD
+            },
+            {
+                label: "2048×1536",
+                value: 17, // FRAMESIZE_QXGA
+            },
+            {
+                label: "2560×1920",
+                value: 21, // FRAMESIZE_QSXGA
+            },
+        ],
+        quality: 12, // image quality (0-63, higher value means lower quality)
         brightness: 0,
         contrast: 0,
         saturation: 0,
@@ -71,10 +116,12 @@ function Image() {
             this.gain = camRes.gain;
             this.flipHorEnable = camRes.bHorizonetal ? true : false;
             this.flipVerEnable = camRes.bVertical ? true : false;
-
+            this.frameSize = camRes.frameSize;
+            this.frameSizeMount = true;
+            this.quality = camRes.quality;
             return Promise.resolve();
         },
-        // 刷新光敏值
+        // refresh light sensitivity value
         async refreshLuminoSensity() {
             const { value } = await getData(URL.getLightParam);
             this.luminoSensity = value;
@@ -108,8 +155,26 @@ function Image() {
                 gain: Number(this.gain),
                 bHorizonetal: Number(this.flipHorEnable),
                 bVertical: Number(this.flipVerEnable),
+                frameSize: Number(this.frameSize),
+                quality: Number(this.quality),
             });
             return;
+        },
+
+        changeFrameSize({ detail }) {
+            this.frameSize = detail.value;
+            if (!detail.isInit) {
+                this.setCamInfo();
+            }
+        },
+        changeQuality() {
+            // limit quality value to range 0-63
+            if (this.quality < 0) {
+                this.quality = 0;
+            } else if (this.quality > 63) {
+                this.quality = 63;
+            }
+            this.setCamInfo();
         },
 
         async setImgAdjustDefault() {
@@ -117,7 +182,7 @@ function Image() {
             this.brightness = 0;
             this.contrast = 0;
             this.saturation = 0;
-            // 移除无用配置项
+            // remove unused configuration items
             // this.aeLevel = 0;
             // this.agcEnable = true;
             // this.gainCeil = 3;
@@ -128,7 +193,7 @@ function Image() {
         },
 
         /**
-         * 根据不同的输入框执行不同的格式处理与请求
+         * execute different format processing and requests based on different input boxes
          * @param {string} type
          */
         inputLightTime(type) {
@@ -160,7 +225,7 @@ function Image() {
                 default:
                     break;
             }
-            // 当输入时间相同时，后面的时间增加一分钟
+            // when input times are the same, add one minute to the later time
             if (
                 this.startTimeHour == this.endTimeHour &&
                 this.startTimeMinute == this.endTimeMinute
@@ -177,7 +242,7 @@ function Image() {
         /**
          *
          * @param {string} type hour | minute
-         * @return {string} 格式化后的时间
+         * @return {string} formatted time
          */
         formatTimeNumber(type, rawNum) {
             let result = "";
@@ -193,7 +258,7 @@ function Image() {
         },
 
         /**
-         * 时间增加一分钟
+         * add one minute to time
          * @param {string|number} hour
          * @param {string|number} minute
          * @return {string} "hour:minute"

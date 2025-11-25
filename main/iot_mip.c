@@ -665,7 +665,7 @@ static void dm_timestamp(dm_downlink_header_t dh, cJSON *ddata, dm_downlink_resu
         system_set_time(&tAttr);
     } else {
         ESP_LOGI(TAG, "dm_timestamp failed to use ntp");
-        system_ntp_time();
+        system_ntp_time(false);
     }
     snprintf(dres->status, sizeof(dres->status), DM_DOWNLINK_RES_SUCCESS);
 }

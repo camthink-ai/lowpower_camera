@@ -270,20 +270,6 @@ static esp_err_t get_u8(nvs_handle_t handle, const char *key, uint8_t *value, ui
     return err;
 }
 
-static esp_err_t get_u16(nvs_handle_t handle, const char *key, uint16_t *value, uint16_t def)
-{
-    esp_err_t err = ESP_OK;
-    char out_value[32] = {0};
-    size_t len = sizeof(out_value);
-
-    err = nvs_get_str(handle, key, out_value, &len);
-    if (err != ESP_OK) {
-        *value = def;
-    } else {
-        *value = (uint16_t)strtoul(out_value, NULL, 10);
-    }
-    return err;
-}
 
 static esp_err_t set_u8(nvs_handle_t handle, const char *key, uint8_t value)
 {
@@ -298,18 +284,6 @@ static esp_err_t set_u8(nvs_handle_t handle, const char *key, uint8_t value)
     return err;
 }
 
-static esp_err_t set_u16(nvs_handle_t handle, const char *key, uint16_t value)
-{
-    esp_err_t err = ESP_OK;
-    char in_value[32] = {0};
-
-    snprintf(in_value, sizeof(in_value), "%u", value);
-    err = nvs_set_str(handle, key, in_value);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "set key:%s value:%d failed", key, value);
-    }
-    return err;
-}
 
 static esp_err_t get_i8(nvs_handle_t handle, const char *key, int8_t *value, int8_t def)
 {
@@ -649,7 +623,7 @@ static int do_date_cmd(int argc, char **argv)
 {
     timeAttr_t tAttr;
     system_get_time(&tAttr);
-    //显示时区和本地时间
+    // display timezone and local time
     misc_show_time(tAttr.tz, tAttr.ts);
     return ESP_OK;
 }
@@ -781,6 +755,8 @@ esp_err_t cfg_get_image_attr(imgAttr_t *image)
     get_u8(g_userHandle, KEY_IMG_GAINCEILING, &image->gainCeiling, 0);
     get_u8(g_userHandle, KEY_IMG_HOR, &image->bHorizonetal, 1);
     get_u8(g_userHandle, KEY_IMG_VER, &image->bVertical, 1);
+    get_u8(g_userHandle, KEY_IMG_FRAMESIZE, &image->frameSize, 14); // default FRAMESIZE_FHD
+    get_u8(g_userHandle, KEY_IMG_QUALITY, &image->quality, 12); // default quality 12 (0-63, higher value means lower quality)
     mutex_unlock();
     return ESP_OK;
 }
@@ -797,6 +773,8 @@ esp_err_t cfg_set_image_attr(imgAttr_t *image)
     set_u8(g_userHandle, KEY_IMG_GAINCEILING, image->gainCeiling);
     set_u8(g_userHandle, KEY_IMG_HOR, image->bHorizonetal);
     set_u8(g_userHandle, KEY_IMG_VER, image->bVertical);
+    set_u8(g_userHandle, KEY_IMG_FRAMESIZE, image->frameSize);
+    set_u8(g_userHandle, KEY_IMG_QUALITY, image->quality);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;
@@ -1086,7 +1064,7 @@ esp_err_t cfg_set_platform_param_attr(platformParamAttr_t *platform)
             set_str(g_userHandle, KEY_MQTT_HOST, platform->mqttPlatform.host);
             set_u32(g_userHandle, KEY_MQTT_PORT, platform->mqttPlatform.mqttPort);
             set_str(g_userHandle, KEY_MQTT_TOPIC, platform->mqttPlatform.topic);
-            // 如果client id为空，则随机生成一个23位的字符串
+            // if client id is empty, randomly generate a 23-character string
             if (strlen(platform->mqttPlatform.clientId) == 0) {
                 char id[24] = {0};
                 generate_random_string(id, sizeof(id) - 1);

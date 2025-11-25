@@ -189,7 +189,7 @@ static void wifi_scan_rx_cb(const struct mmwlan_scan_result *result, void *arg)
         ESP_LOGE(TAG, "Too many scan results");
         return;
     }
-    // 去重
+    // deduplicate
     for (int i = 0; i < args->result->items_count; i++) {
         if (memcmp(result->bssid, args->result->items[i].bssid, MMWLAN_MAC_ADDR_LEN) == 0) {
             return;

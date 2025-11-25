@@ -36,7 +36,7 @@
  * @param version Version string in format like "NE_101.2.0.2"
  * @return Hardware version number (number after first dot):
  */
-static int get_hardware_version(const char *version)
+int get_hardware_version(const char *version)
 {
     char str[32] = {0};
     strncpy(str, version, sizeof(str) - 1);
@@ -102,7 +102,7 @@ esp_err_t ota_vertify(char *header_data, size_t header_size, size_t ota_size)
         //     ESP_LOGW(TAG, "Current running version is the same as a new. We will not continue the update.");
         //     return ESP_FAIL;
         // }
-        // // 判断硬件版本号
+        // // determine hardware version number
         // int running_hardware_version = get_hardware_version(running_app_info.version);
         // int new_hardware_version = get_hardware_version(new_app_info.version);
         // if (running_hardware_version != new_hardware_version) {

@@ -1,6 +1,7 @@
 /**
- * 轻量级 Loading 组件（纯脚本，无需模板/样式文件）
- * 用法：
+ * lightweight Loading component (pure script, no template/style files needed)
+ * usage:
+ *
  * import Loading from './components/loading';
  * Loading.show('Uploading...');
  * Loading.hide();

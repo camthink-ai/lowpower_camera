@@ -168,12 +168,29 @@ void sleep_set_last_upload_time(time_t time);
  */
 time_t sleep_get_last_upload_time(void);
 
+/**
+ * Set timestamp of last schedule
+ * @param time Timestamp to set
+ */
+void sleep_set_last_schedule_time(time_t time);
+
+/**
+ * Get timestamp of last schedule
+ * @return Last schedule timestamp
+ */
+time_t sleep_get_last_schedule_time(void);
 
 /**
  * Check if alarm input should trigger restart
  * @return 1 if should restart, 0 otherwise
  */
 uint32_t sleep_is_alramin_goto_restart();
+
+/**
+ * Check if the will wakeup time is reached
+ * @return true if the time is reached, false otherwise
+ */
+bool sleep_is_will_wakeup_time_reached(void);
 
 #ifdef __cplusplus
 }

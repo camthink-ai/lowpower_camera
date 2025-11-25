@@ -42,6 +42,7 @@ extern "C" {
 #define KEY_IMG_GAINCEILING "img:gceiling"
 #define KEY_IMG_HOR         "img:bHor"
 #define KEY_IMG_VER         "img:bVer"
+#define KEY_IMG_FRAMESIZE   "img:framesize"
 
 #define KEY_IMG_QUALITY     "img:quality"
 #define KEY_IMG_SHARPNESS   "img:sharpness"
@@ -146,31 +147,32 @@ typedef struct lightAttr {
  * Image processing attributes structure
  */
 typedef struct imgAttr {
-    uint8_t quality;            // 图像质量（0 到 63）
-    int8_t brightness;          // 亮度调节（-2 到 2）#
-    int8_t contrast;            // 对比度调节（-2 到 2）#
-    int8_t saturation;          // 饱和度调节（-2 到 2）#
-    int8_t sharpness;           // 锐度调节（-2 到 2）
-    uint8_t denoise;            // 降噪等级（0 到 8）
-    uint8_t specialEffect;      // 特效模式（0-6，例如黑白、怀旧、负片等）
-    uint8_t bAwb;               // 自动白平衡开关（1: 开启，0: 关闭）
-    uint8_t bAwbGain;           // 手动白平衡增益开关
-    uint8_t wbMode;             // 白平衡模式（0-4，不同枚举值代表不同白平衡设置）
-    uint8_t bAec;               // 自动曝光控制开关
-    uint8_t bAec2;              // 二级自动曝光控制
-    int8_t aeLevel;             // 自动曝光等级调节（-2 到 2）#
-    uint16_t aecValue;          // 手动曝光值（0-1200）
-    uint8_t bAgc;               // 自动增益控制开关 #
-    uint8_t gain;               // 手动增益值（0-30 or 64）#
-    uint8_t gainCeiling;        // 最大允许增益（0-6）（2x-128x）#
-    uint8_t bBpc;               // 黑点校正开关
-    uint8_t bWpc;               // 白点校正开关
-    uint8_t bRawGma;            // Gamma校正开关
-    uint8_t bLenc;              // 镜头畸变矫正开关
-    uint8_t bHorizonetal;       // 水平镜像开关 #
-    uint8_t bVertical;          // 垂直翻转开关 #
-    uint8_t bDcw;               // 降采样开关
-    uint8_t bColorbar;          // 彩条测试图开关（用于调试）
+    uint8_t quality;            // image quality (0 to 63)
+    int8_t brightness;          // brightness adjustment (-2 to 2) #
+    int8_t contrast;            // contrast adjustment (-2 to 2) #
+    int8_t saturation;          // saturation adjustment (-2 to 2) #
+    int8_t sharpness;           // sharpness adjustment (-2 to 2)
+    uint8_t denoise;            // denoise level (0 to 8)
+    uint8_t specialEffect;      // special effect mode (0-6, e.g. black & white, vintage, negative, etc.)
+    uint8_t bAwb;               // auto white balance switch (1: on, 0: off)
+    uint8_t bAwbGain;           // manual white balance gain switch
+    uint8_t wbMode;             // white balance mode (0-4, different enum values represent different white balance settings)
+    uint8_t bAec;               // auto exposure control switch
+    uint8_t bAec2;              // secondary auto exposure control
+    int8_t aeLevel;             // auto exposure level adjustment (-2 to 2) #
+    uint16_t aecValue;          // manual exposure value (0-1200)
+    uint8_t bAgc;               // auto gain control switch #
+    uint8_t gain;               // manual gain value (0-30 or 64) #
+    uint8_t gainCeiling;        // maximum allowed gain (0-6) (2x-128x) #
+    uint8_t bBpc;               // black point correction switch
+    uint8_t bWpc;               // white point correction switch
+    uint8_t bRawGma;            // Gamma correction switch
+    uint8_t bLenc;              // lens distortion correction switch
+    uint8_t bHorizonetal;       // horizontal mirror switch #
+    uint8_t bVertical;          // vertical flip switch #
+    uint8_t frameSize;          // resolution setting (framesize_t enum value) #
+    uint8_t bDcw;               // downsampling switch
+    uint8_t bColorbar;          // color bar test pattern switch (for debugging)
 } imgAttr_t;
 
 /**
@@ -254,14 +256,14 @@ typedef enum {
  * Sensing platform attributes structure
  */
 typedef struct sensingPlatformAttr {
-    // 感知平台固定值
+    // sensing platform fixed values
     uint8_t platformType;
     char platformName[MAX_LEN_32];
-    // 可配置参数
+    // configurable parameters
     char host[MAX_LEN_128];
     uint32_t mqttPort;
     uint32_t httpPort;
-    // 不可配置参数
+    // non-configurable parameters
     char topic[MAX_LEN_128];
     char username[MAX_LEN_64];
     char password[MAX_LEN_64];
@@ -273,10 +275,10 @@ typedef struct sensingPlatformAttr {
  * MQTT platform attributes structure
  */
 typedef struct mqttPlatformAttr {
-    // MQTT平台固定值
+    // MQTT platform fixed values
     uint8_t platformType;
     char platformName[MAX_LEN_32];
-    // 可配置参数
+    // configurable parameters
     char host[MAX_LEN_128];
     uint32_t mqttPort;
     char topic[MAX_LEN_128];
@@ -304,10 +306,10 @@ typedef struct platformParamAttr {
  * IoT service attributes structure
  */
 typedef struct IoTAttr {
-    uint8_t autop_enable; // 用于开启和关闭Auto-P（RPS）服务
-    uint8_t dm_enable; // 用于开启和关闭与开发者平台的远程管理服务
-    uint8_t autop_done; // 用于标记Auto-P（RPS）服务Profile是否已经下载完成
-    uint8_t dm_done; // 用于标记与开发者平台的远程管理服务Profile是否已经下载完成
+    uint8_t autop_enable; // used to enable and disable Auto-P (RPS) service
+    uint8_t dm_enable; // used to enable and disable remote management service with developer platform
+    uint8_t autop_done; // used to mark whether Auto-P (RPS) service Profile has been downloaded
+    uint8_t dm_done; // used to mark whether remote management service Profile with developer platform has been downloaded
 } IoTAttr_t;
 
 /**
@@ -325,9 +327,9 @@ typedef enum  {
  * Cellular parameters structure
  */
 typedef struct cellularParamAttr {
-    // 不可配置参数
+    // non-configurable parameters
     char imei[MAX_LEN_32];
-    // 可配置参数
+    // configurable parameters
     char apn[MAX_LEN_32];
     char user[MAX_LEN_64];
     char password[MAX_LEN_64];

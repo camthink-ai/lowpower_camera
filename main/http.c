@@ -217,6 +217,7 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &image, int, gainCeiling);
     s2j_json_set_basic_element(json_obj, &image, int, bHorizonetal);
     s2j_json_set_basic_element(json_obj, &image, int, bVertical);
+    s2j_json_set_basic_element(json_obj, &image, int, frameSize);
     // Apply camera settings
     s2j_json_set_basic_element(json_obj, &image, int, quality);
     s2j_json_set_basic_element(json_obj, &image, int, sharpness);
@@ -261,6 +262,8 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, gainCeiling);
         s2j_struct_get_basic_element(image, json, int, bHorizonetal);
         s2j_struct_get_basic_element(image, json, int, bVertical);
+        s2j_struct_get_basic_element(image, json, int, frameSize);
+        s2j_struct_get_basic_element(image, json, int, quality);
 
         if (camera_set_image(image) == ESP_OK) {
             http_send_json_response(req, RES_OK);
@@ -324,7 +327,7 @@ esp_err_t set_light_param_handle(httpd_req_t *req)
         } else {
             http_send_json_response(req, RES_FAIL);
         }
-        misc_set_flash_duty(light->duty); /*实时更新当前占空比*/
+        misc_set_flash_duty(light->duty); /* update current duty cycle in real-time */
         s2j_delete_struct_obj(light);
         s2j_delete_json_obj(json);
         http_free_content(content);
@@ -1187,7 +1190,7 @@ static esp_err_t upload_to_path(httpd_req_t *req, const char *path)
         return ESP_FAIL;
     }
     
-    // 使用 filesystem_write 需要先收集完整数据
+    // need to collect complete data before using filesystem_write
     char *file_data = malloc(req->content_len);
     if (!file_data) {
         free(buf);
@@ -1615,7 +1618,7 @@ static const httpd_uri_t g_webHandlers[] = {
         .method = HTTP_GET,
         .handler = get_dev_ntp_sync_handle,
     },
-    // 证书上传（三个静态路径，直接写入 LittleFS）
+    // certificate upload (three static paths, directly write to LittleFS)
     {
         .uri = "/api/v1/network/uploadMqttCa",
         .method = HTTP_POST,

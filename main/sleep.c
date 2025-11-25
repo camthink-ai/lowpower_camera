@@ -55,9 +55,11 @@ typedef struct mdSleep {
 } mdSleep_t;
 
 // RTC memory preserved variables
-static RTC_DATA_ATTR uint32_t g_wakeupTodo = 0;  // 每4bit代表一个action，共8个action，共32bit，低位优先级越高
+static RTC_DATA_ATTR uint32_t g_wakeupTodo = 0;  // each 4 bits represent one action, 8 actions total, 32 bits total, lower bits have higher priority
 static RTC_DATA_ATTR time_t g_lastCapTime = 0;          // Timestamp of last capture
 static RTC_DATA_ATTR time_t g_lastUploadTime = 0;       // Timestamp of last upload
+static RTC_DATA_ATTR time_t g_lastScheduleTime = 0;      // Timestamp of last schedule
+static RTC_DATA_ATTR time_t g_willWakeupTime = 0;       // Timestamp of will wakeup
 static RTC_DATA_ATTR TimeCompensator g_TimeCompensator = {0};
 
 static mdSleep_t g_sleep = {0};  // Global sleep state
@@ -402,6 +404,24 @@ static uint32_t calculate_upload_wakeup(const uploadAttr_t *upload, time_t lastU
 }
 
 /**
+ * Calculate schedule wakeup time
+ * @param scheTimeNode Schedule time node
+ * @param lastScheduleTime Last schedule timestamp
+ * @param now Current time
+ * @return Seconds until next schedule, 0 if disabled
+ */
+static uint32_t calculate_schedule_wakeup(const timedNode_t *scheTimeNode, time_t lastScheduleTime, time_t now)
+{
+    time_t tmp;
+    tmp = find_most_recent_time_interval(1, scheTimeNode);
+    // if the next schedule time is less than 3 hours from the last schedule time, next day schedule
+    if (now + tmp < lastScheduleTime + 3 * 60 * 60) {
+        return tmp + 24 * 60 * 60;
+    } else {
+        return tmp;
+    }
+}
+/**
  * Update the wakeup todo list with the earliest wakeup time and corresponding action with automatic conflict resolution
  * @param capture_time Capture wakeup time in seconds
  * @param upload_time Upload wakeup time in seconds  
@@ -410,19 +430,19 @@ static uint32_t calculate_upload_wakeup(const uploadAttr_t *upload, time_t lastU
 static void update_wakeup_todo_list(uint32_t earliest_time, uint32_t capture_time, uint32_t upload_time, uint32_t schedule_time)
 {
 
-    // 将所有在最早时间执行的任务加入队列，按优先级排序
+    // add all tasks scheduled at earliest time to queue, sorted by priority
     if (capture_time == earliest_time) {
-        sleep_set_wakeup_todo(WAKEUP_TODO_SNAPSHOT, 0);  // 最高优先级
+        sleep_set_wakeup_todo(WAKEUP_TODO_SNAPSHOT, 0);  // highest priority
         ESP_LOGI(TAG, "Scheduled SNAPSHOT at time %lu with priority 0", earliest_time);
     }
     
     if (upload_time == earliest_time) {
-        sleep_set_wakeup_todo(WAKEUP_TODO_UPLOAD, 1);    // 中等优先级
+        sleep_set_wakeup_todo(WAKEUP_TODO_UPLOAD, 1);    // medium priority
         ESP_LOGI(TAG, "Scheduled UPLOAD at time %lu with priority 1", earliest_time);
     }
     
     if (schedule_time == earliest_time) {
-        sleep_set_wakeup_todo(WAKEUP_TODO_SCHEDULE, 2);  // 最低优先级
+        sleep_set_wakeup_todo(WAKEUP_TODO_SCHEDULE, 2);  // lowest priority
         ESP_LOGI(TAG, "Scheduled SCHEDULE at time %lu with priority 2", earliest_time);
     }
 
@@ -457,11 +477,13 @@ uint32_t  calc_wakeup_time_seconds(bool bUpdateWakeupTodo)
 
     // Calculate wakeup times for each module
     time_t lastUploadTime = sleep_get_last_upload_time();
+    time_t lastScheduleTime = sleep_get_last_schedule_time();
     uint32_t capture_wakeup = calculate_capture_wakeup(&capture, lastCapTime, now);
     uint32_t upload_wakeup = calculate_upload_wakeup(&upload, lastUploadTime, now);
-    uint32_t schedule_wakeup = find_most_recent_time_interval(1, &scheTimeNode);
+    uint32_t schedule_wakeup = calculate_schedule_wakeup(&scheTimeNode, lastScheduleTime, now);
+    // uint32_t schedule_wakeup = find_most_recent_time_interval(1, &scheTimeNode);
         
-    // 找到最早的执行时间
+    // find earliest execution time
     if (capture_wakeup > 0 && (earliest_wakeup == 0 || capture_wakeup < earliest_wakeup)) {
         earliest_wakeup = capture_wakeup;
     }
@@ -524,7 +546,8 @@ void sleep_start(void)
     wakeup_time_sec -= calculate_sec;
     if (wakeup_time_sec > 0) {
         esp_sleep_enable_timer_wakeup(wakeup_time_sec * uS_TO_S_FACTOR);
-        misc_show_time("wake will at", now + wakeup_time_sec + calculate_sec);
+        g_willWakeupTime = now + wakeup_time_sec + calculate_sec;
+        misc_show_time("wake will at", g_willWakeupTime);
         ESP_LOGI(TAG, "Enabling TIMER wakeup on %ds", wakeup_time_sec);
     }
 
@@ -651,7 +674,7 @@ wakeupTodo_e sleep_get_wakeup_todo()
         return WAKEUP_TODO_NOTHING;
     }
     
-    // 从最高优先级（优先级0，bit 0-3）开始查找
+    // start searching from highest priority (priority 0, bits 0-3)
     for (uint8_t priority = 0; priority < 8; priority++) {
         uint32_t shift_amount = priority * 4;
         uint32_t mask = 0x0000000F << shift_amount;
@@ -660,7 +683,7 @@ wakeupTodo_e sleep_get_wakeup_todo()
         if (todo_bits != 0) {
             wakeupTodo_e todo = (wakeupTodo_e)todo_bits;
             
-            // 清除这个任务
+            // clear this task
             g_wakeupTodo &= ~mask;
             
             ESP_LOGI(TAG, "Retrieved todo %d from priority %d, remaining: 0x%lx", 
@@ -704,20 +727,20 @@ void sleep_set_wakeup_todo(wakeupTodo_e todo, uint8_t priority)
     
     ESP_LOGI(TAG, "sleep_set_wakeup_todo %d (%s), priority %d", todo, todo_str, priority);
     
-    // 确保优先级在有效范围内
+    // ensure priority is within valid range
     if (priority > 7) {
         priority = 7;
     }
     
-    // 根据优先级插入任务到合适的位置
-    // 高优先级（小数值）放在低位，低优先级（大数值）放在高位
+    // insert task to appropriate position based on priority
+    // high priority (small value) placed in lower bits, low priority (large value) placed in higher bits
     uint32_t shift_amount = priority * 4;
     uint32_t mask = 0x0000000F << shift_amount;
     
-    // 清除该优先级位置的现有任务
+    // clear existing task at this priority position
     g_wakeupTodo &= ~mask;
     
-    // 插入新任务
+    // insert new task
     g_wakeupTodo |= ((uint32_t)todo & 0x0F) << shift_amount;
     
     ESP_LOGI(TAG, "Updated wakeup todo queue: 0x%lx", g_wakeupTodo);
@@ -736,7 +759,7 @@ void sleep_clear_wakeup_todo(uint8_t priority)
     uint32_t shift_amount = priority * 4;
     uint32_t mask = 0x0000000F << shift_amount;
     
-    // 清除该优先级位置的任务
+    // clear task at this priority position
     g_wakeupTodo &= ~mask;
     
     ESP_LOGI(TAG, "Cleared wakeup todo at priority %d, remaining: 0x%lx", priority, g_wakeupTodo);
@@ -796,7 +819,23 @@ time_t sleep_get_last_upload_time(void)
     return g_lastUploadTime;
 }
 
+/**
+ * Set timestamp of last schedule
+ * @param time Timestamp to set
+ */
+void sleep_set_last_schedule_time(time_t time)
+{
+    g_lastScheduleTime = time;
+}
 
+/**
+ * Get timestamp of last schedule
+ * @return Last schedule timestamp
+ */
+time_t sleep_get_last_schedule_time(void)
+{
+    return g_lastScheduleTime;
+}
 /**
  * Check if alarm input should trigger restart
  * @return 1 if should restart, 0 otherwise
@@ -804,4 +843,13 @@ time_t sleep_get_last_upload_time(void)
 uint32_t sleep_is_alramin_goto_restart()
 {
     return rtc_gpio_get_level(ALARMIN_WAKEUP_PIN) == ALARMIN_WAKEUP_LEVEL;
+}
+
+/**
+ * Get will wakeup time
+ * @return true if the time is reached, false otherwise
+ */
+bool sleep_is_will_wakeup_time_reached(void)
+{
+    return g_willWakeupTime <= time(NULL);
 }

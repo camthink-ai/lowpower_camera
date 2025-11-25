@@ -4,7 +4,7 @@ import { getData, postData, postFileBuffer, URL } from "../api";
 function Device() {
     return {
         // --Device Maintenance--
-        netmod: "", // 网络模式 wifi cat1 halow
+        netmod: "", // network mode wifi cat1 halow
         deviceName: "",
         macAddress: "",
         sn: "",
@@ -16,9 +16,9 @@ function Device() {
         upgradeFile: null,
         upgradeFilename: "",
         countryCode: "",
-        // 模组类型
-        camera: "USB", // "USB" | "CSI"
-        // NTP同步开关
+        // module type
+        camera: "CSI", // "USB" | "CSI"
+        // NTP sync switch
         ntpSync: true,
         async getDeviceInfo() {
             const res = await getData(URL.getDevInfo);
@@ -43,7 +43,7 @@ function Device() {
                 this.battery = $t("sys.typecPowered");
             }
 
-            // 获取NTP同步开关状态
+            // get NTP sync switch status
             const ntpSyncRes = await getData(URL.getDevNtpSync);
             this.ntpSync = ntpSyncRes.enable ? true : false;
 
@@ -109,18 +109,18 @@ function Device() {
         
         async confirmUpgrade() {
             const that = this;
-            // 等待浏览器加载镜像文件
+            // wait for browser to load image file
             nextTick(() => {
                 that.showUpgradeDialog($t("sys.operateWait"));
             });
-            // 计算文件上传时间
+            // calculate file upload time
             console.time("fileReader");
             const reader = new FileReader();
             reader.readAsArrayBuffer(this.upgradeFile);
             reader.onload = async function () {
                 try {
                     console.timeEnd("fileReader");
-                    // 计算镜像文件传输完成并响应的时间
+                    // calculate time for image file transfer completion and response
                     console.time("postFile");
                     const res = await postFileBuffer(
                         URL.setDevUpgrade,
@@ -128,7 +128,7 @@ function Device() {
                     );
                     console.timeEnd("postFile");
                     if (res.result == 1000) {
-                        // 文件传输成功后，再等待5s设备重置，5S后,弹窗关闭
+                        // after file transfer succeeds, wait 5s for device reset, close dialog after 5s
                         setTimeout(() => {
                             that.dialogVisible = false;
                             nextTick(() => {
@@ -140,7 +140,7 @@ function Device() {
                             });
                         }, 5000);
                     } else if (res.result == 1003) {
-                        // 失败
+                        // failed
                         that.dialogVisible = false;
                         nextTick(() => {
                             that.showTipsDialog(
@@ -163,7 +163,7 @@ function Device() {
                 }
             };
         },
-        // TODO 关闭升级弹窗中断文件上传
+        // TODO close upgrade dialog to interrupt file upload
         // closeUpgrade() {
         //     if (this.reader && this.reader.readyState == 1) {
         //         this.reader.abort();
@@ -172,7 +172,7 @@ function Device() {
         onReload() {
             window.location.reload();
         },
-        /** 移除配置云生态开发者平台相关参数 */
+        /** remove cloud ecosystem developer platform related parameters */
         // async setIotParam() {
         //     try {
         //         await postData(URL.setIotParam, {

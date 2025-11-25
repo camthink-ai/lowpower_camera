@@ -1,6 +1,6 @@
 @import url(./select.css);
 
-/* 默认的组件样式 */
+/* default component styles */
 :root {
     font-family: Helvetica, Arial, sans-serif;
     font-size: 16px;
@@ -43,7 +43,7 @@ h1 {
     border-radius: 35px;
 }
 
-/* 按钮 */
+/* button */
 button {
     display: flex;
     box-sizing: border-box;
@@ -65,7 +65,7 @@ button:hover {
     transition: all .2s linear;
 }
 
-/* 按钮样式-朴素 */
+/* button style - plain */
 button.plain {
     height: 32px;
     border: 1px solid var(--primary-color);
@@ -170,7 +170,7 @@ input {
     font-size: 15px;
 }
 
-/* 滑动条 */
+/* slider */
 input[type="range"] {
     appearance: none;
     cursor: pointer;
@@ -180,43 +180,43 @@ input[type="range"] {
     border-radius: 3px;
     outline: none;
     margin: 0 0 0 5px;
-    /* 在滑动时不触发Android浏览器左右滑动切页 */
+    /* prevent Android browser left-right swipe page switching when sliding */
     touch-action: none;
 }
 
-/* 滑动条-按钮-Chrome */
+/* slider - button - Chrome */
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    /*清除系统默认样式*/
+    /* clear system default style */
     height: 15px;
-    /*拖动块高度*/
+    /* drag block height */
     width: 15px;
-    /*拖动块宽度*/
+    /* drag block width */
     background: #fff;
-    /*拖动块背景*/
+    /* drag block background */
     border-radius: 50%;
-    /*外观设置为圆形*/
+    /* appearance set to circular */
     border: 1px solid var(--primary-color);
 }
 
-/* 滑动条-滑轨-Chrome 不支持CSS 用JS计算 */
-/* 滑动条-按钮-Firefox */
+/* slider - track - Chrome does not support CSS, use JS calculation */
+/* slider - button - Firefox */
 input[type="range"]::-moz-range-thumb {
     appearance: none;
-    /*清除系统默认样式*/
+    /* clear system default style */
     height: 15px;
-    /*拖动块高度*/
+    /* drag block height */
     width: 15px;
-    /*拖动块宽度*/
+    /* drag block width */
     background: #fff;
-    /*拖动块背景*/
+    /* drag block background */
     border-radius: 50%;
-    /*外观设置为圆形*/
+    /* appearance set to circular */
     border: 1px solid var(--primary-color);
-    /*设置边框*/
+    /* set border */
 }
 
-/* 滑动条-滑轨-Firefox */
+/* slider - track - Firefox */
 input[type="range"]::-moz-range-progress {
     height: 6px;
     border-radius: 3px;
@@ -227,7 +227,7 @@ input[type="range"]::-moz-range-progress {
         #f0f0f0);
 }
 
-/* 移动端滑动目标调大 */
+/* enlarge mobile sliding target */
 @media screen and (max-width: 767px) {
     input[type="range"] {
         height: 8px;
@@ -282,7 +282,7 @@ div.error-input {
     background: var(--red-color);
     border-radius: 4px;
     border: 1px solid var(--red-color);
-    /* word-break: keep-all; 修复移动端超出问题*/
+    /* word-break: keep-all; fix mobile overflow issue */
     text-align: left;
     position: absolute;
     top: 36px;
@@ -330,7 +330,7 @@ textarea::-webkit-scrollbar {
 }
 
 
-/* 开关 */
+/* switch */
 span.switch input {
     display: none;
 }
@@ -346,7 +346,7 @@ span.switch .switch-content {
     transition: all 0.3s 0s;
 }
 
-/* 开关的白色圆形按钮 */
+/* switch white circular button */
 span.switch .switch-content::after {
     content: "";
     position: absolute;
@@ -367,7 +367,7 @@ input[type="checkbox"]:checked+.switch-content {
     background-color: var(--primary-color);
 }
 
-/* 文本输入框 */
+/* text input box */
 input[type="text"],
 input[type="password"] {
     box-sizing: border-box;
@@ -380,7 +380,7 @@ input[type="password"] {
     padding-left: 10px;
 }
 
-/* 密码输入框 */
+/* password input box */
 .input-password {
     position: relative;
 }
@@ -405,14 +405,14 @@ input[type="password"] {
     }
 }
 
-/* 弹窗样式 */
+/* dialog style */
 .dialog-shade {
     position: fixed;
     top: 0;
     bottom: 0;
     left: 0;
     right: 0;
-    /* 透明度应使用rgba()以便兼容 */
+    /* transparency should use rgba() for compatibility */
     background-color: rgba(171, 171, 171, 0.51);
     z-index: 2001;
     transition: all 0.3 0s;
@@ -514,7 +514,7 @@ input[type="password"] {
     margin: 20px 0 70px 0;
 }
 
-/* 错误消息提示框 */
+/* error message tip box */
 .ms-message {
     top: 20px;
     z-index: 2004;

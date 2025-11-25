@@ -1,10 +1,10 @@
 /**
- * 使用原型链对Number类型的补零
- * @param {*} n 不传参数默认2位
+ * use prototype chain to pad zeros for Number type
+ * @param {*} n default 2 digits if no parameter passed
  * @returns
  */
 Number.prototype.formatAddZero = function (n = 2) {
-    // 如果数字位数大于格式化位数则不作补零处理
+    // if number of digits is greater than format digits, do not pad zeros
     if (this.toString().length >= n) return this;
     let s = "";
     for (let i = 0; i < n; i++) {
@@ -14,8 +14,8 @@ Number.prototype.formatAddZero = function (n = 2) {
 };
 
 /**
- * 时区代码选项
- * 参考资料https://github.com/espressif/esp-rainmaker-common/tree/7f606294a1e692a1b1efb356e4a94cd46f603952/src
+ * timezone code options
+ * reference: https://github.com/espressif/esp-rainmaker-common/tree/7f606294a1e692a1b1efb356e4a94cd46f603952/src
  */
 const timeZoneOptions = {
     "Africa/Abidjan": "GMT0",

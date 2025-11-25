@@ -650,6 +650,9 @@ void misc_open(uint8_t* mode)
     xTaskCreatePinnedToCore((TaskFunction_t)misc_task, "misc_task", 3 * 1024, NULL, 4, NULL, 1);
     g_misc.isInit = 1;
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
+    time_t now;
+    time(&now);
+    misc_show_time("now is:", now);
 }
 
 void misc_close(void)

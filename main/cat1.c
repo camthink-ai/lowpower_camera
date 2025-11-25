@@ -69,7 +69,7 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base, int32_t event
     }
     if (event_id == NETIF_PPP_ERRORNONE) {
         if(system_get_mode() != MODE_SCHEDULE){
-            system_ntp_time();
+            system_ntp_time(false);
         }
         mqtt_start();
     }
@@ -119,7 +119,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
         }
         // mqtt_start();
         // if(system_get_mode() != MODE_SCHEDULE){
-        //     system_ntp_time();
+        //     system_ntp_time(false);
         // }
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
@@ -729,7 +729,7 @@ static esp_err_t check_pin_status()
                 snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "PIN Required");
             } else {
                 memset(atResp, 0, sizeof(atResp));
-                snprintf(atCmd, sizeof(atCmd), "AT+CPIN=%s", g_cat1.param.pin);//兼容EG912U-GL修改
+                snprintf(atCmd, sizeof(atCmd), "AT+CPIN=%s", g_cat1.param.pin);// compatible with EG912U-GL modification
                 err = esp_modem_at(g_cat1.dce, atCmd, atResp, 5000);
                 ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
                 if (err == ESP_OK) {

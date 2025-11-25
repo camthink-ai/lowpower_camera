@@ -1,16 +1,16 @@
 import { translate as $t } from "/src/i18n";
 
-/** 全局仅一个弹窗实例, 该文件中的变量与方法都是公共的 */
+/** global single dialog instance, variables and methods in this file are public */
 
-/** 控制弹窗显示与否 */
+/** control dialog visibility */
 const dialogVisible = false;
-/** 弹窗参数 */
+/** dialog parameters */
 const dialogParam = {};
 
 /**
- * 显示提示弹窗
- * @param {*} content 提示内容
- * @param {function} callback 点击确认的回调
+ * show tip dialog
+ * @param {*} content tip content
+ * @param {function} callback callback when confirm is clicked
  */
 function showTipsDialog(content, showBtnCancel = false, callback) {
     this.dialogParam = {
@@ -27,9 +27,9 @@ function showTipsDialog(content, showBtnCancel = false, callback) {
 }
 
 /**
- * 显示进度条弹窗,默认标题为升级
- * @param {*} content 提示内容
- * @param {function} callback 点击确认的回调
+ * show progress bar dialog, default title is upgrade
+ * @param {*} content tip content
+ * @param {function} callback callback when confirm is clicked
  */
 function showUpgradeDialog(content, callback = {}) {
     this.dialogParam = {
@@ -49,9 +49,9 @@ function showUpgradeDialog(content, callback = {}) {
 }
 
 /**
- * 显示表单弹窗,默认为输入密码连接Wifi
- * @param {*} content 提示内容
- * @param {function} callback 点击确认的回调
+ * show form dialog, default is input password to connect Wifi
+ * @param {*} content tip content
+ * @param {function} callback callback when confirm is clicked
  */
 function showFormDialog(formData, callback) {
     this.dialogParam = {

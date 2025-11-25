@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-#define CAPTURE_ERROR_THRESHOLD_S 1 // The allowed capture error time value, in seconds
+#define CAPTURE_ERROR_THRESHOLD_S 60 // The allowed capture error time value, in seconds
 /**
  * System operation modes
  */
@@ -122,9 +122,10 @@ esp_err_t system_set_timezone(const char *tz);
 
 /**
  * Sync time with NTP server
+ * @param force_sync If true, force synchronization even if NTP synchronization is disabled  
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t system_ntp_time(void);
+esp_err_t system_ntp_time(bool force_sync);
 
 /**
  * Get firmware version string
@@ -187,6 +188,13 @@ esp_err_t system_set_ntp_sync(ntpSync_t *ntp_sync);
  * @return ESP_OK on success, error code otherwise
  */
 esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync);
+
+/**
+ * Check if NTP synchronization is enabled
+ * @return true if enabled, false otherwise
+ */
+bool system_is_ntp_sync_enable();
+
 
 #ifdef __cplusplus
 }

@@ -189,7 +189,7 @@ static camera_config_t camera_config = {
     .pin_reset = CAMERA_PIN_RESET,     // Reset (not used)
     .xclk_freq_hz = 5000000,          // XCLK frequency (5MHz)
     .pixel_format = PIXFORMAT_JPEG,    // Output format (JPEG)
-    .frame_size = FRAMESIZE_FHD,       // Resolution (Full HD)
+    .frame_size = FRAMESIZE_QSXGA,       // Resolution (Full HD)
     .jpeg_quality = 12,                // JPEG quality (12-63, lower=better)
     .fb_count = 2,                     // Frame buffer count
     .fb_location = CAMERA_FB_IN_PSRAM, // Store frames in PSRAM
@@ -214,15 +214,24 @@ static void uvc_fb_return(camera_fb_t *fb)
 static esp_err_t csi_init(void)
 {
     esp_err_t err;
+    imgAttr_t image;
+    cfg_get_image_attr(&image);
+    // read resolution from config and set to camera_config
+    if (image.frameSize < FRAMESIZE_INVALID) {
+        camera_config.frame_size = (framesize_t)image.frameSize;
+    }
+    // read image quality from config and set to camera_config (0-63, higher value means lower quality)
+    if (image.quality <= 63) {
+        camera_config.jpeg_quality = image.quality;
+    }
+    
     err = esp_camera_init(&camera_config);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "CSI Init Failed");
         return err;
     }
-    imgAttr_t image;
     sensor_t *s = esp_camera_sensor_get();
 
-    cfg_get_image_attr(&image);
     s->set_ae_level(s, image.aeLevel);
     s->set_gain_ctrl(s, 1);
     s->set_gainceiling(s, 0);
@@ -264,6 +273,26 @@ static esp_err_t csi_set_image(imgAttr_t *image)
     if (current.saturation != image->saturation) {
         s->set_saturation(s, image->saturation);
         ESP_LOGI(TAG, "set_saturation : %d", image->saturation);
+    }
+    if (current.frameSize != image->frameSize && image->frameSize < FRAMESIZE_INVALID) {
+        if (s && s->set_framesize) {
+            int ret = s->set_framesize(s, (framesize_t)image->frameSize);
+            if (ret == 0) {
+                ESP_LOGI(TAG, "set_framesize : %d (real-time)", image->frameSize);
+                // give sensor some time to stabilize with new resolution
+                vTaskDelay(pdMS_TO_TICKS(100));
+            } else {
+                ESP_LOGW(TAG, "set_framesize failed: %d", ret);
+            }
+        }
+    }
+    if (current.quality != image->quality && image->quality <= 63) {
+        // JPEG quality is set during initialization, modification requires camera reinitialization
+        // only log here, actual application needs camera reinitialization to take effect
+        ESP_LOGI(TAG, "quality changed: %d -> %d (requires camera reinit to take effect)", 
+                 current.quality, image->quality);
+        // update quality value in config, will be used during next initialization
+        camera_config.jpeg_quality = image->quality;
     }
     return ESP_OK;
 }
@@ -319,7 +348,7 @@ esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
         camera_flash_led_ctrl(&light);
     }
     if (ESP_OK != init_camera(handle)) {
-        sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT); //如果后续无截图任务，将进入休眠；
+        sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT); // if no subsequent snapshot tasks, will enter sleep;
         return ESP_FAIL;
     }
     handle->mutex = xSemaphoreCreateMutex();
@@ -332,7 +361,7 @@ esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
     cfg_get_cap_attr(&capAttr);
     ESP_LOGI(TAG, "wait for sensor stable with configurable delay %d ms", (int)capAttr.camWarmupMs);
     vTaskDelay(pdMS_TO_TICKS(capAttr.camWarmupMs));
-    sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT);          //如果后续无截图任务，将进入休眠；
+    sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT);          // if no subsequent snapshot tasks, will enter sleep;
     misc_get_battery_voltage();
     
     return ESP_OK;
@@ -387,7 +416,7 @@ static bool flash_led_is_time_open(char *startTime, char *endTime)
 
     time(&now);
     localtime_r(&now, &timeinfo);
-    // 计算当前时间距离00:00:00的分钟数
+    // calculate minutes from 00:00:00 to current time
     nowMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
     if (sscanf(startTime, "%02d:%02d", &Hour, &Minute) != 2) {
         ESP_LOGE(TAG, "invalid startTime %s", startTime);
@@ -400,13 +429,13 @@ static bool flash_led_is_time_open(char *startTime, char *endTime)
     }
     endMins = Hour * 60 + Minute;
     ESP_LOGI(TAG, " nowMins %d startMins %d, endMins %d", nowMins, startMins, endMins);
-    if (startMins <= endMins) { //当天
+    if (startMins <= endMins) { // same day
         if (nowMins < startMins || nowMins > endMins) {
             return false;
         } else {
             return true;
         }
-    } else { //跨天
+    } else { // cross day
         if (nowMins < startMins && nowMins > endMins) {
             return false;
         } else {

@@ -1,4 +1,4 @@
-/* 下拉选择框组件样式 */
+/* dropdown selection component styles */
 .ms-select {
     position: relative;
     width: 150px;
@@ -15,6 +15,7 @@
     width: 100%;
     height: 30px;
     line-height: 30px;
+    padding-left: 5px;
     padding-right: 30px;
     border-radius: 4px;
     border: 1px solid #e5e5e5;

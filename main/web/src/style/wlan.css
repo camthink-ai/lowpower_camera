@@ -1,6 +1,6 @@
 /* WLAN Connection */
 .wlan-card .card-list {
-    /* 设置最多显示四行半: 44px * 4.5 */
+    /* set maximum display to 4.5 rows: 44px * 4.5 */
     max-height: 198px;
     min-height: 44px;
     overflow-y: scroll;
@@ -26,7 +26,7 @@
     position: relative;
 }
 
-/* 动态加载图标 */
+/* dynamic loading icon */
 .loading {
     position: relative;
     display: inline-block;
@@ -152,8 +152,8 @@
     position: relative;
 }
 
-/* WiFi加密锁图标绘制 */
-/* 锁的矩形 */
+/* WiFi encryption lock icon drawing */
+/* lock rectangle */
 .right .signal-lock {
     display: inline-block;
     width: 0.5em;
@@ -165,7 +165,7 @@
     left: -18px;
 }
 
-/* 锁的半圆 */
+/* lock semicircle */
 .right .signal-lock::before {
     display: inline-block;
     content: "";
@@ -180,7 +180,7 @@
     left: 0.02em;
 }
 
-/* 信号强度样式 */
+/* signal strength style */
 .right .signal {
     height: 50%;
     width: 27px;

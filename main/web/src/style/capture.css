@@ -10,7 +10,7 @@
 
 /* Timed Capture */
 .capture-card .capture-interval-content {
-    /* 列表数据为空仍显示四行的空间 */
+    /* still show space for 4 rows when list data is empty */
     height: 192px;
 }
 .capture-time-content .card-item-content {
@@ -45,7 +45,7 @@
 }
 
 
-/* 间隔冒号加粗 */
+/* interval colon bold */
 .capture-time-content .number span {
     font-weight: 700;
 }

@@ -6,9 +6,9 @@
         <meta name="google" content="notranslate" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>CamThink</title>
-        <!-- 默认组件样式 -->
+        <!-- default component styles -->
         <link rel="stylesheet" href="./src/style/ui.css" />
-        <!-- 业务功能模块样式 -->
+        <!-- business function module styles -->
         <link rel="stylesheet" href="./src/style/index.css" />
     </head>
 
@@ -62,6 +62,19 @@
                                     {{ $t("img.default") }}
                                 </button></span
                             >
+                        </div>
+                        <div class="card-item" v-if="camera !== 'USB'">
+                            <span class="card-item-label"
+                                >{{ $t("img.resolution") }}</span
+                            >
+                            <span class="card-item-content">
+                                <div
+                                    class="resolution-select"
+                                    v-scope="MsSelect({value: frameSize, options: frameSizeOption})"
+                                    v-if="frameSizeMount"
+                                    @change-select="changeFrameSize"
+                                ></div>
+                            </span>
                         </div>
                         <div class="card-item">
                             <span class="card-item-label"
@@ -170,6 +183,31 @@
                         </div>
 
                         <div v-if="camera !== 'USB'">
+                            <div class="card-item">
+                                <span class="card-item-label"
+                                    >{{ $t("img.quality") }}
+                                    <span class="icon" @click="showTipsDialog($t('img.qualityTip'))">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#888">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm2 13h-4v-2h1v-4h-1v-2h3v6h1v2z"/>
+                                        </svg>
+                                    </span>
+                                </span>
+                                <span class="card-item-content">
+                                    <span class="slider-box">
+                                        <span>{{ quality }}</span>
+                                        <input
+                                            class="slider-input"
+                                            type="range"
+                                            v-model.number="quality"
+                                            min="0"
+                                            max="63"
+                                            @input="changeSlider($el)"
+                                            @change="changeQuality"
+                                            v-effect="quality;changeSlider($el)"
+                                        />
+                                    </span>
+                                </span>
+                            </div>
                             <div class="card-item">
                                 <span class="card-item-label"
                                     >{{ $t("img.brightness") }}</span
@@ -301,7 +339,7 @@
                                 </span>
                             </span>
                         </div>
-                        <!-- 开启 Scheduled Capture后显示 -->
+                        <!-- show when Scheduled Capture is enabled -->
                         <div class="card-item" v-show="scheduledCaptureEnable">
                             <span class="card-item-label"
                                 >{{ $t("cap.captureMode") }}</span
@@ -314,7 +352,7 @@
                                 ></div>
                             </span>
                         </div>
-                        <!-- 当Capture Mode选择Timed Capture时显示 -->
+                        <!-- show when Capture Mode is set to Timed Capture -->
                         <div
                             class="card-item capture-time-content"
                             v-show="scheduledCaptureEnable && captureMode == 0"
@@ -379,7 +417,7 @@
                                 </button>
                             </div>
                         </div>
-                        <!-- 当Capture Mode选择Interval Capture时显示 -->
+                        <!-- show when Capture Mode is set to Interval Capture -->
                         <div
                             class="card-item"
                             v-show="scheduledCaptureEnable && captureMode == 1"
@@ -437,7 +475,7 @@
                         </div>
 
 
-                        <!-- s 定时上传时间 -->
+                        <!-- scheduled upload time -->
                      <div class="card-item" v-show="scheduledCaptureEnable">
                               <span class="card-item-label"
                                >{{ $t("cap.uploadMode") }}</span>
@@ -511,7 +549,7 @@
                             </button>
                         </div>
                     </div>
-                    <!-- end 定时上传时间 -->
+                    <!-- end scheduled upload time -->
 
                         <div class="card-item">
                             <span class="card-item-label"
@@ -999,7 +1037,7 @@
                                 @click="handleConnectWlan(item)"
                                 v-show="!wlanLoading"
                             >
-                                <!-- 仅当前正在连接的WiFi才显示图标 -->
+                                <!-- only show icon for currently connecting WiFi -->
                                 <span class="left" v-show="curConnectItem.ssid == item.ssid">
                                     <span
                                         class="icon icon-tick"
@@ -1048,7 +1086,7 @@
                                 </button>
                             </span>
                         </div>
-                        <!-- CAT1模组的IMEI号 -->
+                        <!-- CAT1 module IMEI number -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.imei") }}</span
@@ -1057,7 +1095,7 @@
                                 <span> {{ cellState.imei }} </span>
                             </span>
                         </div>
-                        <!-- APN 蜂窝的接入点 -->
+                        <!-- APN cellular access point -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.apn") }}</span
@@ -1094,7 +1132,7 @@
                                 />
                             </span>
                         </div>
-                        <!-- 蜂窝连接的PIN码 -->
+                        <!-- cellular connection PIN code -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.pinCode") }}</span
@@ -1120,7 +1158,7 @@
                                 ></div>
                             </span>
                         </div>
-                        <!-- 开放AT指令 -->
+                        <!-- open AT commands -->
                         <div class="card-item flex-start">
                             <span class="card-item-label"
                                 >{{ $t("cell.atCommands") }}</span
@@ -1170,14 +1208,14 @@
                             {{ $t("sleepMode") }}
                         </button>
                     </footer>
-                    <!-- 基本弹窗组件调用 -->
+                    <!-- basic dialog component call -->
                     <div
                         v-if="dialogVisible"
                         v-scope="MsDialog(dialogParam)"
                         @vue:mounted="dialogMounted"
                     ></div>
                 </div>
-                <!-- Cellular详情页面 -->
+                <!-- Cellular detail page -->
                 <div class="content content-cell-detail" v-if="netmod==='cat1'" v-show="goDetail">
                     <div class="card cellular-card">
                         <div class="card-title">
@@ -1193,7 +1231,7 @@
                                 </button></span
                             >
                         </div>
-                        <!-- 蜂窝网络拨号状态 -->
+                        <!-- cellular network dial status -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.networkStatus") }}</span
@@ -1202,7 +1240,7 @@
                                 <span> {{ $t(`cell.${cellState.networkStatus.toLocaleLowerCase()}`) }} </span>
                             </span>
                         </div>
-                        <!-- 模块和SIM卡的相关检测状态 -->
+                        <!-- module and SIM card related detection status -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.modemStatus") }}</span
@@ -1211,7 +1249,7 @@
                                 <span> {{ $t(`cell.${cellState.modemStatus}`) }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝模块型号 -->
+                        <!-- cellular module model -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.model") }}</span
@@ -1220,7 +1258,7 @@
                                 <span> {{ cellState.model }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝模块当前的版本 -->
+                        <!-- current version of cellular module -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.version") }}</span
@@ -1229,7 +1267,7 @@
                                 <span> {{ cellState.version }} </span>
                             </span>
                         </div>
-                        <!-- 当前的信号强度 -->
+                        <!-- current signal strength -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.signalLevel") }}</span
@@ -1238,7 +1276,7 @@
                                 <span> {{ cellState.signalLevel }} </span>
                             </span>
                         </div>
-                        <!-- 当前SIM卡的注册状态 -->
+                        <!-- current SIM card registration status -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.registerStatus") }}</span
@@ -1247,7 +1285,7 @@
                                 <span>  {{ $t(`cell.${cellState.registerStatus}`) }} </span>
                             </span>
                         </div>
-                        <!-- 模块IMEI -->
+                        <!-- module IMEI -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.imei") }}</span
@@ -1256,7 +1294,7 @@
                                 <span> {{ cellState.imei }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡的IMSI -->
+                        <!-- SIM card IMSI -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.imsi") }}</span
@@ -1265,7 +1303,7 @@
                                 <span> {{ cellState.imsi }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡的ICCID -->
+                        <!-- SIM card ICCID -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.iccid") }}</span
@@ -1274,7 +1312,7 @@
                                 <span> {{ cellState.iccid }} </span>
                             </span>
                         </div>
-                        <!-- 注册上的运营商 -->
+                        <!-- registered carrier -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.isp") }}</span
@@ -1283,7 +1321,7 @@
                                 <span> {{ cellState.isp }} </span>
                             </span>
                         </div>
-                        <!-- 拨号上的网络类型，如LTE，3G -->
+                        <!-- network type on dial, such as LTE, 3G -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.networkType") }}</span
@@ -1292,7 +1330,7 @@
                                 <span> {{ cellState.networkType }} </span>
                             </span>
                         </div>
-                        <!-- 显示移动国家代码（MCC)+移动网络代码（MNC)，也显示位置区域码（LAC)和小区识别码 -->
+                        <!-- display mobile country code (MCC) + mobile network code (MNC), also display location area code (LAC) and cell ID -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.plmnId") }}</span
@@ -1301,7 +1339,7 @@
                                 <span> {{ cellState.plmnId }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡位置区域码 -->
+                        <!-- SIM card location area code -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.lac") }}</span
@@ -1310,7 +1348,7 @@
                                 <span> {{ cellState.lac }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡所在的蜂窝小区识别号 -->
+                        <!-- cellular cell ID where SIM card is located -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.cellId") }}</span
@@ -1319,7 +1357,7 @@
                                 <span> {{ cellState.cellId }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取到的IPv4地址 -->
+                        <!-- IPv4 address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv4Address") }}</span
@@ -1328,7 +1366,7 @@
                                 <span> {{ cellState.ipv4Address }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv4网关地址 -->
+                        <!-- IPv4 gateway address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv4Gateway") }}</span
@@ -1337,7 +1375,7 @@
                                 <span> {{ cellState.ipv4Gateway }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv4 DNS -->
+                        <!-- IPv4 DNS obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv4Dns") }}</span
@@ -1346,7 +1384,7 @@
                                 <span> {{ cellState.ipv4Dns }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取到的IPv6地址 -->
+                        <!-- IPv6 address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv6Address") }}</span
@@ -1355,7 +1393,7 @@
                                 <span> {{ cellState.ipv6Address }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv6网关地址 -->
+                        <!-- IPv6 gateway address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv6Gateway") }}</span
@@ -1364,7 +1402,7 @@
                                 <span> {{ cellState.ipv6Gateway }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv6 DNS -->
+                        <!-- IPv6 DNS obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv6Dns") }}</span
@@ -1404,10 +1442,10 @@
     </body>
     <script type="module">
         import "./src/main";
-        import "./src/utils.js"; // 工具函数
+        import "./src/utils.js"; // utility functions
     </script>
 </html>
-<!-- 弹窗组件模板 -->
+<!-- dialog component template -->
 <template id="ms-dialog">
     <div class="dialog-shade" ref="dialog">
         <div class="dialog-box">
@@ -1498,7 +1536,7 @@
     </div>
 </template>
 
-<!-- 下拉选择框组件模板 -->
+<!-- dropdown selection component template -->
 <template id="ms-select">
     <div
         class="ms-select"

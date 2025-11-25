@@ -1,4 +1,4 @@
-// 使用Fetch原生API并根据请求类型进行封装
+// use native Fetch API and encapsulate based on request type
 
 function getData(url = "") {
     return fetch(url, {
@@ -33,7 +33,7 @@ function postData(url = "", data = {}) {
         });
 }
 
-// 上传MQTTS文件
+// upload MQTTS file
 function postMqttFile(url = "",fileName = "", formData) {
     return fetch(url, {
         method: "POST",
@@ -49,7 +49,7 @@ function postMqttFile(url = "",fileName = "", formData) {
         })
         .catch((error) => console.error(error));
 }
-// 传输文件
+// transfer file
 function postFile(url = "", formData) {
     return fetch(url, {
         method: "POST",
@@ -64,7 +64,7 @@ function postFile(url = "", formData) {
         })
         .catch((error) => console.error(error));
 }
-// 传输二进制文件
+// transfer binary file
 function postFileBuffer(url = "", formData) {
     return fetch(url, {
         method: "POST",
@@ -113,7 +113,7 @@ const URL = {
     getIoTParam: baseUrl + "/network/getIoTParam",
     setIotParam: baseUrl + "/network/setIoTParam",
 
-    // 定时上传
+    // scheduled upload
     setUploadParam: baseUrl + "/capture/setUploadParam",
     getUploadParam: baseUrl + "/capture/getUploadParam",
 

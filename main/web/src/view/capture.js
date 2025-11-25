@@ -65,7 +65,7 @@ function Capture() {
         timeSetMinute: '00',
         timeSetSecond: '00',
 
-        // 定时抓拍列表数据
+        // scheduled capture list data
         timeCaptureList: [],
         timeIntervalNum: 8,
         capIntervalError: false,
@@ -92,7 +92,7 @@ function Capture() {
         captureMount: false,
         timeIntervalUnitMount: false,
 
-        // 定时上传
+        // scheduled upload
         uploadTimeSetHour: '00',
         uploadTimeSetMinute: '00',
         uploadTimeSetSecond: '00',
@@ -291,7 +291,7 @@ function Capture() {
             }
             return result;
         },
-        /** 校验间隔时间 */
+        /** validate interval time */
         checkIntervalNum() {
             if (
                 this.checkRequired(this.timeIntervalNum) &&
@@ -304,7 +304,7 @@ function Capture() {
                 return false;
             }
         },
-        /** 抓拍间隔时间输入框失焦 */
+        /** capture interval time input box blur */
         inputCapInterNum() {
             if (this.checkIntervalNum()) {
                 this.timeIntervalNum = parseInt(this.timeIntervalNum);

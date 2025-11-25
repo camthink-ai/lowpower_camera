@@ -108,6 +108,10 @@ static modeSel_e handle_deep_sleep_wakeup(snapType_e *snapType)
 
     switch (type) {
         case WAKEUP_TIMER:
+            if (!sleep_is_will_wakeup_time_reached()) {
+                ESP_LOGI(TAG, "Wake up from timer, but the time is not reached, sleep again");
+                return MODE_SLEEP;
+            }
             return handle_timer_wakeup(snapType);
             
         case WAKEUP_ALARMIN:

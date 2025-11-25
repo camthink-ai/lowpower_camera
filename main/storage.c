@@ -245,7 +245,7 @@ static void upload(mdStorage_t *self)
 
     ESP_LOGI(TAG, "upload Start");
     while (true) {
-        sleep_set_event_bits(SLEEP_STORAGE_UPLOAD_STOP_BIT); // 如果flash里无剩余待上传图片，将进入休眠
+        sleep_set_event_bits(SLEEP_STORAGE_UPLOAD_STOP_BIT); // if no remaining images to upload in flash, will enter sleep
         xEventGroupWaitBits(self->eventGroup, STORAGE_UPLOAD_START_BIT, true, true, portMAX_DELAY);
         sleep_clear_event_bits(SLEEP_STORAGE_UPLOAD_STOP_BIT);
         struct dirent *entry;

@@ -1,32 +1,32 @@
 import { nextTick } from "/src/lib/petite-vue.es.js";
 import { translate as $t } from "/src/i18n";
 /**
- * 弹窗基本组件
+ * basic dialog component
  * @param {*} type
  * @returns
  */
 function MsDialog({ option, prop }) {
     return {
-        // 弹窗组件template ID
+        // dialog component template ID
         $template: "#ms-dialog",
-        // 弹窗顶部标题
+        // dialog top title
         title: prop.title || "Tips",
-        // 显示OK按钮
+        // show OK button
         showBtnOK: option.showBtnOK === undefined ? true : option.showBtnOK,
         btnOkText: option.btnOkText || $t("ok"),
-        // 显示Cancel按钮
+        // show Cancel button
         showBtnCancel: 
             option.showBtnCancel === undefined ? false : option.showBtnCancel,
         btnCancelText: option.btnCancelText || $t("cancel"),
         showBtnClose: option.showBtnClose === undefined ? true : option.showBtnClose,
         content: prop.content || "",
-        // --输入密码弹窗--
+        // --password input dialog--
         showPwdContent:
             option.showPwdContent === undefined ? false : option.showPwdContent,
         showPwd: option.showPwd === undefined ? false : option.showPwd,
-        dialogPwdModel: "", // 输入密码
-        showError: prop.showError === undefined ? false : prop.showError, // 密码错误时输入框边框为红
-        // --升级进度条弹窗--
+        dialogPwdModel: "", // input password
+        showError: prop.showError === undefined ? false : prop.showError, // input box border turns red when password is wrong
+        // --upgrade progress bar dialog--
         showProgress:
             option.showProgress === undefined ? false : option.showProgress,
 
@@ -34,16 +34,16 @@ function MsDialog({ option, prop }) {
         
         handleOK() {
             this.dialogVisible = false;
-            // TODO 判断类型为函数
+            // TODO check if type is function
             if (prop.okCallback) {
-                // 表单弹窗，回调传参数
+                // form dialog, pass parameters in callback
                 if (this.showPwdContent) {
                     prop.okCallback({
                         ssid: prop.title,
                         password: this.dialogPwdModel,
                     });
                 } else {
-                    // 普通弹窗
+                    // normal dialog
                     prop.okCallback();
                 }
             }
@@ -52,18 +52,18 @@ function MsDialog({ option, prop }) {
             this.dialogVisible = false;
         },
         handleClose() {
-            // 如果加载的是升级弹窗，则关闭前清除定时器
+            // if upgrade dialog is loaded, clear timer before closing
             if (this.showProgress) {
                 clearInterval(this.mockInterval);
                 this.$refs.dialog.dispatchEvent(new CustomEvent('close-upgrade', {
                     bubbles: true 
                 }))
             }
-            // TODO 并停止文件上传
+            // TODO and stop file upload
             this.dialogVisible = false;
         },
         dialogMounted() {
-            // 如果加载的是升级弹窗，则开启loading动画
+            // if upgrade dialog is loaded, start loading animation
             if (this.showProgress) {
                 this.upgradeProgress = 0;
                 nextTick(() => {

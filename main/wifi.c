@@ -110,7 +110,7 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
             iot_mip_autop_async_start(NULL);
         }
         if(system_get_mode() != MODE_SCHEDULE){
-            system_ntp_time();
+            system_ntp_time(false);
         }
         mqtt_start();
     }
@@ -324,7 +324,7 @@ static int do_tcp_client(int argc, char **argv)
     // Close socket
     close(sock);
 
-    // 计算发送速率
+    // calculate send rate
     TickType_t  elapsed_time = end_time - start_time;
     float send_rate = (float)total_bytes_sent / ((float)elapsed_time / configTICK_RATE_HZ);
     ESP_LOGI(TAG, "Send rate: %.2f bytes/s", send_rate);
