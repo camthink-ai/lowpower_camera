@@ -10,49 +10,18 @@
 #include <stdint.h>
 
 /**
- * @brief Camera capabilities structure
- */
-typedef struct {
-    bool hdr_supported;
-    bool auto_exposure_supported;
-    bool brightness_supported;
-    bool contrast_supported;
-    bool saturation_supported;
-    bool auto_focus_supported;
-} camera_uvc_capabilities_t;
-
-/**
- * @brief Detect which controls are supported by the camera
+ * @brief Enable/disable HDR
  * 
- * Call this once after camera initialization to discover capabilities.
- * 
+ * @param enable true to enable, false to disable
  * @return ESP_OK on success
  */
-esp_err_t camera_uvc_detect_capabilities(void);
-
-/**
- * @brief Check if HDR is supported
- * 
- * @return true if HDR/Backlight Compensation is supported
- */
-bool camera_uvc_is_hdr_supported(void);
-
-/**
- * @brief Set HDR level
- * 
- * @param level HDR level (0=off, 1=low, 2=medium, 3=high)
- *              Actual range depends on camera hardware
- * @return ESP_OK on success
- *         ESP_ERR_NOT_SUPPORTED if HDR not supported
- */
-esp_err_t camera_uvc_set_hdr(uint16_t level);
+esp_err_t camera_uvc_set_hdr(bool enable);
 
 /**
  * @brief Enable/disable auto exposure
  * 
- * @param enable true to enable auto exposure, false for manual
+ * @param enable true to enable, false to disable
  * @return ESP_OK on success
- *         ESP_ERR_NOT_SUPPORTED if not supported
  */
 esp_err_t camera_uvc_set_auto_exposure(bool enable);
 
@@ -122,12 +91,6 @@ esp_err_t camera_uvc_apply_outdoor_settings(void);
  */
 esp_err_t camera_uvc_apply_lowlight_settings(void);
 
-/**
- * @brief Get current camera capabilities
- * 
- * @return Pointer to capabilities structure (static, do not free)
- */
-const camera_uvc_capabilities_t* camera_uvc_get_capabilities(void);
 
 #endif /* CAMERA_UVC_CONTROLS_H_ */
 

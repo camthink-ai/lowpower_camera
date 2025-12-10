@@ -460,6 +460,10 @@ typedef struct {
     uint16_t frame_width;
     uint16_t frame_height;
     uint32_t frame_interval;
+    // Video Control interface and unit IDs (parsed from descriptors)
+    uint16_t vc_interface;      // Video Control interface number
+    uint8_t ct_id;              // Camera Terminal unit ID
+    uint8_t pu_id;              // Processing Unit unit ID
 } _uvc_device_t;
 
 typedef enum {
@@ -568,6 +572,13 @@ typedef struct {
     _uac_device_t *uac;
     _uvc_device_t *uvc;
     _stream_ifc_t *ifc[STREAM_MAX];
+    // Temporary storage for parsed UVC IDs (before uvc_dev is allocated)
+    uint16_t parsed_vc_interface;
+    uint8_t parsed_ct_id;
+    uint8_t parsed_pu_id;
+    bool vc_interface_parsed;  // Flag to indicate if VC interface was parsed (since 0 is valid)
+    bool ct_id_parsed;         // Flag to indicate if CT ID was parsed (since 0 is valid)
+    bool pu_id_parsed;         // Flag to indicate if PU ID was parsed (since 0 is valid)
     // only operate in single thread
     _enum_stage_t enum_stage;
     // dynamic values should be protect
@@ -969,7 +980,13 @@ static esp_err_t _update_config_from_descriptor(const usb_config_desc_t *cfg_des
             context_class = _intf_desc->bInterfaceClass;
             context_subclass = _intf_desc->bInterfaceSubClass;
             if (context_class == USB_CLASS_VIDEO && context_subclass == VIDEO_SUBCLASS_CONTROL) {
-                ESP_LOGD(TAG, "Found Video Control interface");
+                ESP_LOGD(TAG, "Found Video Control interface %d", context_intf);
+                // Store in temporary location (uvc_dev may not be allocated yet)
+                usb_dev->parsed_vc_interface = context_intf;
+                usb_dev->vc_interface_parsed = true;
+                if (uvc_dev) {
+                    uvc_dev->vc_interface = context_intf;
+                }
             }
             if (context_class == USB_CLASS_VIDEO && context_subclass == VIDEO_SUBCLASS_STREAMING) {
                 ESP_LOGD(TAG, "Found Video Stream interface, %d-%d", context_intf, context_intf_alt);
@@ -1042,8 +1059,19 @@ static esp_err_t _update_config_from_descriptor(const usb_config_desc_t *cfg_des
                     // Check if it's a camera terminal (wTerminalType == 0x0201)
                     const uint8_t *desc = (const uint8_t *)next_desc;
                     uint16_t wTerminalType = desc[4] | (desc[5] << 8);
+                    uint8_t bTerminalID = desc[3];
                     if (wTerminalType == 0x0201) {
                         print_vc_camera_terminal_desc((const uint8_t *)next_desc);
+                        // Store in temporary location (uvc_dev may not be allocated yet)
+                        if (!usb_dev->ct_id_parsed) {
+                            usb_dev->parsed_ct_id = bTerminalID;
+                            usb_dev->ct_id_parsed = true;
+                            ESP_LOGI(TAG, "Found Camera Terminal ID: %d", bTerminalID);
+                        }
+                        if (uvc_dev && !uvc_dev->ct_id) {
+                            // Store first camera terminal ID found
+                            uvc_dev->ct_id = bTerminalID;
+                        }
                     } else {
                         print_vc_input_terminal_desc((const uint8_t *)next_desc);
                     }
@@ -1052,9 +1080,22 @@ static esp_err_t _update_config_from_descriptor(const usb_config_desc_t *cfg_des
                 case VIDEO_CS_ITF_VC_OUTPUT_TERMINAL:
                     print_vc_output_terminal_desc((const uint8_t *)next_desc);
                     break;
-                case VIDEO_CS_ITF_VC_PROCESSING_UNIT:
+                case VIDEO_CS_ITF_VC_PROCESSING_UNIT: {
+                    const uint8_t *desc = (const uint8_t *)next_desc;
+                    uint8_t bUnitID = desc[3];
                     print_vc_processing_unit_desc((const uint8_t *)next_desc);
+                    // Store in temporary location (uvc_dev may not be allocated yet)
+                    if (!usb_dev->pu_id_parsed) {
+                        usb_dev->parsed_pu_id = bUnitID;
+                        usb_dev->pu_id_parsed = true;
+                        ESP_LOGI(TAG, "Found Processing Unit ID: %d", bUnitID);
+                    }
+                    if (uvc_dev && !uvc_dev->pu_id) {
+                        // Store first Processing Unit ID found
+                        uvc_dev->pu_id = bUnitID;
+                    }
                     break;
+                }
                 case VIDEO_CS_ITF_VC_SELECTOR_UNIT:
                 case VIDEO_CS_ITF_VC_EXTENSION_UNIT:
                 case VIDEO_CS_ITF_VC_ENCODING_UNIT:
@@ -2049,11 +2090,24 @@ static esp_err_t uvc_camera_control(stream_ctrl_t ctrl_type, void *ctrl_value)
 {
     UVC_CHECK(s_usb_dev.uvc, "UVC not configured", ESP_ERR_INVALID_STATE);
     
-    // For now, we use interface 0 and unit ID 1 as defaults
-    // In a production system, these should be parsed from the device descriptors
-    uint16_t vc_itf = 0;
-    uint8_t unit_id = 1;  // Usually CT is 1, PU is 2 or 3
-    uint8_t pu_id = 2;    // Processing Unit typically has ID 2
+    // Use parsed values from device descriptors, fallback to defaults if not parsed
+    uint16_t vc_itf = s_usb_dev.uvc->vc_interface;
+    if (!s_usb_dev.vc_interface_parsed) {
+        vc_itf = 0;  // Default to interface 0 if not parsed
+        ESP_LOGW(TAG, "Using default VC interface 0 (not parsed from descriptor)");
+    }
+    uint8_t unit_id = s_usb_dev.uvc->ct_id;
+    if (!s_usb_dev.ct_id_parsed) {
+        unit_id = 1;  // Default Camera Terminal ID
+        ESP_LOGW(TAG, "Using default Camera Terminal ID 1 (not parsed from descriptor)");
+    }
+    uint8_t pu_id = s_usb_dev.uvc->pu_id;
+    if (!s_usb_dev.pu_id_parsed) {
+        pu_id = 2;  // Default Processing Unit ID
+        ESP_LOGW(TAG, "Using default Processing Unit ID 2 (not parsed from descriptor)");
+    }
+    
+    ESP_LOGD(TAG, "UVC Control: vc_itf=%d, ct_id=%d, pu_id=%d", vc_itf, unit_id, pu_id);
     
     uint8_t data_1byte;
     uint16_t data_2byte;
@@ -4054,6 +4108,19 @@ esp_err_t usb_streaming_start()
         s_usb_dev.ifc[STREAM_UVC]->type = STREAM_UVC;
         s_usb_dev.ifc[STREAM_UVC]->name = "UVC";
         s_usb_dev.ifc[STREAM_UVC]->evt_bit = USB_UVC_STREAM_RUNNING;
+        // Copy parsed IDs from temporary storage
+        if (s_usb_dev.vc_interface_parsed) {
+            s_usb_dev.uvc->vc_interface = s_usb_dev.parsed_vc_interface;
+            ESP_LOGI(TAG, "Restored VC interface: %d", s_usb_dev.uvc->vc_interface);
+        }
+        if (s_usb_dev.ct_id_parsed) {
+            s_usb_dev.uvc->ct_id = s_usb_dev.parsed_ct_id;
+            ESP_LOGI(TAG, "Restored Camera Terminal ID: %d", s_usb_dev.uvc->ct_id);
+        }
+        if (s_usb_dev.pu_id_parsed) {
+            s_usb_dev.uvc->pu_id = s_usb_dev.parsed_pu_id;
+            ESP_LOGI(TAG, "Restored Processing Unit ID: %d", s_usb_dev.uvc->pu_id);
+        }
         ESP_LOGD(TAG, "Camera instance created");
         s_usb_dev.enabled[STREAM_UVC] = true;
         //if enable uvc, we should set fifo bias to RX

@@ -7,6 +7,7 @@ function Image() {
         luminoSensity: 60,
         threshold: 58, // light threshold
         duty: 50, // fill light brightness
+        hdrEnable: false, // HDR enable/disable for USB camera
         startTimeHour: "23",
         startTimeMinute: "00",
         endTimeHour: "07",
@@ -119,6 +120,9 @@ function Image() {
             this.frameSize = camRes.frameSize;
             this.frameSizeMount = true;
             this.quality = camRes.quality;
+            
+            // Get HDR status for USB camera
+            this.hdrEnable = camRes.hdrEnable ? true : false;
             return Promise.resolve();
         },
         // refresh light sensitivity value
@@ -157,6 +161,7 @@ function Image() {
                 bVertical: Number(this.flipVerEnable),
                 frameSize: Number(this.frameSize),
                 quality: Number(this.quality),
+                hdrEnable: Number(this.hdrEnable),
             });
             return;
         },

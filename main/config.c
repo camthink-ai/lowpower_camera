@@ -757,6 +757,7 @@ esp_err_t cfg_get_image_attr(imgAttr_t *image)
     get_u8(g_userHandle, KEY_IMG_VER, &image->bVertical, 1);
     get_u8(g_userHandle, KEY_IMG_FRAMESIZE, &image->frameSize, 14); // default FRAMESIZE_FHD
     get_u8(g_userHandle, KEY_IMG_QUALITY, &image->quality, 12); // default quality 12 (0-63, higher value means lower quality)
+    get_u8(g_userHandle, KEY_IMG_HDR, &image->hdrEnable, 0); // default HDR disabled
     mutex_unlock();
     return ESP_OK;
 }
@@ -775,6 +776,7 @@ esp_err_t cfg_set_image_attr(imgAttr_t *image)
     set_u8(g_userHandle, KEY_IMG_VER, image->bVertical);
     set_u8(g_userHandle, KEY_IMG_FRAMESIZE, image->frameSize);
     set_u8(g_userHandle, KEY_IMG_QUALITY, image->quality);
+    set_u8(g_userHandle, KEY_IMG_HDR, image->hdrEnable);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;

@@ -182,6 +182,26 @@
                             </span>
                         </div>
 
+                        <div class="card-item" v-if="camera === 'USB'">
+                            <span class="card-item-label"
+                                >{{ $t("img.hdr") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span class="switch">
+                                    <input
+                                        id="hdrSwitch"
+                                        type="checkbox"
+                                        v-model="hdrEnable"
+                                        @change="setCamInfo()"
+                                    />
+                                    <label
+                                        for="hdrSwitch"
+                                        class="switch-content"
+                                    ></label>
+                                </span>
+                            </span>
+                        </div>
+
                         <div v-if="camera !== 'USB'">
                             <div class="card-item">
                                 <span class="card-item-label"

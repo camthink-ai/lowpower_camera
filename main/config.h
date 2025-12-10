@@ -60,6 +60,7 @@ extern "C" {
 #define KEY_IMG_LENC        "img:bLenc"
 #define KEY_IMG_DCW         "img:bDcw"
 #define KEY_IMG_COLORBAR    "img:bColorbar"
+#define KEY_IMG_HDR         "img:hdr"
 
 #define KEY_LIGHT_MODE      "light:mode"
 #define KEY_LIGHT_THRESHOLD "light:thr"
@@ -173,6 +174,7 @@ typedef struct imgAttr {
     uint8_t frameSize;          // resolution setting (framesize_t enum value) #
     uint8_t bDcw;               // downsampling switch
     uint8_t bColorbar;          // color bar test pattern switch (for debugging)
+    uint8_t hdrEnable;          // HDR enable/disable for USB camera
 } imgAttr_t;
 
 /**

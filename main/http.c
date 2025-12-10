@@ -235,6 +235,7 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &image, int, bLenc);
     s2j_json_set_basic_element(json_obj, &image, int, bDcw);
     s2j_json_set_basic_element(json_obj, &image, int, bColorbar);
+    s2j_json_set_basic_element(json_obj, &image, int, hdrEnable);
 
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -264,6 +265,7 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, bVertical);
         s2j_struct_get_basic_element(image, json, int, frameSize);
         s2j_struct_get_basic_element(image, json, int, quality);
+        s2j_struct_get_basic_element(image, json, int, hdrEnable);
 
         if (camera_set_image(image) == ESP_OK) {
             http_send_json_response(req, RES_OK);

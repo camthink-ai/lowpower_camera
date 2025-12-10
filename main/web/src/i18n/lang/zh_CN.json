@@ -19,6 +19,7 @@
     "flipHorizon": "水平翻转",
     "flipVertical": "垂直翻转",
     "lightBrightness": "光照亮度",
+    "hdr": "宽动态",
     "resolution": "分辨率",
     "quality": "图片质量",
     "qualityTip": "JPEG图片质量参数，范围0-63。值越小图片质量越好但文件越大；值越大图片质量越差但文件越小。建议值：10-20（高质量），30-40（中等质量），50-63（低质量）。"

@@ -19,6 +19,7 @@
     "flipHorizon": "Flip Horizontal",
     "flipVertical": "Flip Vertical",
     "lightBrightness": "Light Brightness",
+    "hdr": "HDR",
     "resolution": "Resolution",
     "quality": "Image Quality",
     "qualityTip": "JPEG image quality parameter, range 0-63. Lower values mean better quality but larger file size; higher values mean lower quality but smaller file size. Recommended values: 10-20 (high quality), 30-40 (medium quality), 50-63 (low quality)."

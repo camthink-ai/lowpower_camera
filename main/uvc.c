@@ -115,7 +115,7 @@ camera_fb_t *uvc_capture_fb_get()
  * @brief Return frame buffer after processing
  * @param fb Pointer to frame buffer structure
  */
-void uvc_camera_fb_return(camera_fb_t *fb)
+void uvc_stream_fb_return(camera_fb_t *fb)
 {
     xEventGroupSetBits(s_evt_handle, BIT2_NEW_FRAME_END);
     return;
@@ -301,17 +301,7 @@ esp_err_t uvc_init(void)
         free(xfer_buffer_b);
         free(frame_buffer);
         return ESP_FAIL;
-}
-    
-    // Initialize UVC controls
-    // ESP_LOGI(TAG, "Initializing UVC controls...");
-    // vTaskDelay(pdMS_TO_TICKS(2000));  // Wait for camera to stabilize
-    
-    // extern esp_err_t camera_uvc_detect_capabilities(void);
-    // extern esp_err_t camera_uvc_apply_indoor_settings(void);
-    
-    // camera_uvc_detect_capabilities();
-    // camera_uvc_apply_indoor_settings();
+    }
     
     return ESP_OK;
 }

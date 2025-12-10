@@ -17,7 +17,7 @@
 #include <string.h>
 #include <esp_timer.h>
 #include "img_converters.h"
-
+#include "camera_uvc_controls.h"
 // Support both IDF 5.x
 #ifndef portTICK_RATE_MS
     #define portTICK_RATE_MS portTICK_PERIOD_MS
@@ -101,7 +101,7 @@ static void camera_unlock(void)
  * @brief Get frame buffer for streaming
  * @return Pointer to frame buffer structure
  */
-static camera_fb_t *csi_fb_get(void)
+static camera_fb_t *csi_camera_fb_get(void)
 {
     return esp_camera_fb_get();
 }
@@ -110,7 +110,7 @@ static camera_fb_t *csi_fb_get(void)
  * @brief Return frame buffer after processing
  * @param fb Pointer to frame buffer structure
  */
-static void csi_fb_return(camera_fb_t *fb)
+static void csi_camera_fb_return(camera_fb_t *fb)
 {
     esp_camera_fb_return(fb);
 }
@@ -201,17 +201,44 @@ extern modeSel_e main_mode;
  * Initialize camera hardware with configured settings
  * @return ESP_OK on success, error code otherwise
  */
-static camera_fb_t *uvc_fb_get(void)
+static camera_fb_t *uvc_camera_fb_get(void)
 {
 	return uvc_stream_fb_get();
 }
 
-static void uvc_fb_return(camera_fb_t *fb)
+static void uvc_camera_fb_return(camera_fb_t *fb)
 {
-	uvc_camera_fb_return(fb);
+	uvc_stream_fb_return(fb);
 }
 
-static esp_err_t csi_init(void)
+static esp_err_t uvc_camera_init(void)
+{
+    esp_err_t err = ESP_OK;
+    imgAttr_t image;
+
+	err = uvc_init();
+	if (err != ESP_OK) {
+		ESP_LOGE(TAG, "UVC Init Failed");
+		return err;
+	}
+
+    cfg_get_image_attr(&image);
+    if (image.hdrEnable) {
+        err = camera_uvc_set_hdr(image.hdrEnable ? true : false);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "UVC Set HDR Failed");
+            return err;
+        }
+    }
+    return ESP_OK;
+}
+
+static void uvc_camera_deinit(void)
+{
+	uvc_deinit();
+}
+
+static esp_err_t csi_camera_init(void)
 {
     esp_err_t err;
     imgAttr_t image;
@@ -244,12 +271,12 @@ static esp_err_t csi_init(void)
     return ESP_OK;
 }
 
-static void csi_deinit(void)
+static void csi_camera_deinit(void)
 {
     // esp_camera_deinit() intentionally omitted if not provided in SDK
 }
 
-static esp_err_t csi_set_image(imgAttr_t *image)
+static esp_err_t csi_camera_set_image(imgAttr_t *image)
 {
     imgAttr_t current;
     sensor_t *s = esp_camera_sensor_get();
@@ -297,28 +324,34 @@ static esp_err_t csi_set_image(imgAttr_t *image)
     return ESP_OK;
 }
 
-static esp_err_t uvc_set_image(imgAttr_t *image)
+static esp_err_t uvc_camera_set_image(imgAttr_t *image)
 {
-    (void)image;
-    return ESP_OK;
+    imgAttr_t current;
+    cfg_get_image_attr(&current);
+    esp_err_t ret = ESP_OK;
+    if (current.hdrEnable != image->hdrEnable) {
+        ret = camera_uvc_set_hdr(image->hdrEnable ? true : false);
+        ESP_LOGI(TAG, "set_hdr : %d", image->hdrEnable);
+    }
+    return ret;
 }
 
 static const camera_vtable_t VTABLE_CSI = {
 	.name = "CSI",
-	.fb_get = csi_fb_get,
-	.fb_return = csi_fb_return,
-	.init = csi_init,
-	.deinit = csi_deinit,
-	.set_image = csi_set_image,
+	.fb_get = csi_camera_fb_get,
+	.fb_return = csi_camera_fb_return,
+	.init = csi_camera_init,
+	.deinit = csi_camera_deinit,
+	.set_image = csi_camera_set_image,
 };
 
 static const camera_vtable_t VTABLE_UVC = {
 	.name = "USB",
-	.fb_get = uvc_fb_get,
-	.fb_return = uvc_fb_return,
-	.init = uvc_init,
-	.deinit = uvc_deinit,
-	.set_image = uvc_set_image,
+	.fb_get = uvc_camera_fb_get,
+	.fb_return = uvc_camera_fb_return,
+	.init = uvc_camera_init,
+	.deinit = uvc_camera_deinit,
+	.set_image = uvc_camera_set_image,
 };
 
 static esp_err_t init_camera(mdCamera_t *handle)
