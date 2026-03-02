@@ -84,7 +84,7 @@ command_result SIM800::set_data_mode()
 
 command_result EC800E::set_data_mode()
 {
-    return dce_commands::set_data_mode_ec800e(dte.get());
+    return dce_commands::set_data_mode_ec800e(dte.get(), pdp ? (int)pdp->context_id : 1);
 }
 
 } // namespace esp_modem

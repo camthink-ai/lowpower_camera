@@ -157,6 +157,9 @@
     "imsi": "IMSI",
     "iccid": "ICCID",
     "isp": "ISP",
+    "ispSelect": "ISP Selection",
+    "ispAuto": "Auto",
+    "ispVerizon": "Verizon",
     "networkType": "Network Type",
     "plmnId": "PLMN ID",
     "lac": "LAC",
@@ -187,5 +190,14 @@
     "Registered (Roaming)": "Registered (Roaming)",
     "Registering": "Registering",
     "saveTip": "Please wait for the module to restart..."
+  },
+  "debug": {
+    "title": "Debug",
+    "pingTest": "Ping Test",
+    "pingHostPlaceholder": "Host or IP",
+    "ping": "Ping",
+    "pinging": "Pinging...",
+    "pingError": "Ping failed",
+    "back": "Back"
   }
 }

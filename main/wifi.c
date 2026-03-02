@@ -204,7 +204,6 @@ static void timer_cb(void *arg)
         wifi->apTimeoutSeconds = 0;
     }
     if (wifi->apTimeoutSeconds >= AP_TIMEOUT_SECONDS) {
-        ESP_LOGI(TAG, "AP nobody to connect over %ds, will go to sleep", AP_TIMEOUT_SECONDS);
         sleep_set_event_bits(SLEEP_NO_OPERATION_TIMEOUT_BIT);
     }
 }

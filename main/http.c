@@ -20,6 +20,7 @@
 #include "s2j.h"
 #include "iot_mip.h"
 #include "cat1.h"
+#include "ping.h"
 #include "net_module.h"
 #include "storage.h"
 #include "utils.h"
@@ -974,6 +975,7 @@ esp_err_t get_cellular_param_handle(httpd_req_t *req)
 
     s2j_create_json_obj(json_obj);
     s2j_json_set_basic_element(json_obj, &param, string, imei);
+    s2j_json_set_basic_element(json_obj, &param, string, isp_select);
     s2j_json_set_basic_element(json_obj, &param, string, apn);
     s2j_json_set_basic_element(json_obj, &param, string, user);
     s2j_json_set_basic_element(json_obj, &param, string, password);
@@ -1000,6 +1002,7 @@ esp_err_t set_cellular_param_handle(httpd_req_t *req)
         s2j_create_struct_obj(param, cellularParamAttr_t);
         cfg_get_cellular_param_attr(param);
         s2j_struct_get_basic_element(param, json, string, imei);
+        s2j_struct_get_basic_element(param, json, string, isp_select);
         s2j_struct_get_basic_element(param, json, string, apn);
         s2j_struct_get_basic_element(param, json, string, user);
         s2j_struct_get_basic_element(param, json, string, password);
@@ -1051,6 +1054,58 @@ esp_err_t send_cellular_command_handle(httpd_req_t *req)
         return ESP_OK;
     } else {
         return ESP_FAIL;
+    }
+}
+
+#define PING_OUT_BUF_SIZE 1024
+
+esp_err_t ping_test_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    /* Accept empty body - use defaults */
+    if (!content && req->content_len > 0) {
+        return ESP_FAIL;
+    }
+    {
+        cJSON *json = content ? cJSON_Parse(content) : NULL;
+        const char *host = "8.8.8.8";
+        int count = 4;
+        if (json) {
+            cJSON *j_host = cJSON_GetObjectItem(json, "host");
+            if (cJSON_IsString(j_host) && j_host->valuestring && j_host->valuestring[0]) {
+                host = j_host->valuestring;
+            }
+            cJSON *j_count = cJSON_GetObjectItem(json, "count");
+            if (cJSON_IsNumber(j_count) && j_count->valueint >= 1 && j_count->valueint <= 100) {
+                count = j_count->valueint;
+            }
+        }
+
+        char out_buf[PING_OUT_BUF_SIZE];
+        memset(out_buf, 0, sizeof(out_buf));
+        esp_err_t err = ping_execute(host, count, out_buf, sizeof(out_buf));
+
+        cellularCommandResp_t resp;
+        memset(&resp, 0, sizeof(resp));
+        resp.result = (err == ESP_OK) ? 0 : -1;
+        strncpy(resp.message, out_buf, sizeof(resp.message) - 1);
+        resp.message[sizeof(resp.message) - 1] = '\0';
+
+        s2j_create_json_obj(json_obj);
+        s2j_json_set_basic_element(json_obj, &resp, int, result);
+        s2j_json_set_basic_element(json_obj, &resp, string, message);
+        char *str = cJSON_PrintUnformatted(json_obj);
+
+        if (json) cJSON_Delete(json);
+        if (content) http_free_content(content);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, str);
+        cJSON_free(str);
+        s2j_delete_json_obj(json_obj);
+        return ESP_OK;
     }
 }
 
@@ -1700,6 +1755,11 @@ static const httpd_uri_t g_webHandlers[] = {
         .handler = get_cellular_status_handle,
     },
     {
+        .uri = "/api/v1/network/pingTest",
+        .method = HTTP_POST,
+        .handler = ping_test_handle,
+    },
+    {
         .uri = "/api/v1/system/getDevInfo",
         .method = HTTP_GET,
         .handler = get_dev_info_handle,
@@ -1880,6 +1940,7 @@ esp_err_t http_open(void)
     web_server_start(80);
     stream_server_start(8080);
     http_timer_start();
+    sleep_set_event_bits(SLEEP_NO_DEBUG_BIT);
     return ESP_OK;
 }
 

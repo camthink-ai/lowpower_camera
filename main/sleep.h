@@ -25,6 +25,7 @@ typedef enum sleepBits {
     SLEEP_NO_OPERATION_TIMEOUT_BIT = BIT(2),   // No operation timeout
     SLEEP_SCHEDULE_DONE_BIT = BIT(3),          // Scheduled tasks complete
     SLEEP_MIP_DONE_BIT = BIT(4),               // MIP operations complete
+    SLEEP_NO_DEBUG_BIT = BIT(5),               // No debug mode
 } sleepBits_e;
 
 /**

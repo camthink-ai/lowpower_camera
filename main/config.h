@@ -113,6 +113,7 @@ extern "C" {
 #define KEY_CAT1_PASSWORD   "cat1:password"
 #define KEY_CAT1_PIN        "cat1:pin"
 #define KEY_CAT1_AUTH_TYPE  "cat1:authType"
+#define KEY_CAT1_ISP_SELECT "cat1:ispSelect"
 #define KEY_CAT1_BAUD_RATE  "cat1:baudRate"
 #define KEY_TRIGGER_MODE    "trigger:mode"
 #define KEY_PIR_SENS        "pir:sens"
@@ -337,6 +338,7 @@ typedef struct cellularParamAttr {
     // non-configurable parameters
     char imei[MAX_LEN_32];
     // configurable parameters
+    char isp_select[MAX_LEN_16];  /* "auto" or "verizon" - ISP selection for PDP context */
     char apn[MAX_LEN_32];
     char user[MAX_LEN_64];
     char password[MAX_LEN_64];

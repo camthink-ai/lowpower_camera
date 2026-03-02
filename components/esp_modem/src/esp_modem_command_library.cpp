@@ -21,13 +21,13 @@ static command_result generic_command(CommandableIf *t, const std::string &comma
                                       const std::list<std::string_view> &fail_phrase,
                                       uint32_t timeout_ms)
 {
-    ESP_LOGI(TAG, "%s command %s\n", __func__, command.c_str());
+    // ESP_LOGI(TAG, "%s command %s\n", __func__, command.c_str());
     return t->command(command, [&](uint8_t *data, size_t len) {
         std::string_view response((char *)data, len);
         if (data == nullptr || len == 0 || response.empty()) {
             return command_result::TIMEOUT;
         }
-        ESP_LOGI(TAG, "Response: %.*s\n", (int)response.length(), response.data());
+        // ESP_LOGI(TAG, "Response: %.*s\n", (int)response.length(), response.data());
         for (auto &it : pass_phrase)
             if (response.find(it) != std::string::npos) {
                 return command_result::OK;
@@ -299,10 +299,17 @@ command_result set_data_mode_sim8xx(CommandableIf *t)
 
 command_result set_data_mode_ec800e(CommandableIf *t)
 {
+    return set_data_mode_ec800e(t, 1);
+}
+
+command_result set_data_mode_ec800e(CommandableIf *t, int context_id)
+{
     ESP_LOGV(TAG, "%s", __func__ );
     const auto pass = std::list<std::string_view>({"CONNECT"});
     const auto fail = std::list<std::string_view>({"NO CARRIER", "ERROR"});
-    return generic_command(t, "ATD*99#\r", pass, fail, 5000);
+    /* For Verizon: use ATD*99***3# to dial context 3; default ATD*99***1# for context 1 */
+    std::string cmd = "ATD*99***" + std::to_string(context_id) + "#\r";
+    return generic_command(t, cmd, pass, fail, 5000);
 }
 
 command_result resume_data_mode(CommandableIf *t)

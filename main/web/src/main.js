@@ -11,6 +11,7 @@ import Mqtt from './view/mqtt';
 import Device from './view/device';
 import Wlan from './view/wlan';
 import Cellular from './view/cellular';
+import Debug from './view/debug';
 
 const App = {
     name: 'App',
@@ -148,6 +149,7 @@ const App = {
     ...Device(),
     ...Wlan(),
     ...Cellular(),
+    ...Debug(),
 };
 
 createApp({

@@ -339,6 +339,7 @@ remap_t g_remap[] = {
     {"cat1_apn", KEY_CAT1_APN, apply_str_value, fetch_str_value, ""},
     {"cat1_pin", KEY_CAT1_PIN, apply_str_value, fetch_str_value, ""},
     {"cat1_auth_type", KEY_CAT1_AUTH_TYPE, apply_u8_value, fetch_u8_value, "0"},
+    {"cat1_isp_select", KEY_CAT1_ISP_SELECT, apply_str_value, fetch_str_value, "auto"},
 };
 
 // --------------------iot mip--------------------

@@ -410,7 +410,7 @@ static void handle_config_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
     http_open();
     
     sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | 
-                          SLEEP_NO_OPERATION_TIMEOUT_BIT | SLEEP_MIP_DONE_BIT, true);
+                          SLEEP_NO_OPERATION_TIMEOUT_BIT | SLEEP_MIP_DONE_BIT | SLEEP_NO_DEBUG_BIT, true);
 }
 
 /**
@@ -505,7 +505,7 @@ void app_main(void)
     }
 
     // Handle different operational modes
-    // main_mode = MODE_SNAPSHOT; //TODO: for test
+    // main_mode = MODE_CONFIG; //TODO: for test
     switch (main_mode) {
         case MODE_SNAPSHOT:
             handle_snapshot_mode(snapType, xQueueMqtt, xQueueStorage);

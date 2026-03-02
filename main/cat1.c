@@ -13,8 +13,12 @@
 #include "esp_netif_ppp.h"
 #include "esp_modem_api.h"
 #include "iot_mip.h"
+#include "debug.h"
 
 #define TAG "-->CAT1"  // Logging tag for CAT1 module
+
+// Actual modem: Quectel EG915Q (LTE Cat.1 bis). Uses EC800E DCE profile for compatibility
+// (same Quectel AT set: ATD*99***X#, AT+QICSGP, AT+CGDCONT, AT+QNETDEVCTL, etc.)
 
 // CAT1 module configuration
 #define CAT1_BAUD_RATE (921600)  // Default baud rate for CAT1 module
@@ -51,6 +55,36 @@ typedef struct mdCat1 {
 } mdCat1_t;
 
 static mdCat1_t g_cat1 = {0};  // Global CAT1 module state
+
+/**
+ * Check if current operator is Verizon (reference: verizon.c)
+ * Verizon US: IMSI prefix 311480 (MCC 311, MNC 480) or operator name contains "Verizon"
+ */
+static bool is_verizon_network(void)
+{
+    char atResp[256];
+    esp_err_t err;
+
+    /* Check by IMSI: Verizon US uses MCC 311, MNC 480 (IMSI prefix 311480) */
+    memset(atResp, 0, sizeof(atResp));
+    err = esp_modem_get_imsi(g_cat1.dce, atResp);
+    if (err == ESP_OK && strlen(atResp) >= 6) {
+        if (strncmp(atResp, "311480", 6) == 0) {
+            ESP_LOGI(TAG, "Verizon detected by IMSI prefix 311480");
+            return true;
+        }
+    }
+    /* Check by operator name from AT+COPS? */
+    memset(atResp, 0, sizeof(atResp));
+    err = esp_modem_at(g_cat1.dce, "AT+COPS?", atResp, 1000);
+    if (err == ESP_OK && strstr(atResp, "Verizon") != NULL) {
+        ESP_LOGI(TAG, "Verizon detected by operator name");
+        return true;
+    }
+
+
+    return false;
+}
 
 /**
  * PPP state change handler
@@ -242,7 +276,7 @@ static esp_err_t cat1_set_baud_rate(uint32_t baud_rate)
     char atCmd[64];
     char atResp[256];
 
-    // EC800E default baud rate is 115200, needs to be changed to 921600
+    // Quectel (EC800E/EG915Q) default baud rate is 115200, needs to be changed to 921600
     int *baud_rate_array = NULL;
     int baud_rate_len = 0;
     int baud_rate_index = 0;
@@ -685,6 +719,7 @@ static esp_err_t check_baud_rate()
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(g_cat1.param.apn);
     esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
     g_cat1.esp_netif = esp_netif_new(&netif_ppp_config);
+    /* EC800E profile: compatible with EG915Q (same Quectel dial ATD*99***X#, PDP, Q* cmds) */
     g_cat1.dce = esp_modem_new_dev(ESP_MODEM_DCE_EC800E, &dte_config, &dce_config, g_cat1.esp_netif);
 
     return ESP_OK;
@@ -769,6 +804,14 @@ static esp_err_t check_pin_status()
 
 /**
  * Establish network connection
+ *
+ * Quectel (EC800E/EG915Q) Verizon compatibility (ref: verizon.c, Quectel LTE TCP/IP App Note):
+ * 1. PDP context 3: Verizon requires context 3 for data (OTA-DM uses ctx1 for attach, ctx3 for bearer)
+ * 2. AT+CGDCONT: define PDP context (APN). Empty APN ok for Verizon auto-provision.
+ * 3. AT+QICSGP: configure TCP/IP context (context_id, protocol, APN, user, pass, auth)
+ * 4. AT+QNETDEVCTL=1,3,1: activate context 3 before dial (in udhcpcd_dialer)
+ * 5. ATD*99***3#: dial using context 3 (via esp_modem pdp context_id)
+ *
  * @return ESP_OK on success
  */
 esp_err_t connect_to_network()
@@ -776,11 +819,56 @@ esp_err_t connect_to_network()
     char atCmd[256];
     char atResp[256];
     esp_err_t err = ESP_OK;
+    int context_id = 1;  /* Default context 1; use 3 for Verizon */
 
-    // Set apn related information
-    if (g_cat1.param.apn[0] != '\0') {
+    /* Verizon compatibility: use PDP context 3 when isp_select=verizon or (isp_select=auto/empty and network detected as Verizon) */
+    bool force_verizon = (strcmp(g_cat1.param.isp_select, "verizon") == 0);
+    bool auto_verizon = is_verizon_network();
+    bool is_auto = (g_cat1.param.isp_select[0] == '\0' || strcmp(g_cat1.param.isp_select, "auto") == 0);
+    if (force_verizon || (is_auto && auto_verizon)) {
+        context_id = 3;
+        ESP_LOGI(TAG, "Using PDP context 3 (isp_select=%s, force=%d, auto_detect=%d)",
+                 g_cat1.param.isp_select, (int)force_verizon, (int)auto_verizon);
+
+        /* Verizon: clear context 1 before configuring context 3 (ref: AT+QICSGP=1,3,"","","",0) */
         memset(atResp, 0, sizeof(atResp));
-        snprintf(atCmd, sizeof(atCmd), "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",%d", g_cat1.param.apn, g_cat1.param.user, g_cat1.param.password, g_cat1.param.authentication);
+        err = esp_modem_at(g_cat1.dce, "AT+QICSGP=1,3,\"\",\"\",\"\",0", atResp, 500);
+        ESP_LOGI(TAG, "AT+QICSGP=1,3,\"\",\"\",\"\",0=>%s", atResp);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "AT+QICSGP clear ctx1 failed %d(%s)", err, atResp);
+        }
+    }
+
+    /* Configure PDP context (required for Verizon context 3 even when APN is empty - ref: verizon.c)
+     * 1. esp_modem_set_pdp_context: AT+CGDCONT + sets dial context (ATD*99***X#)
+     * 2. AT+QICSGP: configure TCP/IP context
+     */
+    {
+        const char *apn = (g_cat1.param.apn[0] != '\0') ? g_cat1.param.apn : "";
+
+        /* esp_modem_set_pdp_context sends CGDCONT when apn non-empty; always updates dial context */
+        esp_modem_PdpContext_t pdp_ctx = {
+            .context_id = context_id,
+            .protocol_type = "IP",
+            .apn = apn,
+        };
+        err = esp_modem_set_pdp_context(g_cat1.dce, &pdp_ctx);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_modem_set_pdp_context failed %d", err);
+            snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
+        }
+
+        /* When APN empty, esp_modem skips CGDCONT - for Verizon context 3 we must define it (ref: verizon.c QICSGP=3,3,"","","",0) */
+        if (apn[0] == '\0' && context_id == 3) {
+            memset(atResp, 0, sizeof(atResp));
+            err = esp_modem_at(g_cat1.dce, "AT+CGDCONT=3,\"IP\",\"\"", atResp, 500);
+            ESP_LOGI(TAG, "AT+CGDCONT=3,\"IPV4\",\"\"=>%s", atResp);
+        }
+
+        /* AT+QICSGP: context_id, protocol_type(1=IPv4), APN, user, pass, auth - ref: verizon.c */
+        memset(atResp, 0, sizeof(atResp));
+        snprintf(atCmd, sizeof(atCmd), "AT+QICSGP=%d,1,\"%s\",\"%s\",\"%s\",%d",
+                 context_id, apn, g_cat1.param.user, g_cat1.param.password, g_cat1.param.authentication);
         err = esp_modem_at(g_cat1.dce, atCmd, atResp, 500);
         ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
         if (err != ESP_OK) {
@@ -806,6 +894,14 @@ esp_err_t connect_to_network()
     ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
+    }
+
+    /* Verizon: activate PDP context before dial (ref: verizon.c udhcpcd_dialer - AT+QNETDEVCTL=1,3,1) */
+    if (context_id == 3) {
+        memset(atResp, 0, sizeof(atResp));
+        err = esp_modem_at(g_cat1.dce, "AT+QNETDEVCTL=1,3,1", atResp, 2000);
+        ESP_LOGI(TAG, "AT+QNETDEVCTL=1,3,1=>%s", atResp);
+        vTaskDelay(pdMS_TO_TICKS(1000));  /* seconds_sleep(1) in verizon.c */
     }
 
     // CMUX mode dial
@@ -880,6 +976,7 @@ void cat1_init(int mode)
 
     g_cat1.mode = mode;
     g_cat1.event_group = xEventGroupCreate();
+    cat1_cmd_add();
 }
 
 /**
@@ -978,9 +1075,9 @@ esp_err_t cat1_send_at(const char *at, cellularCommandResp_t *resp)
     }
 
     esp_err_t err = ESP_OK;
-    ESP_LOGI(TAG, "AT command: %s", at);
+    // ESP_LOGI(TAG, "AT command: %s", at);
     resp->result = esp_modem_at(g_cat1.dce, at, resp->message, 500);
-    ESP_LOGI(TAG, "AT response: %s, %d", resp->message, resp->result);
+    // ESP_LOGI(TAG, "AT response: %s, %d", resp->message, resp->result);
     switch (resp->result) {
     case ESP_FAIL:
         snprintf(resp->message, sizeof(resp->message), "%s", "ERROR");
@@ -1070,4 +1167,35 @@ static void task_show_status(void *pvParameters)
 void cat1_show_status(void)
 {
     xTaskCreatePinnedToCore((TaskFunction_t)task_show_status, TAG, 8 * 1024, NULL, 4, NULL, 1);
+}
+
+static int cat1_atsend_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("invalid argvment, eg: atsend AT+CSQ\n");
+        return ESP_FAIL;
+    }
+    cellularCommandResp_t resp;
+    memset(&resp, 0, sizeof(cellularCommandResp_t));
+    if (cat1_send_at(argv[1], &resp) != ESP_OK) {
+        printf("AT command failed: %s\n", resp.message);
+        return ESP_FAIL;
+    }
+    printf("AT response: %d, %s\n", resp.result, resp.message);
+    return ESP_OK;
+}
+
+static int cat1_restart_cmd(int argc, char **argv)
+{
+    cat1_restart();
+    return ESP_OK;
+}
+static esp_console_cmd_t g_cmd[] = {
+    {"atsend", "atsend [at_command]", NULL, cat1_atsend_cmd, NULL},
+    {"cat1restart", "cat1restart", NULL, cat1_restart_cmd, NULL},
+};
+
+void cat1_cmd_add(void)
+{
+    debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
 }

@@ -8,8 +8,12 @@
 */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
+#include <inttypes.h>
 #include "sdkconfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
@@ -20,8 +24,11 @@
 #include "ping/ping_sock.h"
 #include "esp_check.h"
 #include "system.h"
+#include "ping.h"
 
 const static char *TAG = "PING";
+
+#define PING_API_BUF_MAX 1024
 
 /**
  * Callback when ping receives a response
@@ -95,6 +102,143 @@ static struct {
     struct arg_str *host;
     struct arg_end *end;
 } ping_args;
+
+/* Ping API context for blocking execution */
+static struct {
+    char *buf;
+    size_t buf_len;
+    size_t buf_used;
+    SemaphoreHandle_t done;
+} s_ping_api;
+
+static void ping_api_append(const char *fmt, ...)
+{
+    if (!s_ping_api.buf || s_ping_api.buf_used >= s_ping_api.buf_len) return;
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(s_ping_api.buf + s_ping_api.buf_used,
+                      s_ping_api.buf_len - s_ping_api.buf_used, fmt, args);
+    va_end(args);
+    if (n > 0) s_ping_api.buf_used += (size_t)n;
+}
+
+static void ping_api_on_success(esp_ping_handle_t hdl, void *args)
+{
+    uint8_t ttl;
+    uint16_t seqno;
+    uint32_t elapsed_time, recv_len;
+    ip_addr_t target_addr;
+    esp_ping_get_profile(hdl, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_TTL, &ttl, sizeof(ttl));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_SIZE, &recv_len, sizeof(recv_len));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_TIMEGAP, &elapsed_time, sizeof(elapsed_time));
+    ping_api_append("%" PRIu32 " bytes from %s icmp_seq=%" PRIu16 " ttl=%" PRIu16 " time=%" PRIu32 " ms\n",
+                    recv_len, ipaddr_ntoa((ip_addr_t *)&target_addr), seqno, ttl, elapsed_time);
+}
+
+static void ping_api_on_timeout(esp_ping_handle_t hdl, void *args)
+{
+    uint16_t seqno;
+    ip_addr_t target_addr;
+    esp_ping_get_profile(hdl, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    ping_api_append("From %s icmp_seq=%d timeout\n", ipaddr_ntoa((ip_addr_t *)&target_addr), seqno);
+}
+
+static void ping_api_on_end(esp_ping_handle_t hdl, void *args)
+{
+    ip_addr_t target_addr;
+    uint32_t transmitted, received, total_time_ms;
+    esp_ping_get_profile(hdl, ESP_PING_PROF_REQUEST, &transmitted, sizeof(transmitted));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_REPLY, &received, sizeof(received));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_DURATION, &total_time_ms, sizeof(total_time_ms));
+    uint32_t loss = (uint32_t)((1 - ((float)received) / transmitted) * 100);
+    if (IP_IS_V4(&target_addr)) {
+        ping_api_append("\n--- %s ping statistics ---\n", inet_ntoa(*ip_2_ip4(&target_addr)));
+    } else {
+        ping_api_append("\n--- %s ping statistics ---\n", inet6_ntoa(*ip_2_ip6(&target_addr)));
+    }
+    ping_api_append("%" PRIu32 " packets transmitted, %" PRIu32 " received, %" PRIu32 "%% packet loss, time %" PRIu32 "ms\n",
+                    transmitted, received, loss, total_time_ms);
+    esp_ping_delete_session(hdl);
+    if (s_ping_api.done) xSemaphoreGive(s_ping_api.done);
+}
+
+esp_err_t ping_execute(const char *host, int count, char *out_buf, size_t out_len)
+{
+    if (!host || !out_buf || out_len < 64) return ESP_ERR_INVALID_ARG;
+    if (count < 1) count = 1;
+    if (count > 100) count = 100;
+
+    struct sockaddr_in6 sock_addr6;
+    ip_addr_t target_addr;
+    memset(&target_addr, 0, sizeof(target_addr));
+
+    if (inet_pton(AF_INET6, host, &sock_addr6.sin6_addr) == 1) {
+        ipaddr_aton(host, &target_addr);
+    } else {
+        struct addrinfo hint, *res = NULL;
+        memset(&hint, 0, sizeof(hint));
+        if (getaddrinfo(host, NULL, &hint, &res) != 0) {
+            snprintf(out_buf, out_len, "ping: unknown host %s", host);
+            return ESP_ERR_NOT_FOUND;
+        }
+        if (res->ai_family == AF_INET) {
+            struct in_addr addr4 = ((struct sockaddr_in *)(res->ai_addr))->sin_addr;
+            inet_addr_to_ip4addr(ip_2_ip4(&target_addr), &addr4);
+        } else {
+            struct in6_addr addr6 = ((struct sockaddr_in6 *)(res->ai_addr))->sin6_addr;
+            inet6_addr_to_ip6addr(ip_2_ip6(&target_addr), &addr6);
+        }
+        freeaddrinfo(res);
+    }
+
+    s_ping_api.buf = out_buf;
+    s_ping_api.buf_len = out_len;
+    s_ping_api.buf_used = 0;
+    s_ping_api.done = xSemaphoreCreateBinary();
+    if (!s_ping_api.done) return ESP_ERR_NO_MEM;
+
+    esp_ping_config_t config = ESP_PING_DEFAULT_CONFIG();
+    config.target_addr = target_addr;
+    config.count = (uint32_t)count;
+    config.timeout_ms = 2000;
+    config.interval_ms = 500;
+
+    esp_ping_callbacks_t cbs = {
+        .cb_args = NULL,
+        .on_ping_success = ping_api_on_success,
+        .on_ping_timeout = ping_api_on_timeout,
+        .on_ping_end = ping_api_on_end
+    };
+
+    esp_ping_handle_t ping;
+    esp_err_t err = esp_ping_new_session(&config, &cbs, &ping);
+    if (err != ESP_OK) {
+        vSemaphoreDelete(s_ping_api.done);
+        snprintf(out_buf, out_len, "ping: create session failed");
+        return err;
+    }
+
+    err = esp_ping_start(ping);
+    if (err != ESP_OK) {
+        esp_ping_delete_session(ping);
+        vSemaphoreDelete(s_ping_api.done);
+        snprintf(out_buf, out_len, "ping: start failed");
+        return err;
+    }
+
+    if (xSemaphoreTake(s_ping_api.done, pdMS_TO_TICKS(count * 3000 + 5000)) != pdTRUE) {
+        esp_ping_stop(ping);
+        esp_ping_delete_session(ping);
+        snprintf(out_buf, out_len, "ping: timeout waiting for result");
+    }
+    vSemaphoreDelete(s_ping_api.done);
+    s_ping_api.buf = NULL;
+    return ESP_OK;
+}
 
 /**
  * Execute ping command

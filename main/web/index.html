@@ -1199,6 +1199,20 @@
                                 <span> {{ cellState.imei }} </span>
                             </span>
                         </div>
+                        <!-- ISP selection: auto or Verizon -->
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cell.ispSelect") }}</span
+                            >
+                            <span class="card-item-content">
+                                <div
+                                    class="normal-select"
+                                    v-scope="MsSelect({value: cellParam.isp_select, options: ispSelectOptions.map(o=>({...o, label: $t(o.label)}))})"
+                                    v-if="cellMounted"
+                                    @change-select="changeIspSelect"
+                                ></div>
+                            </span>
+                        </div>
                         <!-- APN cellular access point -->
                         <div class="card-item">
                             <span class="card-item-label"
@@ -1302,6 +1316,39 @@
                         </div>
                     </div>
                     <!-- E Cellular -->
+
+                    <!-- S Debug (independent, applies to wifi/cellular) -->
+                    <div class="card debug-card">
+                        <div class="card-title">
+                            <span class="card-title-text">{{ $t("debug.title") }}</span>
+                        </div>
+                        <div class="card-item flex-start">
+                            <span class="card-item-label">{{ $t("debug.pingTest") }}</span>
+                            <span class="card-item-content">
+                                <input
+                                    type="text"
+                                    v-model="pingHost"
+                                    :placeholder="$t('debug.pingHostPlaceholder')"
+                                    class="input-text"
+                                    style="width: 120px; margin-right: 8px;"
+                                />
+                                <button
+                                    class="plain"
+                                    @click="doPing"
+                                    :class="{'disabled-btn': pingLoading}"
+                                >
+                                    {{ pingLoading ? $t("debug.pinging") : $t("debug.ping") }}
+                                </button>
+                            </span>
+                        </div>
+                        <div class="card-item flex-start card-item-ping-result" v-if="pingResult">
+                            <span class="card-item-label"></span>
+                            <span class="card-item-content">
+                                <pre class="ping-result">{{ pingResult }}</pre>
+                            </span>
+                        </div>
+                    </div>
+                    <!-- E Debug -->
 
                     <footer class="footer">
                         <button

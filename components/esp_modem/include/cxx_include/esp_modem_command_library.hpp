@@ -56,6 +56,7 @@ command_result set_network_bands_sim76xx(CommandableIf *t, const std::string &mo
 command_result power_down_sim8xx(CommandableIf *t);
 command_result set_data_mode_sim8xx(CommandableIf *t);
 command_result set_data_mode_ec800e(CommandableIf *t);
+command_result set_data_mode_ec800e(CommandableIf *t, int context_id);
 
 /**
  * @}

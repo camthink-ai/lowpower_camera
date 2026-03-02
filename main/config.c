@@ -646,6 +646,27 @@ static int do_reset_cmd(int argc, char **argv)
     return ESP_OK;
 }
 
+static int do_debug_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("invalid argvment, eg: debug on\n");
+        return ESP_OK;
+    }
+    if (strcmp(argv[1], "off") == 0) {
+        sleep_set_event_bits(SLEEP_NO_DEBUG_BIT);
+    } else if (strcmp(argv[1], "on") == 0) {
+        sleep_clear_event_bits(SLEEP_NO_DEBUG_BIT);
+    }
+    printf("debug %s\n", argv[1]);
+    return ESP_OK;
+}
+
+static int do_snap_cmd(int argc, char **argv)
+{
+    camera_snapshot(SNAP_DEBUG, 1);
+    return ESP_OK;
+}
+
 static esp_console_cmd_t g_cmd[] = {
     {"fset", "factory setting: fset [key] [value]", NULL, do_fset_cmd, NULL},
     {"fget", "factory getting: fget [key]", NULL, do_fget_cmd, NULL},
@@ -658,6 +679,8 @@ static esp_console_cmd_t g_cmd[] = {
     {"date", "show system date", NULL, do_date_cmd, NULL},
     {"rpsurl", "set rps url", NULL, do_rpsurl_cmd, NULL},
     {"sys_reset", "system reset", NULL, do_reset_cmd, NULL},
+    {"debug", "debug on/off", NULL, do_debug_cmd, NULL},
+    {"snap", "snapshot", NULL, do_snap_cmd, NULL},
 };
 
 /*------------------------------------------------------------------------*/
@@ -1095,6 +1118,7 @@ esp_err_t cfg_get_cellular_param_attr(cellularParamAttr_t *cellularParam)
     mutex_lock();
     memset(cellularParam, 0, sizeof(cellularParamAttr_t));
     get_str(g_userHandle, KEY_CAT1_IMEI, cellularParam->imei, sizeof(cellularParam->imei), "");
+    get_str(g_userHandle, KEY_CAT1_ISP_SELECT, cellularParam->isp_select, sizeof(cellularParam->isp_select), "auto");
     get_str(g_userHandle, KEY_CAT1_APN, cellularParam->apn, sizeof(cellularParam->apn), "");
     get_str(g_userHandle, KEY_CAT1_USER, cellularParam->user, sizeof(cellularParam->user), "");
     get_str(g_userHandle, KEY_CAT1_PASSWORD, cellularParam->password, sizeof(cellularParam->password), "");
@@ -1107,6 +1131,7 @@ esp_err_t cfg_get_cellular_param_attr(cellularParamAttr_t *cellularParam)
 esp_err_t cfg_set_cellular_param_attr(cellularParamAttr_t *cellularParam)
 {
     mutex_lock();
+    set_str(g_userHandle, KEY_CAT1_ISP_SELECT, cellularParam->isp_select);
     set_str(g_userHandle, KEY_CAT1_APN, cellularParam->apn);
     set_str(g_userHandle, KEY_CAT1_USER, cellularParam->user);
     set_str(g_userHandle, KEY_CAT1_PASSWORD, cellularParam->password);

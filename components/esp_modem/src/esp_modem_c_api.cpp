@@ -393,13 +393,24 @@ extern "C" esp_err_t esp_modem_reset(esp_modem_dce_t *dce_wrap)
 
 extern "C" esp_err_t esp_modem_set_pdp_context(esp_modem_dce_t *dce_wrap, esp_modem_PdpContext_t *c_api_pdp)
 {
-    if (dce_wrap == nullptr || dce_wrap->dce == nullptr) {
+    if (dce_wrap == nullptr || dce_wrap->dce == nullptr || c_api_pdp == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
-    esp_modem::PdpContext pdp{c_api_pdp->apn};
+    esp_modem::PdpContext pdp{c_api_pdp->apn ? c_api_pdp->apn : ""};
     pdp.context_id = c_api_pdp->context_id;
-    pdp.protocol_type = c_api_pdp->protocol_type;
-    return command_response_to_esp_err(dce_wrap->dce->set_pdp_context(pdp));
+    pdp.protocol_type = c_api_pdp->protocol_type ? c_api_pdp->protocol_type : "IP";
+    esp_err_t err = command_response_to_esp_err(dce_wrap->dce->set_pdp_context(pdp));
+    if (err == ESP_OK) {
+        /* Update module's internal pdp so set_data_mode uses correct context (e.g. ATD*99***3# for Verizon) */
+        auto *generic_module = static_cast<esp_modem::GenericModule *>(dce_wrap->dce->get_module());
+        if (generic_module != nullptr) {
+            auto new_pdp = std::make_unique<esp_modem::PdpContext>(pdp.apn);
+            new_pdp->context_id = pdp.context_id;
+            new_pdp->protocol_type = pdp.protocol_type;
+            generic_module->configure_pdp_context(std::move(new_pdp));
+        }
+    }
+    return err;
 }
 
 extern "C" esp_err_t esp_modem_command(esp_modem_dce_t *dce_wrap, const char *command, esp_err_t(*got_line_fn)(uint8_t *data, size_t len), uint32_t timeout_ms)

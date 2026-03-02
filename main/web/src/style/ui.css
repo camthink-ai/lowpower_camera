@@ -583,3 +583,25 @@ input[type="password"] {
     /* Microsoft Edge */
     color: #AEABAB;
 }
+
+/* Ping test result - cellular card, debug card */
+.cellular-card .card-item-ping-result .card-item-content,
+.debug-card .card-item-ping-result .card-item-content {
+    flex: 1;
+    min-width: 0;
+    align-items: stretch;
+}
+.ping-result {
+    margin: 0;
+    padding: 8px;
+    font-size: 13px;
+    font-family: monospace;
+    white-space: pre;
+    background: #f5f5f5;
+    border-radius: 4px;
+    max-height: 200px;
+    overflow: auto;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}

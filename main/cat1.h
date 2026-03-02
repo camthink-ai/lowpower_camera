@@ -124,4 +124,9 @@ esp_err_t cat1_connect_check(void);
  */
 void cat1_show_status(void);
 
+/**
+ * Add CAT1 commands to console
+ */
+void cat1_cmd_add(void);
+
 #endif // __CAT1_H__

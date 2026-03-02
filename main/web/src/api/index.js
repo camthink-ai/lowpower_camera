@@ -110,6 +110,7 @@ const URL = {
     setCellularParam: baseUrl + "/network/setCellularParam",
     sendCellularCommand: baseUrl + "/network/sendCellularCommand",
     getCellularStatus: baseUrl + "/network/getCellularStatus",
+    pingTest: baseUrl + "/network/pingTest",
     getIoTParam: baseUrl + "/network/getIoTParam",
     setIotParam: baseUrl + "/network/setIoTParam",
 

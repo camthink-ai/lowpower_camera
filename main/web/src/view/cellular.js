@@ -8,12 +8,17 @@ function Cellular() {
         /** whether to show detail page */
         goDetail: false,
         cellParam: {
+            isp_select: 'auto',
             apn: '',
             user: '',
             password: '',
             pin: '',
             authentication: 0,
         },
+        ispSelectOptions: [
+            { value: 'auto', label: 'cell.ispAuto' },
+            { value: 'verizon', label: 'cell.ispVerizon' },
+        ],
         cellAuthenOptions: [
             {
                 value: 0,
@@ -62,9 +67,13 @@ function Cellular() {
         changeCellAuthenType({ detail }) {
             this.cellParam.authentication = detail.value;
         },
+        changeIspSelect({ detail }) {
+            this.cellParam.isp_select = detail.value;
+        },
         async getCellularInfo() {
             const param = await getData(URL.getCellularParam);
-            this.cellParam = { ...param };
+            this.cellParam = { isp_select: 'auto', ...param };
+            if (!this.cellParam.isp_select) this.cellParam.isp_select = 'auto';
             await this.getCellularStatus();
             this.cellMounted = true;
         },

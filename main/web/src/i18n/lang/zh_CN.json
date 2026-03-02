@@ -157,6 +157,9 @@
     "imsi": "IMSI",
     "iccid": "ICCID",
     "isp": "运营商",
+    "ispSelect": "运营商选择",
+    "ispAuto": "自动",
+    "ispVerizon": "Verizon",
     "networkType": "网络类型",
     "plmnId": "PLMN ID",
     "lac": "位置区码",
@@ -187,5 +190,14 @@
     "Registered (Roaming)": "已注册（漫游）",
     "Registering": "注册中",
     "saveTip": "请等待模组重启..."
+  },
+  "debug": {
+    "title": "调试",
+    "pingTest": "Ping 测试",
+    "pingHostPlaceholder": "主机或IP",
+    "ping": "Ping",
+    "pinging": "Ping 中...",
+    "pingError": "Ping 失败",
+    "back": "返回"
   }
 }
