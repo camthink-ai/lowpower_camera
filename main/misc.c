@@ -30,6 +30,7 @@
 #include "misc.h"
 #include "debug.h"
 #include "esp_sleep.h"
+#include "session_log.h"
 #include "pir.h"
 #include "http.h"
 #include "wifi.h"
@@ -133,6 +134,7 @@ static void button_single_click_cb(void *arg, void *priv)
     }else if(system_get_mode() != MODE_CONFIG){
         sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG, 0);
         esp_sleep_enable_timer_wakeup(100000ULL);
+        session_log_close_for_sleep();
         esp_deep_sleep_start();
     }
 }

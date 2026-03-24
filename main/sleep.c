@@ -27,6 +27,7 @@
 #include "mqtt.h"
 #include "pir.h"
 #include "net_module.h"
+#include "session_log.h"
 
 #define TAG "-->SLEEP"  // Logging tag
 
@@ -592,6 +593,7 @@ void sleep_start(void)
         pir_init(1);
     }
     ESP_LOGI(TAG, "Entering deep sleep");
+    session_log_close_for_sleep();
     esp_deep_sleep_start();
 }
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -13,7 +13,6 @@
 #include "cxx_include/esp_modem_netif.hpp"
 #include "cxx_include/esp_modem_dte.hpp"
 #include "esp_netif_ppp.h"
-
 
 namespace esp_modem {
 
@@ -39,6 +38,7 @@ esp_err_t Netif::esp_modem_dte_transmit(void *h, void *buffer, size_t len)
     return ESP_FAIL;
 }
 
+#ifdef CONFIG_ESP_MODEM_USE_PPP_MODE
 esp_err_t Netif::esp_modem_post_attach(esp_netif_t *esp_netif, void *args)
 {
     auto d = (ppp_netif_driver *) args;
@@ -49,9 +49,9 @@ esp_err_t Netif::esp_modem_post_attach(esp_netif_t *esp_netif, void *args)
     ESP_ERROR_CHECK(esp_netif_set_driver_config(esp_netif, &driver_ifconfig));
     // check if PPP error events are enabled, if not, do enable the error occurred/state changed
     // to notify the modem layer when switching modes
-    esp_netif_ppp_config_t ppp_config = { .ppp_phase_event_enabled = true,    // assuming phase enabled, as earlier IDFs
-                                          .ppp_error_event_enabled = false
-                                        }; // don't provide cfg getters so we enable both events
+    esp_netif_ppp_config_t ppp_config = { };
+    ppp_config.ppp_phase_event_enabled = true;    // assuming phase enabled, as earlier IDFs
+    ppp_config.ppp_error_event_enabled = false;   // don't provide cfg getters so we enable both events
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
     esp_netif_ppp_get_params(esp_netif, &ppp_config);
 #endif // ESP-IDF >= v4.4
@@ -62,25 +62,28 @@ esp_err_t Netif::esp_modem_post_attach(esp_netif_t *esp_netif, void *args)
 
     return ESP_OK;
 }
+#endif // CONFIG_ESP_MODEM_USE_PPP_MODE
 
 void Netif::receive(uint8_t *data, size_t len)
 {
-    if (signal.is_any(PPP_STARTED)) {
-        esp_netif_receive(driver.base.netif, data, len, nullptr);
-    }
+    esp_netif_receive(driver.base.netif, data, len, nullptr);
 }
 
 Netif::Netif(std::shared_ptr<DTE> e, esp_netif_t *ppp_netif) :
-    ppp_dte(std::move(e)), netif(ppp_netif)
+    ppp_dte(std::move(e))
 {
     driver.base.netif = ppp_netif;
     driver.ppp = this;
+#ifdef CONFIG_ESP_MODEM_USE_PPP_MODE
     driver.base.post_attach = esp_modem_post_attach;
     ESP_MODEM_THROW_IF_ERROR(esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, (void *) this));
+#endif
     ESP_MODEM_THROW_IF_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_PPP_GOT_IP, esp_netif_action_connected, ppp_netif));
     ESP_MODEM_THROW_IF_ERROR(
         esp_event_handler_register(IP_EVENT, IP_EVENT_PPP_LOST_IP, esp_netif_action_disconnected, ppp_netif));
+#ifdef CONFIG_ESP_MODEM_USE_PPP_MODE
     ESP_MODEM_THROW_IF_ERROR(esp_netif_attach(ppp_netif, &driver));
+#endif
 }
 
 void Netif::start()
@@ -89,13 +92,29 @@ void Netif::start()
         receive(data, len);
         return true;
     });
-    esp_netif_action_start(driver.base.netif, nullptr, 0, nullptr);
-    signal.set(PPP_STARTED);
+    if (!signal.is_any(PPP_STARTED)) {
+        signal.set(PPP_STARTED);
+        esp_netif_action_start(driver.base.netif, nullptr, 0, nullptr);
+    }
 }
 
 void Netif::stop()
 {
     esp_netif_action_stop(driver.base.netif, nullptr, 0, nullptr);
+    signal.clear(PPP_STARTED);
+}
+
+void Netif::resume()
+{
+    ppp_dte->set_read_cb([this](uint8_t *data, size_t len) -> bool {
+        receive(data, len);
+        return true;
+    });
+    signal.set(PPP_STARTED);
+}
+
+void Netif::pause()
+{
     signal.clear(PPP_STARTED);
 }
 
@@ -106,7 +125,9 @@ Netif::~Netif()
         signal.clear(PPP_STARTED);
         signal.wait(PPP_EXIT, 30000);
     }
+#ifdef CONFIG_ESP_MODEM_USE_PPP_MODE
     esp_event_handler_unregister(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed);
+#endif
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_PPP_GOT_IP, esp_netif_action_connected);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_PPP_LOST_IP, esp_netif_action_disconnected);
 }

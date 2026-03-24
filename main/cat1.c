@@ -25,7 +25,7 @@
 
 // Timeout constants
 #define CAT1_POWER_ON_TIMEOUT_MS (30000)  // Max time to power on module
-#define CAT1_PPP_CONNECT_TIMEOUT_MS (60000)  // Max time to establish PPP connection
+#define CAT1_PPP_CONNECT_TIMEOUT_MS (90000)  // Max time to establish PPP connection
 
 // Event group bits
 #define CAT1_POWER_ON_BIT BIT(0)  // Module powered on
@@ -719,8 +719,8 @@ static esp_err_t check_baud_rate()
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(g_cat1.param.apn);
     esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
     g_cat1.esp_netif = esp_netif_new(&netif_ppp_config);
-    /* EC800E profile: compatible with EG915Q (same Quectel dial ATD*99***X#, PDP, Q* cmds) */
-    g_cat1.dce = esp_modem_new_dev(ESP_MODEM_DCE_EC800E, &dte_config, &dce_config, g_cat1.esp_netif);
+    /* Use EG91X profile so that data mode uses ATD*99***<cid># based on PDP context */
+    g_cat1.dce = esp_modem_new_dev(ESP_MODEM_DCE_EG91X, &dte_config, &dce_config, g_cat1.esp_netif);
 
     return ESP_OK;
 }
@@ -819,6 +819,9 @@ esp_err_t connect_to_network()
     char atCmd[256];
     char atResp[256];
     esp_err_t err = ESP_OK;
+    int reg_state = 0;
+    int reg_retry = 0;
+    int max_retry = 10; 
     int context_id = 1;  /* Default context 1; use 3 for Verizon */
 
     /* Verizon compatibility: use PDP context 3 when isp_select=verizon or (isp_select=auto/empty and network detected as Verizon) */
@@ -839,42 +842,33 @@ esp_err_t connect_to_network()
         }
     }
 
-    /* Configure PDP context (required for Verizon context 3 even when APN is empty - ref: verizon.c)
-     * 1. esp_modem_set_pdp_context: AT+CGDCONT + sets dial context (ATD*99***X#)
-     * 2. AT+QICSGP: configure TCP/IP context
+    /* Configure PDP context (required for Verizon context 3 even when APN is empty)
+     * 1. esp_modem_configure_pdp_context: updates internal pdp context (used by setup_data_mode)
+     * 2. esp_modem_set_pdp_context: sends AT+CGDCONT + sets dial context (ATD*99***X#)
+     * 3. AT+QICSGP: configure TCP/IP context
      */
-    {
-        const char *apn = (g_cat1.param.apn[0] != '\0') ? g_cat1.param.apn : "";
+    const char *apn = (g_cat1.param.apn[0] != '\0') ? g_cat1.param.apn : "";
 
-        /* esp_modem_set_pdp_context sends CGDCONT when apn non-empty; always updates dial context */
-        esp_modem_PdpContext_t pdp_ctx = {
-            .context_id = context_id,
-            .protocol_type = "IP",
-            .apn = apn,
-        };
-        err = esp_modem_set_pdp_context(g_cat1.dce, &pdp_ctx);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "esp_modem_set_pdp_context failed %d", err);
-            snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
-        }
-
-        /* When APN empty, esp_modem skips CGDCONT - for Verizon context 3 we must define it (ref: verizon.c QICSGP=3,3,"","","",0) */
-        if (apn[0] == '\0' && context_id == 3) {
-            memset(atResp, 0, sizeof(atResp));
-            err = esp_modem_at(g_cat1.dce, "AT+CGDCONT=3,\"IP\",\"\"", atResp, 500);
-            ESP_LOGI(TAG, "AT+CGDCONT=3,\"IPV4\",\"\"=>%s", atResp);
-        }
-
-        /* AT+QICSGP: context_id, protocol_type(1=IPv4), APN, user, pass, auth - ref: verizon.c */
-        memset(atResp, 0, sizeof(atResp));
-        snprintf(atCmd, sizeof(atCmd), "AT+QICSGP=%d,1,\"%s\",\"%s\",\"%s\",%d",
-                 context_id, apn, g_cat1.param.user, g_cat1.param.password, g_cat1.param.authentication);
-        err = esp_modem_at(g_cat1.dce, atCmd, atResp, 500);
-        ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
-            snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
-        }
+    /* Configure internal PDP context (updates GenericModule::pdp member) */
+    esp_modem_PdpContext_t pdp_ctx = {
+        .context_id = context_id,
+        .protocol_type = "IP",
+        .apn = apn,
+    };
+    err = esp_modem_configure_pdp_context(g_cat1.dce, &pdp_ctx);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_modem_configure_pdp_context failed %d", err);
+        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
+    }
+    /* AT+QICSGP: context_id, protocol_type(1=IPv4), APN, user, pass, auth  */
+    memset(atResp, 0, sizeof(atResp));
+    snprintf(atCmd, sizeof(atCmd), "AT+QICSGP=%d,1,\"%s\",\"%s\",\"%s\",%d",
+             context_id, apn, g_cat1.param.user, g_cat1.param.password, g_cat1.param.authentication);
+    err = esp_modem_at(g_cat1.dce, atCmd, atResp, 500);
+    ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
+        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
     }
 
     // Activate roaming service
@@ -895,23 +889,53 @@ esp_err_t connect_to_network()
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
     }
-
-    /* Verizon: activate PDP context before dial (ref: verizon.c udhcpcd_dialer - AT+QNETDEVCTL=1,3,1) */
-    if (context_id == 3) {
-        memset(atResp, 0, sizeof(atResp));
-        err = esp_modem_at(g_cat1.dce, "AT+QNETDEVCTL=1,3,1", atResp, 2000);
-        ESP_LOGI(TAG, "AT+QNETDEVCTL=1,3,1=>%s", atResp);
-        vTaskDelay(pdMS_TO_TICKS(1000));  /* seconds_sleep(1) in verizon.c */
+    /* Wait for network registration before entering PPP data mode.
+     * When the module is still searching (CREG/CEREG=2 or QENG: "SEARCH"/"NOCONN"),
+     * forcing DATA mode often fails with ESP_FAIL. Here we poll the registration
+     * state for a short period; if it never reaches Registered(1/5), we skip PPP
+     * for this cycle and let upper layers treat it as "no network, save to flash".
+     */
+    while (reg_retry++ < max_retry) {
+        if (esp_modem_get_network_registration_state(g_cat1.dce, &reg_state) == ESP_OK &&
+            (reg_state == 1 || reg_state == 5)) {
+            ESP_LOGI(TAG, "Network registered, state=%d", reg_state);
+            break;
+        }
+        ESP_LOGI(TAG, "Network not registered yet, state=%d, retry=%d/%d",
+                 reg_state, reg_retry, max_retry);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    // CMUX mode dial
-    err = esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_CMUX);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_CMUX) failed with %d", err);
-        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
+    if (!(reg_state == 1 || reg_state == 5)) {
+        ESP_LOGW(TAG, "Network still not registered, skip PPP dialing this cycle");
+        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "Network Searching");
+        return ESP_FAIL;
+    }
+    
+    reg_retry = 0;
+    max_retry = 5;
+    while (reg_retry++ < max_retry) {
+        ESP_LOGI(TAG, "Setting mode, retry=%d/%d", reg_retry, max_retry);
+        if (g_cat1.mode == MODE_CONFIG) {
+            ESP_LOGI(TAG, "Using CMUX mode");
+            err = esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_CMUX);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "CMUX mode enabled successfully");
+                break;
+            }
+        } else {
+            ESP_LOGI(TAG, "Using DATA mode");
+            err = esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_DATA);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "DATA mode enabled successfully");
+                break;
+            } 
+        }
+        esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_UNDEF);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    return err;
+    return ESP_OK;
 }
 
 /**
@@ -987,7 +1011,7 @@ void cat1_open()
     xEventGroupClearBits(g_cat1.event_group, CAT1_POWER_ON_BIT);
     xEventGroupClearBits(g_cat1.event_group, CAT1_STA_CONNECT_BIT);
     xEventGroupClearBits(g_cat1.event_group, CAT1_STA_DISCONNECT_BIT);
-    BaseType_t task = xTaskCreatePinnedToCore((TaskFunction_t)task_start_modem, TAG, 8 * 1024, NULL, 4, NULL, 1);
+    BaseType_t task = xTaskCreatePinnedToCore((TaskFunction_t)task_start_modem, TAG, 8 * 1024, NULL, 5, NULL, 0);
     if (task == pdPASS) {
     } else {
         ESP_LOGE(TAG, "xTaskCreatePinnedToCore(task_start_modem) failed");
@@ -1009,7 +1033,7 @@ void cat1_wait_open(void)
         mqtt_stop();
     }
 
-    get_status(&g_cat1.status);
+    // get_status(&g_cat1.status);
 }
 
 /**

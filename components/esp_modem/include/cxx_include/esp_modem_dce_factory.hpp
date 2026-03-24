@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +12,7 @@
  * @brief DCE modem factory
  */
 
+#define esp_modem_create_dce_from dce_factory::Factory::create_unique_dce_from
 
 namespace esp_modem::dce_factory {
 
@@ -61,12 +62,16 @@ class Creator {
 public:
     Creator(std::shared_ptr<DTE> dte, esp_netif_t *esp_netif): dte(std::move(dte)), device(nullptr), netif(esp_netif)
     {
+#ifdef CONFIG_ESP_MODEM_USE_PPP_MODE
         ESP_MODEM_THROW_IF_FALSE(netif != nullptr, "Null netif");
+#endif
     }
 
     Creator(std::shared_ptr<DTE> dte, esp_netif_t *esp_netif, std::shared_ptr<T_Module> dev): dte(std::move(dte)), device(std::move(dev)), netif(esp_netif)
     {
+#ifdef CONFIG_ESP_MODEM_USE_PPP_MODE
         ESP_MODEM_THROW_IF_FALSE(netif != nullptr, "Null netif");
+#endif
     }
 
     explicit Creator(std::shared_ptr<DTE> dte): dte(std::move(dte)), device(nullptr), netif(nullptr)
@@ -117,7 +122,8 @@ enum class ModemType {
     SIM7000,            /*!< Derived from the GenericModule, specifics applied to SIM7000 model */
     BG96,               /*!< Derived from the GenericModule, specifics applied to BG69 model */
     SIM800,             /*!< Derived from the GenericModule with specifics applied to SIM800 model */
-    EC800E,             /*!< Derived from the GenericModule with specifics applied to EC800E model */
+    SQNGM02S,           /*!< Derived from the GenericModule, specifics applied to GM02S model */
+    EG91X,              /*!< Derived from the GenericModule, specifics applied to EG91x (EG915/EG912) model */
 };
 
 /**
@@ -178,8 +184,10 @@ public:
             return build_shared_module<SIM7000>(cfg, std::forward<Args>(args)...);
         case ModemType::BG96:
             return build_shared_module<BG96>(cfg, std::forward<Args>(args)...);
-        case ModemType::EC800E:
-            return build_shared_module<EC800E>(cfg, std::forward<Args>(args)...);
+        case ModemType::SQNGM02S:
+            return build_shared_module<SQNGM02S>(cfg, std::forward<Args>(args)...);
+        case ModemType::EG91X:
+            return build_shared_module<EG91X>(cfg, std::forward<Args>(args)...);
         case ModemType::GenericModule:
             return build_shared_module<GenericModule>(cfg, std::forward<Args>(args)...);
         default:
@@ -209,8 +217,10 @@ public:
             return build_unique<SIM7000>(cfg, std::forward<Args>(args)...);
         case ModemType::BG96:
             return build_unique<BG96>(cfg, std::forward<Args>(args)...);
-        case ModemType::EC800E:
-            return build_unique<EC800E>(cfg, std::forward<Args>(args)...);
+        case ModemType::SQNGM02S:
+            return build_unique<SQNGM02S>(cfg, std::forward<Args>(args)...);
+        case ModemType::EG91X:
+            return build_unique<EG91X>(cfg, std::forward<Args>(args)...);
         case ModemType::GenericModule:
             return build_unique<GenericModule>(cfg, std::forward<Args>(args)...);
         default:
@@ -233,14 +243,24 @@ public:
             return build<SIM7000>(cfg, std::forward<Args>(args)...);
         case ModemType::BG96:
             return build<BG96>(cfg, std::forward<Args>(args)...);
-        case ModemType::EC800E:
-            return build<EC800E>(cfg, std::forward<Args>(args)...);
+        case ModemType::SQNGM02S:
+            return build<SQNGM02S>(cfg, std::forward<Args>(args)...);
+        case ModemType::EG91X:
+            return build<EG91X>(cfg, std::forward<Args>(args)...);
         case ModemType::GenericModule:
             return build<GenericModule>(cfg, std::forward<Args>(args)...);
         default:
             break;
         }
         return nullptr;
+    }
+
+    template <typename T_Module, typename Ptr = std::unique_ptr<DCE>>
+    static Ptr create_unique_dce_from(const esp_modem::dce_config *config,
+                                      std::shared_ptr<esp_modem::DTE> dte,
+                                      esp_netif_t *netif)
+    {
+        return build_generic_DCE<T_Module, DCE, Ptr>(config, std::move(dte), netif);
     }
 
 private:

@@ -1094,11 +1094,30 @@
                                     {{ $t("sys.browse") }}
                                 </button>
                                 <button
-                                    class="plain"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     style="color: #333333; border-color: #B1B1B1;"
                                     @click="handleUpgrade"
                                 >
                                     {{ $t("sys.upgrade") }}
+                                </button>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("sys.exportSessionLog") }}</span
+                            >
+                            <span
+                                class="card-item-content device-card-log-download"
+                            >
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    style="color: #333333; border-color: #B1B1B1;"
+                                    :title="$t('sys.exportSessionLogTip')"
+                                    @click="exportSessionLog"
+                                >
+                                    {{ $t("sys.exportSessionLogBtn") }}
                                 </button>
                             </span>
                         </div>

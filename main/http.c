@@ -23,6 +23,7 @@
 #include "ping.h"
 #include "net_module.h"
 #include "storage.h"
+#include "session_log.h"
 #include "utils.h"
 #include "pir.h"
 
@@ -1349,6 +1350,13 @@ static esp_err_t get_dev_ntp_sync_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t export_session_log_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    return session_log_http_export(req);
+}
+
 static esp_err_t upload_to_path(httpd_req_t *req, const char *path)
 {
     ESP_LOGI(TAG, "upload_to_path %s", path);
@@ -1803,6 +1811,11 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/system/getDevNtpSync",
         .method = HTTP_GET,
         .handler = get_dev_ntp_sync_handle,
+    },
+    {
+        .uri = "/api/v1/system/exportSessionLog",
+        .method = HTTP_GET,
+        .handler = export_session_log_handle,
     },
     // certificate upload (three static paths, directly write to LittleFS)
     {

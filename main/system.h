@@ -16,6 +16,7 @@ extern "C" {
  * System operation modes
  */
 typedef enum modeSel {
+    MODE_UNDEFINED = -1, ///< Undefined mode
     MODE_SLEEP = 0,    ///< Low-power sleep mode
     MODE_SNAPSHOT,     ///< Snapshot mode
     MODE_CONFIG,       ///< Configuration mode
@@ -196,6 +197,18 @@ esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync);
  */
 bool system_is_ntp_sync_enable();
 
+/**
+ * Set temporary mode
+ * @param mode Mode to set
+ */
+void system_set_temporary_mode(modeSel_e mode);
+
+/**
+ * Get temporary mode
+ * @return Temporary mode
+ */
+
+modeSel_e system_get_temporary_mode(void);
 
 #ifdef __cplusplus
 }

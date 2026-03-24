@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -64,7 +64,6 @@ public:
 
     void set_read_cb(std::function<bool(uint8_t *data, size_t len)> f) override
     {
-        ESP_MODEM_THROW_IF_FALSE(signal.wait(TASK_PARAMS, 1000), "Failed to set UART task params");
         on_read = std::move(f);
     }
 
@@ -73,6 +72,7 @@ private:
     {
         auto t = static_cast<UartTerminal *>(task_param);
         t->task();
+        t->task_handle.task_handle = nullptr;
         vTaskDelete(nullptr);
     }
 
@@ -91,7 +91,6 @@ private:
     static const size_t TASK_INIT = BIT0;
     static const size_t TASK_START = BIT1;
     static const size_t TASK_STOP = BIT2;
-    static const size_t TASK_PARAMS = BIT3;
 
     QueueHandle_t event_queue;
     uart_resource uart;
@@ -118,9 +117,7 @@ void UartTerminal::task()
         return; // exits to the static method where the task gets deleted
     }
     while (signal.is_any(TASK_START)) {
-        signal.set(TASK_PARAMS);
         if (get_event(event, 100)) {
-            signal.clear(TASK_PARAMS);
             switch (event.type) {
             case UART_DATA:
                 uart_get_buffered_data_len(uart.port, &len);
@@ -164,6 +161,11 @@ void UartTerminal::task()
                 ESP_LOGW(TAG, "unknown uart event type: %d", event.type);
                 break;
             }
+        } else {
+            uart_get_buffered_data_len(uart.port, &len);
+            if (len && on_read) {
+                on_read(nullptr, len);
+            }
         }
     }
 }
@@ -174,13 +176,20 @@ int UartTerminal::read(uint8_t *data, size_t len)
     uart_get_buffered_data_len(uart.port, &length);
     length = std::min(len, length);
     if (length > 0) {
-        return uart_read_bytes(uart.port, data, length, portMAX_DELAY);
+        int read_len = uart_read_bytes(uart.port, data, length, portMAX_DELAY);
+#if CONFIG_ESP_MODEM_ADD_DEBUG_LOGS
+        ESP_LOG_BUFFER_HEXDUMP("uart-rx", data, read_len, ESP_LOG_DEBUG);
+#endif
+        return read_len;
     }
     return 0;
 }
 
 int UartTerminal::write(uint8_t *data, size_t len)
 {
+#if CONFIG_ESP_MODEM_ADD_DEBUG_LOGS
+    ESP_LOG_BUFFER_HEXDUMP("uart-tx", data, len, ESP_LOG_DEBUG);
+#endif
     return uart_write_bytes_compat(uart.port, data, len);
 }
 

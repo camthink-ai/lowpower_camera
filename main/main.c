@@ -40,6 +40,8 @@
 #include "net_module.h"
 #include "morse.h"
 #include "utils.h"
+#include "storage.h"
+#include "session_log.h"
 
 #define TAG "-->MAIN"
 
@@ -401,14 +403,13 @@ static void handle_config_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
     misc_led_blink(STATUS_LED_BLINK_COUNT, STATUS_LED_BLINK_INTERVAL);
     ESP_LOGI(TAG, "config mode");
     
+    http_open();
+    sleep_reset_wakeup_todo();
+    netModule_open(main_mode);
     camera_open(NULL, xQueueMqtt);
     if (snapType == SNAP_BUTTON) {
         camera_snapshot(snapType, 1);
     }
-    sleep_reset_wakeup_todo();
-    netModule_open(main_mode);
-    http_open();
-    
     sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | 
                           SLEEP_NO_OPERATION_TIMEOUT_BIT | SLEEP_MIP_DONE_BIT | SLEEP_NO_DEBUG_BIT, true);
 }
@@ -482,6 +483,11 @@ static esp_err_t init_queues_and_services(QueueHandle_t *xQueueMqtt, QueueHandle
 
 void app_main(void)
 {
+    /* Mount LittleFS and start session log file (truncated each boot) before other init. */
+    if (storage_ensure_mounted() == ESP_OK) {
+        session_log_init();
+    }
+
     // Initialize common components
     common_init();
 
@@ -506,6 +512,11 @@ void app_main(void)
 
     // Handle different operational modes
     // main_mode = MODE_CONFIG; //TODO: for test
+    modeSel_e temp_mode = system_get_temporary_mode();
+    if (temp_mode != MODE_UNDEFINED) {
+        main_mode = temp_mode;
+        ESP_LOGI(TAG, "temporary mode: %d", main_mode);
+    }
     switch (main_mode) {
         case MODE_SNAPSHOT:
             handle_snapshot_mode(snapType, xQueueMqtt, xQueueStorage);

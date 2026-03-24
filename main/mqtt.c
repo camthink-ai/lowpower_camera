@@ -33,7 +33,7 @@
 
 // Timeout constants (milliseconds)
 #define MQTT_START_TIMEOUT_MS (1000)           // Start timeout
-#define MQTT_CONNECT_TIMEOUT_MS (30000)        // Connection timeout
+#define MQTT_CONNECT_TIMEOUT_MS (90000)        // Connection timeout
 #define MQTT_DISCONNECT_TIMEOUT_MS (2000)      // Disconnect timeout
 #define MQTT_STOP_TIMEOUT_MS (1000)            // Stop timeout
 #define MQTT_PUBLISHED_TIMEOUT_MS (20000)      // Publish timeout

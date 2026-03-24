@@ -9,7 +9,7 @@ menu "Example Configuration"
                 Connect to modem via UART.
         config EXAMPLE_SERIAL_CONFIG_USB
             bool "USB"
-            depends on IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
+            depends on IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4
             help
                 Connect to modem via USB (CDC-ACM class). For IDF version >= 4.4.
     endchoice
@@ -29,6 +29,11 @@ menu "Example Configuration"
             bool "BG96"
             help
                 Quectel BG96 is a series of LTE Cat M1/Cat NB1/EGPRS module.
+        config EXAMPLE_MODEM_DEVICE_EC20
+            depends on EXAMPLE_SERIAL_CONFIG_USB
+            bool "EC20"
+            help
+                Quectel EC20 is a series of LTE Cat M4 module.
         config EXAMPLE_MODEM_DEVICE_SIM7000
             depends on EXAMPLE_SERIAL_CONFIG_UART
             bool "SIM7000"
@@ -48,6 +53,13 @@ menu "Example Configuration"
             bool "A7670"
             help
                 A7670X is Multi-Band LTE-FDD/LTE-TDD/GSM/GPRS/EDGE module.
+
+        config EXAMPLE_MODEM_DEVICE_CUSTOM
+            select ESP_MODEM_ADD_CUSTOM_MODULE
+            bool "Custom device"
+            help
+                This demonstrates use of a custom device in C-API.
+
     endchoice
 
     config EXAMPLE_MODEM_PPP_APN
@@ -55,26 +67,6 @@ menu "Example Configuration"
         default "internet"
         help
             Set APN (Access Point Name), a logical name to choose data network
-
-    config EXAMPLE_MODEM_PPP_AUTH_USERNAME
-        string "Set username for authentication"
-        default "espressif"
-        depends on !EXAMPLE_MODEM_PPP_AUTH_NONE
-        help
-            Set username for PPP Authentication.
-
-    config EXAMPLE_MODEM_PPP_AUTH_PASSWORD
-        string "Set password for authentication"
-        default "esp32"
-        depends on !EXAMPLE_MODEM_PPP_AUTH_NONE
-        help
-            Set password for PPP Authentication.
-
-    config EXAMPLE_MODEM_PPP_AUTH_NONE
-        bool "Skip PPP authentication"
-        default n
-        help
-            Set to true for the PPP client to skip authentication
 
     config EXAMPLE_SEND_MSG
         bool "Short message (SMS)"
@@ -108,28 +100,28 @@ menu "Example Configuration"
         config EXAMPLE_MODEM_UART_TX_PIN
             int "TXD Pin Number"
             default 25
-            range 0 31
+            range 0 56
             help
                 Pin number of UART TX.
 
         config EXAMPLE_MODEM_UART_RX_PIN
             int "RXD Pin Number"
             default 26
-            range 0 31
+            range 0 56
             help
                 Pin number of UART RX.
 
         config EXAMPLE_MODEM_UART_RTS_PIN
             int "RTS Pin Number"
             default 27
-            range 0 31
+            range 0 56
             help
                 Pin number of UART RTS.
 
         config EXAMPLE_MODEM_UART_CTS_PIN
             int "CTS Pin Number"
             default 23
-            range 0 31
+            range 0 56
             help
                 Pin number of UART CTS.
 
@@ -193,7 +185,7 @@ menu "Example Configuration"
 
     config EXAMPLE_MQTT_BROKER_URI
         string "MQTT Broker URL"
-        default "mqtt://mqtt.eclipseprojects.io"
+        default "mqtt://test.mosquitto.org"
         help
             URL of the mqtt broker which this example connects to.
 
@@ -208,5 +200,24 @@ menu "Example Configuration"
         default "esp32-pppos"
         help
             MQTT data message, which we publish and expect to receive.
+
+    config EXAMPLE_PAUSE_NETIF_TO_CHECK_SIGNAL
+        bool "Demonstrate netif pause"
+        default n
+        help
+            Set this to true to demonstrate network pausing.
+            If enabled, the example waits for an MQTT data, then temporarily
+            drops network to check signal quality, resumes networking and
+            publishes another MQTT message.
+            Connection to the MQTT broker should be kept.
+
+    config EXAMPLE_DETECT_MODE_BEFORE_CONNECT
+        bool "Detect mode before connect"
+        default n
+        help
+            Set this to true to demonstrate mode auto-detection.
+            If enabled, the example tries to recognize the actual mode.
+            If mode is detected correctly and it is not a command mode,
+            then the example switches to command mode.
 
 endmenu

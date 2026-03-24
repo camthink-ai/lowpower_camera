@@ -201,6 +201,23 @@ img.logo {
     width: 80px;
 }
 
+/* Upgrade + Download: same fixed width, right edge aligns with Browse row’s second button */
+.device-card .card-item-content button.device-card-action-btn {
+    margin: 8px;
+    width: 100px;
+    max-width: 100px;
+    min-width: 100px;
+    box-sizing: border-box;
+    white-space: nowrap;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+/* Single Download button: align to same right column as Upgrade (after Browse) */
+.device-card .card-item-content.device-card-log-download {
+    justify-content: flex-end;
+}
+
 .normal-select .ms-select {
     width: 160px;
 }

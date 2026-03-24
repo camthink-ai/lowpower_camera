@@ -17,6 +17,7 @@
 
 static int time_delta = 0;    //When synchronizing time, the error time between the system and the actual time, in seconds.
 static char ntp_sync_flag = 0;  //The flag indicating whether ntp is synchronized.
+static RTC_DATA_ATTR modeSel_e g_tmpMode = MODE_UNDEFINED;
 /**
  * Get the current system mode
  * @return modeSel_e
@@ -39,7 +40,7 @@ esp_err_t system_ntp_time(bool force_sync)
     }
 
     int retry = 0;
-    const int retry_count = 7;  // Maximum retry attempts
+    const int retry_count = 5;  // Maximum retry attempts
     time_t sys_now;
 
     ESP_LOGI(TAG, "Initializing SNTP");
@@ -305,4 +306,26 @@ bool system_is_ntp_sync_enable()
     ntpSync_t ntp_sync;
     system_get_ntp_sync(&ntp_sync);
     return ntp_sync.enable == 1;
+}
+
+
+/* *
+ * Set temporary mode
+ * @param mode Mode to set
+ */
+void system_set_temporary_mode(modeSel_e mode)
+{
+    g_tmpMode = mode;
+    system_restart();
+}
+
+/**
+ * Get temporary mode
+ * @return Temporary mode
+ */
+modeSel_e system_get_temporary_mode(void)
+{
+    modeSel_e mode = g_tmpMode;
+    g_tmpMode = MODE_UNDEFINED;
+    return mode;
 }

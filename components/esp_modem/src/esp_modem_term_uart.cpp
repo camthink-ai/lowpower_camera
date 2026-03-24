@@ -63,7 +63,7 @@ uart_resource::uart_resource(const esp_modem_uart_term_config *config, QueueHand
     ESP_MODEM_THROW_IF_ERROR(res, "install uart driver failed");
     ESP_MODEM_THROW_IF_ERROR(uart_set_rx_timeout(config->port_num, 1), "set rx timeout failed");
 
-    ESP_MODEM_THROW_IF_ERROR(uart_set_rx_full_threshold(config->port_num, 128), "config rx full threshold failed");//兼容EG912U-GL修改,fifo最大为128
+    ESP_MODEM_THROW_IF_ERROR(uart_set_rx_full_threshold(config->port_num, 64), "config rx full threshold failed");
 
     /* mark UART as initialized */
     port = config->port_num;

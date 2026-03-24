@@ -1,6 +1,23 @@
 import { nextTick } from "/src/lib/petite-vue.es.js";
 import { translate as $t } from "../i18n";
 import { getData, postData, postFileBuffer, URL } from "../api";
+
+async function downloadSessionLog() {
+    const res = await fetch(URL.exportSessionLog, { method: "GET" });
+    if (!res.ok) {
+        throw new Error("export failed");
+    }
+    const blob = await res.blob();
+    const objUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = "session_logs.txt";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(objUrl);
+}
 function Device() {
     return {
         // --Device Maintenance--
@@ -171,6 +188,14 @@ function Device() {
         // },
         onReload() {
             window.location.reload();
+        },
+        async exportSessionLog() {
+            try {
+                await downloadSessionLog();
+            } catch (e) {
+                console.error(e);
+                this.alertMessage("error");
+            }
         },
         /** remove cloud ecosystem developer platform related parameters */
         // async setIotParam() {

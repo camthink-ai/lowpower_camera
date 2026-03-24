@@ -482,7 +482,7 @@ camera_fb_t *cam_take(TickType_t timeout, int try_times)
             if (offset_e >= 0) {
                 // adjust buffer length
                 dma_buffer->len = offset_e + sizeof(JPEG_EOI_MARKER);
-                ESP_LOGI(TAG, "Picture taken! Its size was: %d", dma_buffer->len);
+                // ESP_LOGI(TAG, "Picture taken! Its size was: %d", dma_buffer->len);
                 return dma_buffer;
             } else {
                 ESP_LOGW(TAG, "NO-EOI");

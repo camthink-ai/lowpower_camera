@@ -485,7 +485,7 @@ int8_t iot_mip_init()
     iot_mip_autop_init();
     iot_mip_dm_init();
     sleep_set_event_bits(SLEEP_MIP_DONE_BIT);
-    xTaskCreatePinnedToCore(mip_task, "mip_task", 1024 * 10, NULL, 5, NULL, 1);
+    // xTaskCreatePinnedToCore(mip_task, "mip_task", 1024 * 10, NULL, 5, NULL, 1);
     return 0;
 }
 

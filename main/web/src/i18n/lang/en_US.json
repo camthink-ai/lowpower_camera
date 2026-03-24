@@ -113,7 +113,10 @@
     "upgradeFailedTryAgain": "Upgrade failed! Please try again.",
     "autoProvision": "Auto Provision",
     "DevelopPlatformTake": "Development Platform Takeover",
-    "ntpSync": "Network Time Sync"
+    "ntpSync": "Network Time Sync",
+    "exportSessionLog": "Session log",
+    "exportSessionLogBtn": "Download",
+    "exportSessionLogTip": "Download last 3 boots’ logs merged (oldest first, one text file)"
   },
   "wlan": {
     "gateWayConnect": "Gateway Connection",

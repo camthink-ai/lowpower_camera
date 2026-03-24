@@ -104,6 +104,7 @@ const URL = {
     setWifiParam: baseUrl + "/network/setWifiParam",
     setDevSleep: baseUrl + "/system/setDevSleep",
     setDevTime: baseUrl + "/system/setDevTime",
+    exportSessionLog: baseUrl + "/system/exportSessionLog",
 
     // Cellular
     getCellularParam: baseUrl + "/network/getCellularParam",

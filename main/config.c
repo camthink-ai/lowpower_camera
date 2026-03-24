@@ -667,6 +667,31 @@ static int do_snap_cmd(int argc, char **argv)
     return ESP_OK;
 }
 
+static int do_mode_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("invalid argvment, eg: mode snapshot\n");
+        return ESP_OK;
+    }
+    modeSel_e tmp_mode = MODE_UNDEFINED;
+    printf("mode %s\n", argv[1]);
+    if (strcmp(argv[1], "snapshot") == 0) {
+        tmp_mode = MODE_SNAPSHOT;
+    } else if (strcmp(argv[1], "config") == 0) {
+        tmp_mode = MODE_CONFIG;
+    } else if (strcmp(argv[1], "schedule") == 0) {
+        tmp_mode = MODE_SCHEDULE;
+    } else if (strcmp(argv[1], "upload") == 0) {
+        tmp_mode = MODE_UPLOAD;
+    } else {
+        printf("invalid argvment, eg: mode snapshot\n");
+        return ESP_OK;
+    }
+    
+    system_set_temporary_mode(tmp_mode);
+    return ESP_OK;
+}
+
 static esp_console_cmd_t g_cmd[] = {
     {"fset", "factory setting: fset [key] [value]", NULL, do_fset_cmd, NULL},
     {"fget", "factory getting: fget [key]", NULL, do_fget_cmd, NULL},
@@ -681,6 +706,7 @@ static esp_console_cmd_t g_cmd[] = {
     {"sys_reset", "system reset", NULL, do_reset_cmd, NULL},
     {"debug", "debug on/off", NULL, do_debug_cmd, NULL},
     {"snap", "snapshot", NULL, do_snap_cmd, NULL},
+    {"mode", "set mode", NULL, do_mode_cmd, NULL},
 };
 
 /*------------------------------------------------------------------------*/

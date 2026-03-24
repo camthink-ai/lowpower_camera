@@ -113,7 +113,10 @@
     "upgradeFailedTryAgain": "升级失败！请重试。",
     "autoProvision": "自动预配置",
     "DevelopPlatformTake": "开发者平台接管",
-    "ntpSync": "网络同步时间"
+    "ntpSync": "网络同步时间",
+    "exportSessionLog": "运行日志",
+    "exportSessionLogBtn": "下载",
+    "exportSessionLogTip": "下载最近3次启动的运行日志（按时间从旧到新合并为一个文本）"
   },
   "wlan": {
     "gateWayConnect": "网关连接",

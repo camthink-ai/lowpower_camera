@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -21,6 +21,7 @@ void LoopbackTerm::stop()
 int LoopbackTerm::write(uint8_t *data, size_t len)
 {
     if (inject_by) {    // injection test: ignore what we write, but respond with injected data
+        signal.clear(1);
         auto ret = std::async(&LoopbackTerm::batch_read, this);
         async_results.push_back(std::move(ret));
         return len;
@@ -35,7 +36,7 @@ int LoopbackTerm::write(uint8_t *data, size_t len)
         } else if (command == "ATO\r") {
             response = "ERROR\r\n";
         } else if (command.find("ATD") != std::string::npos) {
-            response = "CONNECT\r\n";
+            response = "CONNECT\n";
         } else if (command.find("AT+CSQ\r") != std::string::npos) {
             response = "+CSQ: 123,456\n\r\nOK\r\n";
         } else if (command.find("AT+CGMM\r") != std::string::npos) {
@@ -66,12 +67,16 @@ int LoopbackTerm::write(uint8_t *data, size_t len)
             data_len = response.length();
             loopback_data.resize(data_len);
             memcpy(&loopback_data[0], &response[0], data_len);
+            signal.clear(1);
             auto ret = std::async(on_read, nullptr, data_len);
             return len;
         }
     }
     if (len > 2 && data[0] == 0xf9) { // Simple CMUX responder
         // turn the request into a reply -> implements CMUX loopback
+        // Note: This simple CMUX responder only updates CMUX headers and replaces payload.
+        // It means that all responses (that we test) must be shorter or equal to the requests
+        // For example ATD (dial command): sizeof("ATD*99#") >= sizeof("CONNECT");
         if (data[2] == 0x3f || data[2] == 0x53) {  // SABM command
             data[2] = 0x73;
         } else if (data[2] == 0xef) { // Generic request
@@ -81,6 +86,7 @@ int LoopbackTerm::write(uint8_t *data, size_t len)
     loopback_data.resize(data_len + len);
     memcpy(&loopback_data[data_len], data, len);
     data_len += len;
+    signal.clear(1);
     auto ret = std::async(on_read, nullptr, data_len);
     return len;
 }
@@ -102,9 +108,15 @@ int LoopbackTerm::read(uint8_t *data, size_t len)
     return read_len;
 }
 
-LoopbackTerm::LoopbackTerm(bool is_bg96): loopback_data(), data_len(0), pin_ok(false), is_bg96(is_bg96), inject_by(0) {}
+LoopbackTerm::LoopbackTerm(bool is_bg96): loopback_data(), data_len(0), pin_ok(false), is_bg96(is_bg96), inject_by(0)
+{
+    init_signal();
+}
 
-LoopbackTerm::LoopbackTerm(): loopback_data(), data_len(0), pin_ok(false), is_bg96(false), inject_by(0) {}
+LoopbackTerm::LoopbackTerm(): loopback_data(), data_len(0), pin_ok(false), is_bg96(false), inject_by(0)
+{
+    init_signal();
+}
 
 int LoopbackTerm::inject(uint8_t *data, size_t len, size_t injected_by, size_t delay_before, size_t delay_after)
 {
@@ -132,6 +144,29 @@ void LoopbackTerm::batch_read()
         }
         Task::Delay(delay_after_inject);
     }
+    signal.set(1);
 }
 
-LoopbackTerm::~LoopbackTerm() = default;
+LoopbackTerm::~LoopbackTerm()
+{
+    data_len = 0;
+    signal.wait(1, INT32_MAX); // wait "very long" to let the std::async() finish
+}
+
+void LoopbackTerm::init_signal()
+{
+    // This indicates, that we can safely exit
+    // we clear the signal upon an async operation, so the destructor needs to wait until
+    // it's finished
+    signal.set(1);
+}
+
+void LoopbackTerm::set_read_cb(std::function<bool(uint8_t *, size_t)> f)
+{
+    user_on_read = std::move(f);
+    on_read = [this](uint8_t *data, size_t len) {
+        auto ret = user_on_read(data, len);
+        signal.set(1);
+        return ret;
+    };
+}

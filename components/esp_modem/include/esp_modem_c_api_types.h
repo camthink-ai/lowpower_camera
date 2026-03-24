@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +12,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/*  Compatibility macro to be removed in v2.0
+ */
+#define ESP_MODEM_DCE_GENETIC ESP_MODEM_DCE_GENERIC
 
 typedef struct esp_modem_dce_wrap esp_modem_dce_t;
 
@@ -41,19 +45,24 @@ typedef enum esp_modem_dce_mode {
     ESP_MODEM_MODE_CMUX_MANUAL_SWAP,    /**< Swap terminals in CMUX manual mode */
     ESP_MODEM_MODE_CMUX_MANUAL_DATA,    /**< Set DATA mode in CMUX manual mode */
     ESP_MODEM_MODE_CMUX_MANUAL_COMMAND, /**< Set COMMAND mode in CMUX manual mode */
+    ESP_MODEM_MODE_DETECT,              /**< Detect the mode and resume it (if sucessfully detected) */
+    ESP_MODEM_MODE_UNDEF,
 } esp_modem_dce_mode_t;
 
 /**
  * @brief DCE devices: Enum list of supported devices
  */
 typedef enum esp_modem_dce_device {
-    ESP_MODEM_DCE_GENETIC,  /**< The most generic device */
+    ESP_MODEM_DCE_GENERIC,  /**< The most generic device */
     ESP_MODEM_DCE_SIM7600,
     ESP_MODEM_DCE_SIM7070,
     ESP_MODEM_DCE_SIM7000,
     ESP_MODEM_DCE_BG96,
+    ESP_MODEM_DCE_EC20,
     ESP_MODEM_DCE_SIM800,
-    ESP_MODEM_DCE_EC800E,
+    ESP_MODEM_DCE_SQNGM02S,
+    ESP_MODEM_DCE_EG91X,
+    ESP_MODEM_DCE_CUSTOM
 } esp_modem_dce_device_t;
 
 /**
@@ -119,8 +128,70 @@ esp_err_t esp_modem_set_error_cb(esp_modem_dce_t *dce, esp_modem_terminal_error_
  */
 esp_err_t esp_modem_set_mode(esp_modem_dce_t *dce, esp_modem_dce_mode_t mode);
 
+/**
+ * @brief Convenient function to run arbitrary commands from C-API
+ *
+ * @param dce Modem DCE handle
+ * @param command Command to send
+ * @param got_line_cb Callback function which is called whenever we receive a line
+ * @param timeout_ms Command timeout
+ * @return ESP_OK on success, ESP_FAIL on failure
+ */
+
 esp_err_t esp_modem_command(esp_modem_dce_t *dce, const char *command, esp_err_t(*got_line_cb)(uint8_t *data, size_t len), uint32_t timeout_ms);
 
+/**
+ * @brief Sets the APN and configures it into the modem's PDP context
+ *
+ * @param dce Modem DCE handle
+ * @param apn Access Point Name
+ * @return ESP_OK on success
+ */
+esp_err_t esp_modem_set_apn(esp_modem_dce_t *dce, const char *apn);
+
+/**
+ * @brief Configures the modem's internal PDP context (context ID, protocol, APN)
+ *
+ * This function updates the modem's internal PDP context configuration that will be
+ * used when entering DATA or CMUX mode. Unlike esp_modem_set_pdp_context() which only
+ * sends AT commands, this function updates the internal state so that setup_data_mode()
+ * uses the correct context ID.
+ *
+ * @param dce Modem DCE handle
+ * @param pdp PDP context configuration (context_id, protocol_type, apn)
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG on invalid parameters
+ */
+esp_err_t esp_modem_configure_pdp_context(esp_modem_dce_t *dce, esp_modem_PdpContext_t *pdp);
+
+#ifdef CONFIG_ESP_MODEM_URC_HANDLER
+/**
+ * @brief Sets a handler for unsolicited result codes (URCs) from the modem
+ *
+ * This function registers a callback that is triggered whenever an unsolicited
+ * result code (URC) is received from the modem. URCs are typically sent by the
+ * modem without a prior command to notify the host about certain events or status changes.
+ *
+ * @param dce Modem DCE handle
+ * @param got_line_cb Callback function which is called whenever a URC line is received
+ * @return ESP_OK on success, ESP_FAIL on failure
+ */
+esp_err_t esp_modem_set_urc(esp_modem_dce_t *dce, esp_err_t(*got_line_cb)(uint8_t *data, size_t len));
+#endif
+
+esp_err_t esp_modem_sqn_gm02s_connect(esp_modem_dce_t *dce, const esp_modem_PdpContext_t *pdp_context);
+
+/**
+ * @brief This API provides support for temporarily pausing networking in order
+ * to send/receive AT commands and resume networking afterwards.
+ * @note This function does not switch modes, the modem is still in data mode.
+ *
+ * @param dce Modem DCE handle
+ * @param pause true to pause the network interface, false to resume networking
+ * @return ESP_OK on success
+ */
+esp_err_t esp_modem_pause_net(esp_modem_dce_t *dce, bool pause);
+
+esp_modem_dce_mode_t esp_modem_get_mode(esp_modem_dce_t *dce);
 /**
  * @}
  */

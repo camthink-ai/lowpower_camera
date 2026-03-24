@@ -1,12 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <charconv>
 #include <cstring>
-#include <sys/socket.h>
 #include "sock_commands.hpp"
 #include "cxx_include/esp_modem_command_library_utils.hpp"
 #include "sock_dce.hpp"
@@ -19,14 +18,14 @@ using namespace esp_modem;
 
 command_result net_open(CommandableIf *t)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     std::string out;
     auto ret = dce_commands::generic_get_string(t, "AT+QISTATE?\r", out, 1000);
     if (ret != command_result::OK) {
         return ret;
     }
     if (out.find("+QISTATE: 0") != std::string::npos) {
-        ESP_LOGV(TAG, "%s", out.data() );
+        ESP_LOGV(TAG, "%s", out.data());
         ESP_LOGD(TAG, "Already there");
         return command_result::FAIL;
     } else if (out.empty()) {
@@ -37,7 +36,7 @@ command_result net_open(CommandableIf *t)
 
 command_result net_close(CommandableIf *t)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     dce_commands::generic_command(t, "AT+QICLOSE=0\r", "OK", "ERROR", 10000);
     esp_modem::Task::Delay(1000);
     return dce_commands::generic_command(t, "AT+QIDEACT=1\r", "OK", "ERROR", 40000);
@@ -45,11 +44,11 @@ command_result net_close(CommandableIf *t)
 
 command_result tcp_open(CommandableIf *t, const std::string &host, int port, int timeout)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     std::string ip_open = R"(AT+QIOPEN=1,0,"TCP",")" + host + "\"," + std::to_string(port) + "\r";
     auto ret = dce_commands::generic_command(t, ip_open, "+QIOPEN: 0,0", "ERROR", timeout);
     if (ret != command_result::OK) {
-        ESP_LOGE(TAG, "%s Failed", __func__ );
+        ESP_LOGE(TAG, "%s Failed", __func__);
         return ret;
     }
     return command_result::OK;
@@ -57,27 +56,27 @@ command_result tcp_open(CommandableIf *t, const std::string &host, int port, int
 
 command_result tcp_close(CommandableIf *t)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     return dce_commands::generic_command(t, "AT+QICLOSE=0\r", "OK", "ERROR", 10000);
 }
 
 command_result tcp_send(CommandableIf *t, uint8_t *data, size_t len)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     assert(0);      // Remove when fix done
     return command_result::FAIL;
 }
 
 command_result tcp_recv(CommandableIf *t, uint8_t *data, size_t len, size_t &out_len)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     assert(0);      // Remove when fix done
     return command_result::FAIL;
 }
 
 command_result get_ip(CommandableIf *t, std::string &ip)
 {
-    ESP_LOGV(TAG, "%s", __func__ );
+    ESP_LOGV(TAG, "%s", __func__);
     std::string out;
     auto ret = dce_commands::generic_get_string(t, "AT+QIACT?\r", out, 5000);
     if (ret != command_result::OK) {
@@ -110,17 +109,17 @@ void Responder::start_sending(size_t len)
 {
     data_to_send = len;
     send_stat = 0;
-    send_cmd("AT+QISEND=0," + std::to_string(len) + "\r");
+    send_cmd("AT+QISEND=" + std::to_string(link_id) + "," + std::to_string(len) + "\r");
 }
 
 void Responder::start_receiving(size_t len)
 {
-    send_cmd("AT+QIRD=0," + std::to_string(len) + "\r");
+    send_cmd("AT+QIRD=" + std::to_string(link_id) + "," + std::to_string(len) + "\r");
 }
 
 bool Responder::start_connecting(std::string host, int port)
 {
-    send_cmd(R"(AT+QIOPEN=1,0,"TCP",")" + host + "\"," + std::to_string(port) + "\r");
+    send_cmd(std::string("AT+QIOPEN=1,") + std::to_string(link_id) + R"(,"TCP",")" + host + "\"," + std::to_string(port) + "\r");
     return true;
 }
 
@@ -131,13 +130,24 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
     auto *recv_data = (char *)data;
     if (data_to_recv == 0) {
         const std::string_view head = "+QIRD: ";
-        auto head_pos = std::search(recv_data, recv_data + len, head.begin(), head.end());
-        if (head_pos == nullptr) {
-            return ret::FAIL;
+again:
+        const std::string_view recv_data_view = std::string_view(recv_data, len);
+        auto head_pos_found = recv_data_view.find(head);
+        if (head_pos_found == std::string_view::npos) {
+            return ret::IN_PROGRESS;
         }
 
+        auto *head_pos = recv_data + head_pos_found;
         auto next_nl = (char *)memchr(head_pos + head.size(), '\n', MIN_MESSAGE);
+
         if (next_nl == nullptr) {
+            if (head_pos + head.size() + 1 < recv_data + len) {
+                // might be that we misinterpreted the URC +QIRD: <>,<>,<> (notification) with the +QIRD: <> (read data)
+                // so we try to find the next +QIRD:
+                recv_data = head_pos + head.size() + 1;
+                goto again;
+            }
+            ESP_LOGD(TAG, "no new line found");
             return ret::FAIL;
         }
 
@@ -149,7 +159,9 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
         ESP_LOGD(TAG, "Received: actual len=%d", actual_len);
         if (actual_len == 0) {
             ESP_LOGD(TAG, "no data received");
-            return ret::FAIL;
+            data_to_recv = 0;
+            // return OK here, as BG96 would keep unacked data and notifies us with +QIRD: 0
+            return ret::OK;
         }
 
         if (actual_len > buffer_size) {
@@ -160,17 +172,17 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
         recv_data = next_nl + 1;
         auto first_data_len = len - (recv_data - (char *)data) /* minus size of the command marker */;
         if (actual_len > first_data_len) {
-            ::send(sock, recv_data, first_data_len, 0);
+            on_read(recv_data, first_data_len);
             data_to_recv = actual_len - first_data_len;
             return ret::NEED_MORE_DATA;
         }
-        ::send(sock, recv_data, actual_len, 0);
+        on_read(recv_data, actual_len);
     } else if (data_to_recv > len) {    // continue sending
-        ::send(sock, recv_data, len, 0);
+        on_read(recv_data, len);
         data_to_recv -= len;
         return ret::NEED_MORE_DATA;
     } else if (data_to_recv <= len) {    // last read -> looking for "OK" marker
-        ::send(sock, recv_data, data_to_recv, 0);
+        on_read(recv_data, data_to_recv);
         actual_len = data_to_recv;
     }
 
@@ -180,6 +192,7 @@ Responder::ret Responder::recv(uint8_t *data, size_t len)
         last_pos = (char *)memchr(recv_data + 1 + actual_len, 'O', MIN_MESSAGE);
         if (last_pos == nullptr || last_pos[1] != 'K') {
             data_to_recv = 0;
+            ESP_LOGD(TAG, "no OK after data");
             return ret::FAIL;
         }
     }
@@ -220,7 +233,7 @@ Responder::ret Responder::send(std::string_view response)
 {
     if (send_stat == 3) {
         if (response.find("SEND OK") != std::string::npos) {
-            send_cmd("AT+QISEND=0,0\r");
+            send_cmd(std::string("AT+QISEND=") + std::to_string(link_id) + ",0\r");
             send_stat++;
             return ret::IN_PROGRESS;
         } else if (response.find("SEND FAIL") != std::string::npos) {
@@ -265,7 +278,7 @@ Responder::ret Responder::send(std::string_view response)
             if (ack < total) {
                 ESP_LOGD(TAG, "all sending data are not ack (missing %d bytes acked)", (total - ack));
                 if (total - ack > 64) {
-                    ESP_LOGW(TAG, "Need a pause: missing %d bytes acked", (total - ack));
+                    ESP_LOGD(TAG, "Need a pause: missing %d bytes acked", (total - ack));
                     return ret::NEED_MORE_TIME;
                 }
             }
@@ -282,7 +295,8 @@ Responder::ret Responder::send(std::string_view response)
 
 Responder::ret Responder::connect(std::string_view response)
 {
-    if (response.find("+QIOPEN: 0,0") != std::string::npos) {
+    std::string open_response = "+QIOPEN: " + std::to_string(link_id) + ",0";
+    if (response.find(open_response) != std::string::npos) {
         ESP_LOGI(TAG, "Connected!");
         return ret::OK;
     }
@@ -293,10 +307,9 @@ Responder::ret Responder::connect(std::string_view response)
     return Responder::ret::IN_PROGRESS;
 }
 
-Responder::ret Responder::check_async_replies(status state, std::string_view &response)
+Responder::ret Responder::check_urc(status state, std::string_view &response)
 {
-    ESP_LOGD(TAG, "response %.*s", static_cast<int>(response.size()), response.data());
-    if (response.find("+QIURC: \"recv\",0") != std::string::npos) {
+    if (response.find(std::string("+QIURC: \"recv\",") + std::to_string(link_id)) != std::string::npos) {
         uint64_t data_ready = 1;
         write(data_ready_fd, &data_ready, sizeof(data_ready));
         ESP_LOGD(TAG, "Got data on modem!");
@@ -307,6 +320,9 @@ Responder::ret Responder::check_async_replies(status state, std::string_view &re
         response = response.substr(head_pos + head.size());
         int next_cr = response.find('\r');
         if (next_cr != std::string::npos) {
+            if (next_cr < 2) {
+                return ret::IN_PROGRESS;
+            }
             response = response.substr(next_cr - 2, next_cr);
             if (response.find(",0") != std::string::npos) {
                 ESP_LOGV(TAG, "Receiving done");
@@ -316,12 +332,21 @@ Responder::ret Responder::check_async_replies(status state, std::string_view &re
                 ESP_LOGD(TAG, "Got data on modem!");
             }
         }
-    } else if (response.find("+QIURC: \"closed\",0") != std::string::npos) {
+    } else if (response.find(std::string("+QIURC: \"closed\",") + std::to_string(link_id)) != std::string::npos) {
+        ESP_LOGE(TAG, "Connection closed");
         return ret::FAIL;
     }
+    return ret::IN_PROGRESS;
+}
+
+
+Responder::ret Responder::check_async_replies(status state, std::string_view &response)
+{
+    ESP_LOGD(TAG, "response %.*s", static_cast<int>(response.size()), response.data());
     if (state == status::SENDING) {
         return send(response);
-    } else if (state == status::CONNECTING) {
+    }
+    if (state == status::CONNECTING) {
         return connect(response);
     }
     return ret::IN_PROGRESS;
@@ -340,7 +365,7 @@ Responder::ret Responder::process_data(status state, uint8_t *data, size_t len)
 
 status Responder::pending()
 {
-    send_cmd("AT+QISEND=0,0\r");
+    send_cmd(std::string("AT+QISEND=") + std::to_string(link_id) + ",0\r");
     return status::SENDING;
 }
 
