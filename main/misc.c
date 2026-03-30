@@ -305,15 +305,15 @@ static int  get_adc_voltage_mv()
             ret = adc_oneshot_read(g_misc.adc2_unit_handle, BATTERY_DET_ADC2_CHN, &raw);
         } while (ret == ESP_ERR_INVALID_STATE);
         if (g_misc.adc2_cali_handle) {
+            raw = MIN(raw, 4000);
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(g_misc.adc2_cali_handle, raw, &voltage));
             n--;
-            // ESP_LOGI(TAG, "voltage %d", voltage);
+            // ESP_LOGI(TAG, "voltage %d raw %d", voltage, raw);
         }
         sum += voltage;
     }
     // misc_io_set(BATTERY_POWER_IO, BATTERY_POWER_OFF);
     voltage = sum / ADC_SUM_N;
-
     return voltage;
 }
 
@@ -415,7 +415,7 @@ uint8_t  misc_get_battery_voltage_rate()
     voltage_mv = misc_get_battery_voltage() / 2;
     if (voltage_mv < BATTERY_MIN_VOLTAGE) {
         // maybe typec inserted
-        rate = 100;
+        rate = 1;
     } else {
         voltage_mv = MIN(MAX(voltage_mv, BATTERY_MIN_VOLTAGE), BATTERY_MAX_VOLTAGE);
         rate = (uint8_t)((voltage_mv - BATTERY_MIN_VOLTAGE) * 100 / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE));
