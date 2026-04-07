@@ -1,5 +1,5 @@
 # LowPower Camera
-![NE101](https://wiki.camthink.ai/assets/images/Module-e3b1464484e50a4d1b01294295f2b1d1.png)
+![NE101](https://resources.camthink.ai/wiki/img/neoeyes-ne101-series/overview/Module.png)
 
 ## Project Overview
 This project is a low-power image acquisition solution based on the CamThink Event Camera NeoEyes NE101. The main features include:
