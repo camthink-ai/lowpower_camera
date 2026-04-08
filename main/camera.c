@@ -295,6 +295,7 @@ static esp_err_t csi_camera_init(void)
 
 static void csi_camera_deinit(void)
 {
+    esp_camera_deinit();
     // esp_camera_deinit() intentionally omitted if not provided in SDK
 }
 

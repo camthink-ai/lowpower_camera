@@ -414,9 +414,9 @@ static int do_tcp_server(int argc, char **argv)
 }
 
 static esp_console_cmd_t g_cmd[] = {
-    {"wifiscan", "scan ssid list", NULL, do_scan_cmd, NULL},
-    {"tcpclient", "tcp client", NULL, do_tcp_client, NULL},
-    {"tcpserver", "tcp server", NULL, do_tcp_server, NULL},
+    ESP_CONSOLE_CMD_INIT("wifiscan", "scan ssid list", NULL, do_scan_cmd, NULL),
+    ESP_CONSOLE_CMD_INIT("tcpclient", "tcp client", NULL, do_tcp_client, NULL),
+    ESP_CONSOLE_CMD_INIT("tcpserver", "tcp server", NULL, do_tcp_server, NULL),
 };
 
 /**

@@ -17,6 +17,7 @@
 #include "lwip/inet.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
+#include "esp_idf_version.h"
 #include "esp_console.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
@@ -339,6 +340,9 @@ static void register_ping(void)
         .help = "send ICMP ECHO_REQUEST to network hosts",
         .hint = NULL,
         .func = &do_ping_cmd,
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+        .context = NULL,
+#endif
         .argtable = &ping_args
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&ping_cmd));
@@ -359,7 +363,10 @@ static esp_err_t register_quit(void)
     esp_console_cmd_t command = {
         .command = "quit",
         .help = "Quit REPL environment",
-        .func = &do_cmd_quit
+        .func = &do_cmd_quit,
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+        .context = NULL
+#endif
     };
     return esp_console_cmd_register(&command);
 }

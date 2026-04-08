@@ -14,7 +14,7 @@ extern "C" {
 #define STATUS_LED_OFF      (1)
 
 /* Flash LED control pins and states */ 
-#define FLASH_LED_IO        (47)
+#define FLASH_LED_IO        (42)
 #define FLASH_LED_ON        (1)
 #define FLASH_LED_OFF       (0)
 
@@ -28,14 +28,14 @@ extern "C" {
 
 /* Battery monitoring pins and parameters */
 #define BATTERY_DET_IO      (14)
-#define BATTERY_POWER_IO    (3)//(46)
+#define BATTERY_POWER_IO    (42)//(46)
 #define BATTERY_POWER_ON    (1)
 #define BATTERY_POWER_OFF   (0)
 #define BATTERY_MIN_VOLTAGE (1800)  /* Minimum battery voltage in mV */
 #define BATTERY_MAX_VOLTAGE (3000)  /* Maximum battery voltage in mV */
 
 /* TF (TransFlash) card power control */
-#define TF_POWER_IO         (42)
+#define TF_POWER_IO         (48)
 #define TF_POWER_ON         (1)
 #define TF_POWER_OFF        (0)
 
@@ -54,12 +54,12 @@ extern "C" {
 #define TYPEC_REMOVE        (0)  /* Type-C removed */
 
 /* Camera power control */
-#define CAMERA_POWER_IO (3)
+#define CAMERA_POWER_IO (42)
 #define CAMERA_POWER_ON  (1)
 #define CAMERA_POWER_OFF (0)
 
 /* Sensor power and PWM control */
-#define SENSOR_POWER_IO (3)
+#define SENSOR_POWER_IO (42)
 #define PWM_IO          (47)      /* PWM output pin */
 #define PWM_FREQ        (20000)   /* PWM frequency in Hz */
 #define PWM_MIN_DUTY    (5)       /* Minimum PWM duty cycle */

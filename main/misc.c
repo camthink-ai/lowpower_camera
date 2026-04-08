@@ -602,7 +602,7 @@ static int misc_test(int argc, char **argv)
 }
 
 static esp_console_cmd_t g_cmd[] = {
-    {"misc", "misc [led/bat/light/pir] (cmd)", NULL, misc_test, NULL},
+    ESP_CONSOLE_CMD_INIT("misc", "misc [led/bat/light/pir] (cmd)", NULL, misc_test, NULL),
 };
 
 

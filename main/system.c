@@ -66,9 +66,10 @@ esp_err_t system_ntp_time(bool force_sync)
         ESP_LOGE(TAG, "Failed to obtain time");
         return ESP_FAIL;
     }
-    sys_now += retry;
-    record_time_sync(now, sys_now);
-    time_delta = (int)(now - sys_now);
+    
+    // Note: Don't sync to RTC immediately - camera may be using I2C bus
+    // RTC will be synced before deep sleep when I2C bus is free
+    
     ntp_sync_flag = 1;
     return ESP_OK;
 }

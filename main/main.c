@@ -38,6 +38,7 @@
 #include "cat1.h"
 #include "iot_mip.h"
 #include "net_module.h"
+#include "rtc_pcf8563.h"
 #include "morse.h"
 #include "utils.h"
 #include "storage.h"
@@ -212,7 +213,6 @@ static void print_system_info(void)
  */
 static modeSel_e handle_power_on_reset(void)
 {
-    comp_init();
     netModule_check();
     return MODE_SCHEDULE;
 }
@@ -343,7 +343,6 @@ static void common_init(void)
 {
     ESP_LOGI(TAG, "start main..");
     esp_register_shutdown_handler(crash_handler);
-    // time_compensation_boot();
     srand(esp_random());
 
     debug_open();
@@ -456,7 +455,9 @@ static esp_err_t init_queues_and_services(QueueHandle_t *xQueueMqtt, QueueHandle
     }
 
     // Initialize hardware and network module
-    misc_open((uint8_t*)&main_mode);
+    misc_open((uint8_t*)&main_mode);  // Turns on sensor power (GPIO3)
+    rtc_sync_to_system();
+    
     netModule_init(main_mode);
 
     // Create queues with error checking

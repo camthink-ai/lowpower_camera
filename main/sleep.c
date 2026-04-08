@@ -27,6 +27,7 @@
 #include "mqtt.h"
 #include "pir.h"
 #include "net_module.h"
+#include "rtc_pcf8563.h"
 #include "session_log.h"
 
 #define TAG "-->SLEEP"  // Logging tag
@@ -35,19 +36,7 @@
 #define uS_TO_S_FACTOR 1000000ULL          // Microseconds to seconds conversion
 
 
-#define MAX_HISTORY   5      // Keep last 5 error records
-#define WRITE_CFG_CNT 10    // Every 20 records are written to config.
-#define ALPHA 0.4f  // Error value smoothing factor (0-1), the larger the value, the higher the weight of recent data
-
-/* Time compensation controller structure
- * Maintains timing references and error history for drift compensation */
-typedef struct {
-    time_t real_prev;       // Last synchronized real time
-    float errors[MAX_HISTORY]; // Error rate history (circular buffer)
-    int err_index;         // Current index in error buffer
-    int err_count;         // Valid error records count
-    uint32_t total_count;         // Total records count
-} TimeCompensator;
+// Time compensation removed - using external PCF8563 RTC as time source
 /**
  * Sleep module state structure
  */
@@ -61,176 +50,11 @@ static RTC_DATA_ATTR time_t g_lastCapTime = 0;          // Timestamp of last cap
 static RTC_DATA_ATTR time_t g_lastUploadTime = 0;       // Timestamp of last upload
 static RTC_DATA_ATTR time_t g_lastScheduleTime = 0;      // Timestamp of last schedule
 static RTC_DATA_ATTR time_t g_willWakeupTime = 0;       // Timestamp of will wakeup
-static RTC_DATA_ATTR TimeCompensator g_TimeCompensator = {0};
 
 static mdSleep_t g_sleep = {0};  // Global sleep state
 
 /* Initialize compensation controller */
-void comp_init()
-{
-    int32_t err_rate;
-    g_TimeCompensator.real_prev = 0;
-    g_TimeCompensator.err_index = 0;
-    g_TimeCompensator.err_count = 0;
-    g_TimeCompensator.total_count = 0;
-    for(int i=0; i<MAX_HISTORY; i++) g_TimeCompensator.errors[i] = 0;
-
-    cfg_get_time_err_rate(&err_rate);
-    if(err_rate != 0){
-        g_TimeCompensator.err_count = 1;
-        g_TimeCompensator.errors[0] = err_rate / (float)(10000);
-        g_TimeCompensator.err_index = 1;
-        ESP_LOGI(TAG, "Default error rate: %.2f%%", g_TimeCompensator.errors[0]*100);
-    }
-}
-
-/* Calculate smoothed error rate using moving average
- * @return Weighted error rates */
-static float get_smoothed_error() 
-{
-    if(g_TimeCompensator.err_count == 0) {
-        ESP_LOGD(TAG, "No error history available");
-        return 0.0f;
-    }
-
-    float weighted_error = 0;
-    float total_weight = 0;
-    float weight = 1.0f;  // Initial weights for recent data
-    
-    // Calculate the weighted average from the newest to the oldest data
-    for(int i = 0; i < g_TimeCompensator.err_count; i++) {
-        int idx = (g_TimeCompensator.err_index - 1 - i + MAX_HISTORY) % MAX_HISTORY;
-        weighted_error += g_TimeCompensator.errors[idx] * weight;
-        total_weight += weight;
-        weight *= (1.0f - ALPHA);  // Gradually decay weight
-        
-        ESP_LOGD(TAG, "[%d] err=%.2f%% weight=%.2f", 
-                i, g_TimeCompensator.errors[idx]*100, weight);
-    }
-
-    float result = weighted_error / total_weight;
-    ESP_LOGI(TAG, "Weighted error: %.2f%% (α=%.1f, %d samples)", 
-            result*100, ALPHA, g_TimeCompensator.err_count);
-    return result;
-}
-
-/* Process time synchronization event
- * @param real_now Actual real time from reliable source
- * @param sys_now  Current system time */
-void record_time_sync(time_t real_now, time_t sys_now) 
-{
-    ESP_LOGI(TAG,"Sync event - real: %lld, sys: %lld", real_now, sys_now);
-    // Initial synchronization
-    if(g_TimeCompensator.real_prev == 0) {
-        g_TimeCompensator.real_prev = real_now;
-        return;
-    }
-
-    // Calculate time deltas
-    time_t delta_real = real_now - g_TimeCompensator.real_prev;
-    time_t delta_sys = sys_now - g_TimeCompensator.real_prev;
-    ESP_LOGI(TAG,"Time deltas - real: %lld, sys: %lld", delta_real, delta_sys);
-
-    // Handle abnormal cases (time rollback)
-    if(delta_sys <= 0 || delta_real < 0) {
-        g_TimeCompensator.err_count = 0;  // Reset error history
-        g_TimeCompensator.real_prev = real_now;
-        return;
-    }
-
-    // Calculate error rate: (real_delta - sys_delta)/sys_delta
-    float err_rate = (delta_real - delta_sys)/(float)delta_sys;
-    //If the error rate exceeds the threshold or the time delta is too small, the data will be discarded.
-    if( (delta_real < 300 || delta_sys < 300) || 
-        err_rate < -0.1f || err_rate > 0.1f){
-        g_TimeCompensator.real_prev = real_now;
-        return;
-    }
-    ESP_LOGI(TAG, "New error rate calculated: %.2f%%", err_rate*100);
-
-    // Update circular buffer
-    g_TimeCompensator.errors[g_TimeCompensator.err_index] = err_rate;
-    g_TimeCompensator.err_index = (g_TimeCompensator.err_index + 1) % MAX_HISTORY;
-    if(g_TimeCompensator.err_count < MAX_HISTORY) g_TimeCompensator.err_count++;
-
-    g_TimeCompensator.total_count++;
-    if((g_TimeCompensator.total_count % WRITE_CFG_CNT) == 0){
-        int32_t w_rate = (int32_t)(get_smoothed_error() * 10000);
-        cfg_set_time_err_rate(w_rate);
-        ESP_LOGI(TAG, "write cfg rate: %.2f%%", (float)(w_rate/100));
-    }
-    // Update time references
-    g_TimeCompensator.real_prev = real_now;
-}
-
-/**
- * @brief Calculate the time compensation value based on historical error
- * @param interval The nominal sleep interval in seconds
- * @return The calculated compensation value in seconds (positive means system is slow, negative means fast)
- */
-static int calculate_compensation(time_t interval)
-{
-    float err = get_smoothed_error();
-    
-    // When the sleep time is too long, manually compensate for the error to make the system wake up later.
-    if(interval > (5 * 3600)){
-        err -= 0.001f;
-    }
-    // Calculate raw compensation value (in seconds)
-    float compensation = interval * err;  // err = (real_delta - sys_delta)/sys_delta
-    
-    // Apply safety bounds (adjust these values as needed)
-    const float MAX_COMPENSATION = interval * 0.3f; // Limit to ±30% of interval
-    if (compensation > MAX_COMPENSATION) {
-        compensation = MAX_COMPENSATION;
-        ESP_LOGI(TAG, "Compensation clamped to +%.1fs (upper bound)", MAX_COMPENSATION);
-    } else if (compensation < -MAX_COMPENSATION) {
-        compensation = -MAX_COMPENSATION;
-        ESP_LOGI(TAG, "Compensation clamped to -%.1fs (lower bound)", MAX_COMPENSATION);
-    }
-
-    // Round to nearest second
-    int final_compensation = (int)(compensation + (compensation > 0 ? 0.5f : -0.5f));
-    
-
-    ESP_LOGI(TAG, "Compensation calc: nominal=%lld, err=%.3f%%, comp=%+.1fs (%+ds)", 
-             interval, err*100, compensation, final_compensation);
-    
-    return final_compensation;
-}
-
-/**
- * @brief Adjusts the system time at boot based on the predicted drift since the last recorded time.
- */
-void time_compensation_boot() 
-{
-    time_t now = time(NULL);
-
-    if(now <= g_TimeCompensator.real_prev || g_TimeCompensator.real_prev == 0)
-        return;
-
-    int predicted_drift = calculate_compensation(now - g_TimeCompensator.real_prev);
-    time_t adjusted_time = now + predicted_drift;
-
-    ESP_LOGI(TAG, "Boot time adjustment: sys=%lld, pred=%lld (drift=%ds)",
-                now, adjusted_time, predicted_drift);
-    
-    struct timeval tv = { .tv_sec = adjusted_time };
-    settimeofday(&tv, NULL);
-    ESP_LOGI(TAG, "System time adjusted by %+lld seconds",adjusted_time - now);
-
-}
-
-int time_compensation(time_t time_sec) 
-{
-    if(time_sec <= g_TimeCompensator.real_prev || g_TimeCompensator.real_prev == 0)
-        return 0;
-
-    int predicted_drift = calculate_compensation(time_sec - g_TimeCompensator.real_prev);
-
-    ESP_LOGI(TAG, "compensation drift=%ds", predicted_drift);
-    return predicted_drift;
-}
+// All time compensation functions removed - using PCF8563 RTC as accurate time source
 
 /**
  * Find the most recent time interval for scheduled wakeups
@@ -533,23 +357,33 @@ void sleep_start(void)
     time(&now);
     misc_show_time("now sleep at", now);
     
-    // Calculate and set timer wakeup
-    
+    // Calculate wakeup time
     int wakeup_time_sec = 0;
-    int calculate_sec;
 
     if (sleep_has_wakeup_todo()) {
         wakeup_time_sec = 1;
     } else {
         wakeup_time_sec = calc_wakeup_time_seconds(true);
     }
-    calculate_sec = calculate_compensation(wakeup_time_sec);
-    wakeup_time_sec -= calculate_sec;
+
     if (wakeup_time_sec > 0) {
-        esp_sleep_enable_timer_wakeup(wakeup_time_sec * uS_TO_S_FACTOR);
-        g_willWakeupTime = now + wakeup_time_sec + calculate_sec;
+    
+        // Use external RTC (PCF8563) for wakeup
+        time_t actual_wakeup_time = 0;
+        esp_err_t rtc_ret = rtc_set_alarm(wakeup_time_sec, &actual_wakeup_time);
+        
+        if (rtc_ret == ESP_OK) {
+            g_willWakeupTime = actual_wakeup_time;
+            ESP_LOGI(TAG, "Using RTC alarm (minute-precision)");
+        } else {
+            // Fallback to internal timer
+            g_willWakeupTime = now + wakeup_time_sec;
+            ESP_LOGW(TAG, "RTC alarm failed (%s), using internal timer", esp_err_to_name(rtc_ret));
+            esp_sleep_enable_timer_wakeup(wakeup_time_sec * uS_TO_S_FACTOR);
+            ESP_LOGI(TAG, "Enabling TIMER wakeup on %ds", wakeup_time_sec);
+        }
+        
         misc_show_time("wake will at", g_willWakeupTime);
-        ESP_LOGI(TAG, "Enabling TIMER wakeup on %ds", wakeup_time_sec);
     }
 
     // Configure button wakeup
@@ -558,23 +392,37 @@ void sleep_start(void)
     rtc_gpio_pulldown_dis(BTN_WAKEUP_PIN);
     esp_sleep_enable_ext0_wakeup(BTN_WAKEUP_PIN, BTN_WAKEUP_LEVEL);
 
-    // Get trigger mode from configuration (only if trigger capture is enabled)
+    // Configure EXT1 wakeup: always enable RTC INT pin (active low)
+    uint64_t ext1_mask = rtc_get_wakeup_mask();
+
+    // Configure RTC INT pin for deep sleep wakeup
+    if (ext1_mask != 0) {            
+        int int_gpio = __builtin_ffsll(ext1_mask) - 1;
+        gpio_num_t rtc_gpio = (gpio_num_t)int_gpio;
+        ESP_LOGI(TAG, "Configured RTC INT pin (GPIO%d) for EXT1 wakeup", int_gpio);
+        rtc_gpio_pullup_en(rtc_gpio);
+        rtc_gpio_pulldown_dis(rtc_gpio);
+        ext1_mask |= BIT64(rtc_gpio);            
+    }
+
     uint8_t trigger_mode = TRIGGER_MODE_DISABLED;
     if(capture.bAlarmInCap == true){
         cfg_get_trigger_mode(&trigger_mode);
         
         if(trigger_mode == TRIGGER_MODE_PIR){
             // PIR trigger mode
-            esp_sleep_enable_ext1_wakeup(BIT64(PIR_WAKEUP_PIN), PIR_IN_ACTIVE);
+            // PIR is active high, ALARMIN is disabled in this configuration.
+            // If PIR is used together with PCF8563, only PCF8563 will reliably wake from deep sleep.
             esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
             rtc_gpio_pullup_dis(PIR_WAKEUP_PIN);
             rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
             ESP_LOGI(TAG, "Enabling PIR wakeup on pin GPIO%d", PIR_WAKEUP_PIN);
         } else if(trigger_mode == TRIGGER_MODE_ALARM){
             // Alarm input trigger mode
+            // Combine external alarm input (active low) with PCF8563 INT pin
             rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
             rtc_gpio_pulldown_dis(ALARMIN_WAKEUP_PIN);
-            esp_sleep_enable_ext1_wakeup(BIT64(ALARMIN_WAKEUP_PIN), ALARMIN_WAKEUP_LEVEL);
+            ext1_mask |= BIT64(ALARMIN_WAKEUP_PIN);
             ESP_LOGI(TAG, "Enabling ALARM wakeup on pin GPIO%d", ALARMIN_WAKEUP_PIN);
         } else {
             // TRIGGER_MODE_DISABLED or invalid - no wakeup configured
@@ -584,6 +432,11 @@ void sleep_start(void)
         ESP_LOGI(TAG, "Trigger capture disabled, no external wakeup configured");
     }
 
+    if (ext1_mask != 0) {
+        // All wake sources on EXT1 are active low (PCF8563 INT and ALARM_IN)
+        ESP_LOGI(TAG, "Enabling EXT1 wakeup on mask 0x%016llx (ANY_LOW)", (unsigned long long)ext1_mask);
+        esp_sleep_enable_ext1_wakeup(ext1_mask, ESP_EXT1_WAKEUP_ANY_LOW);
+    }
     mqtt_stop();
     wifi_close();
     cat1_close();
@@ -610,7 +463,22 @@ wakeupType_e sleep_wakeup_case()
         }
         case ESP_SLEEP_WAKEUP_EXT1: {
             uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-            ESP_LOGI(TAG, "Alarm in Wake up from GPIO %d", __builtin_ffsll(wakeup_pin_mask) - 1);
+            
+            // Log wakeup status
+            if (wakeup_pin_mask == 0) {
+                ESP_LOGW(TAG, "Wake up from EXT1 but mask is 0 (GPIO detection failed)");
+            } else {
+                ESP_LOGI(TAG, "Wake up from EXT1 GPIO %d (mask: 0x%llx)", \
+                     __builtin_ffsll(wakeup_pin_mask) - 1, \
+                     (unsigned long long)wakeup_pin_mask);
+            }
+            // If wakeup from RTC INT pin, treat as timer wakeup
+            if (wakeup_pin_mask & rtc_get_wakeup_mask()) {
+                // Clear RTC alarm flag if wakeup from RTC
+                rtc_clear_alarm();
+                return WAKEUP_TIMER;
+            }
+            // other EXT1 sources (e.g. ALARM_IN)
             return WAKEUP_ALARMIN;
         }
         case ESP_SLEEP_WAKEUP_TIMER: {
@@ -860,8 +728,21 @@ uint32_t sleep_is_alramin_goto_restart()
 /**
  * Get will wakeup time
  * @return true if the time is reached, false otherwise
+ * 
+ * Note: For PCF8563 minute-precision alarms, we allow a tolerance of 60 seconds
+ * to account for time synchronization differences and prevent unnecessary re-sleep cycles.
  */
 bool sleep_is_will_wakeup_time_reached(void)
 {
-    return g_willWakeupTime <= time(NULL);
+    time_t now = time(NULL);
+    time_t diff = g_willWakeupTime - now;
+    
+    // Allow tolerance of 60 seconds for minute-precision alarms
+    // This prevents unnecessary re-sleep when PCF8563 triggers slightly early
+    // due to time sync differences or minute-level precision
+    if (diff <= 60 && diff >= -60) {
+        return true;  // Within tolerance, consider time reached
+    }
+    
+    return g_willWakeupTime <= now;
 }

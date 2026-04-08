@@ -130,7 +130,7 @@ typedef struct deviceInfo {
     char mac[MAX_LEN_32];
     char sn[MAX_LEN_32];
     char hardVersion[MAX_LEN_16];
-    char softVersion[MAX_LEN_16];
+    char softVersion[MAX_LEN_32];
     char model[MAX_LEN_16];
     char secretKey[MAX_LEN_16];
     char countryCode[MAX_LEN_3];

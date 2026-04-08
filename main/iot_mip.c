@@ -394,6 +394,8 @@ static void mip_timer_start()
     timer_started = true;
 }
 
+static void __attribute__((unused)) mip_task(void *param);
+
 static void mip_task(void *param)
 {
     ESP_LOGI(TAG, "mip_task");

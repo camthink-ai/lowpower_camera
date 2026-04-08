@@ -488,7 +488,7 @@ static int do_sendrate_cmd(int argc, char **argv)
 }
 
 static esp_console_cmd_t g_cmd[] = {
-    {"sendrate", "mqtt send success rate", NULL, do_sendrate_cmd, NULL},
+    ESP_CONSOLE_CMD_INIT("sendrate", "mqtt send success rate", NULL, do_sendrate_cmd, NULL),
 };
 
 void mqtt_open(QueueHandle_t in, QueueHandle_t out)

@@ -49,24 +49,7 @@ typedef enum wakeupTodo {
     WAKEUP_TODO_UPLOAD,        // Perform upload tasks
 } wakeupTodo_e;
 
-/* Initialize compensation controller */
-void comp_init();
-
-/* Process time synchronization event
- * @param real_now Actual real time from reliable source
- * @param sys_now  Current system time 
- */
-void record_time_sync(time_t real_now, time_t sys_now);
-
-/**
- * @brief Adjusts the system time at boot based on the predicted drift since the last recorded time.
- */
-void time_compensation_boot();
-
-/**
- * @brief Compensates the current time based on the synchronization time.
- */
-int time_compensation(time_t time_sec);
+// Time compensation functions removed - using PCF8563 RTC as accurate time source
 
 /**
  * Calculate next wakeup time in seconds
