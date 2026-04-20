@@ -41,6 +41,7 @@ typedef enum snapType {
     SNAP_TIMER = 'T',      ///< Timer-triggered snapshot
     SNAP_BUTTON = 'B',     ///< Button-triggered snapshot
     SNAP_ALARMIN = 'A',    ///< Alarm-triggered snapshot
+    SNAP_PIR = 'P',        ///< PIR-triggered snapshot
     SNAP_DEBUG = 'D',      ///< Debug-triggered snapshot
 } snapType_e;
 

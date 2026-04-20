@@ -35,6 +35,7 @@ typedef enum wakeupType {
     WAKEUP_UNDEFINED = 0,  // Unknown wakeup source
     WAKEUP_BUTTON,         // Button press wakeup
     WAKEUP_ALARMIN,        // Alarm input wakeup
+    WAKEUP_PIR,            // PIR wakeup
     WAKEUP_TIMER,          // Timer wakeup
 } wakeupType_e;
 

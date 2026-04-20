@@ -1425,3 +1425,23 @@ esp_err_t cfg_set_pir_attr(pirAttr_t *pir)
     mutex_unlock();
     return ESP_OK;
 }
+
+esp_err_t cfg_get_webhook_attr(webhookAttr_t *webhook)
+{
+    mutex_lock();
+    memset(webhook, 0, sizeof(webhookAttr_t));
+    get_str(g_userHandle, KEY_WEBHOOK_URL, webhook->url, sizeof(webhook->url), "");
+    get_str(g_userHandle, KEY_WEBHOOK_HEADER, webhook->header, sizeof(webhook->header), "");
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_set_webhook_attr(webhookAttr_t *webhook)
+{
+    mutex_lock();
+    set_str(g_userHandle, KEY_WEBHOOK_URL, webhook->url);
+    set_str(g_userHandle, KEY_WEBHOOK_HEADER, webhook->header);
+    commit_cfg(g_userHandle);
+    mutex_unlock();
+    return ESP_OK;
+}

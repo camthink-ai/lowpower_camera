@@ -25,6 +25,7 @@
 #include "cat1.h"
 #include "camera.h"
 #include "mqtt.h"
+#include "push.h"
 #include "pir.h"
 #include "net_module.h"
 #include "session_log.h"
@@ -584,7 +585,7 @@ void sleep_start(void)
         ESP_LOGI(TAG, "Trigger capture disabled, no external wakeup configured");
     }
 
-    mqtt_stop();
+    push_stop();
     wifi_close();
     cat1_close();
     

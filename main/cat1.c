@@ -1,5 +1,6 @@
 #include "cat1.h"
 #include "mqtt.h"
+#include "push.h"
 #include "system.h"
 
 #include <string.h>
@@ -105,7 +106,7 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base, int32_t event
         if(system_get_mode() != MODE_SCHEDULE){
             system_ntp_time(false);
         }
-        mqtt_start();
+        push_start();
     }
 }
 
@@ -151,7 +152,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
         if (iot_mip_autop_is_enable()) {
             iot_mip_autop_async_start(NULL);
         }
-        // mqtt_start();
+        // push_start();
         // if(system_get_mode() != MODE_SCHEDULE){
         //     system_ntp_time(false);
         // }
@@ -162,7 +163,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
         snprintf(g_cat1.status.ipv4Address, sizeof(g_cat1.status.ipv4Address), "%s", "0.0.0.0/0");
         snprintf(g_cat1.status.ipv4Gateway, sizeof(g_cat1.status.ipv4Gateway), "%s", "0.0.0.0");
         snprintf(g_cat1.status.ipv4Dns, sizeof(g_cat1.status.ipv4Dns), "%s", "0.0.0.0");
-        mqtt_stop();
+        push_stop();
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
@@ -493,7 +494,7 @@ static esp_err_t get_status(cellularStatusAttr_t *status)
     snprintf(status->lac, sizeof(status->lac), "%s", "-");
     snprintf(status->cellId, sizeof(status->cellId), "%s", "-");
     memset(atResp, 0, sizeof(atResp));
-    err = esp_modem_at(g_cat1.dce, "AT+CREG?", atResp, 500);
+    err = esp_modem_at_raw(g_cat1.dce, "AT+CREG?\r", atResp, "+CREG", "+CME ERROR", 500);
     ESP_LOGI(TAG, "AT+CREG?=>%s", atResp);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(AT+CREG?) failed with %d(%s)", err, atResp);
@@ -554,7 +555,7 @@ static esp_err_t get_status(cellularStatusAttr_t *status)
     // ICCID，{+QCCID: 89861121206083099081}
     snprintf(status->iccid, sizeof(status->iccid), "%s", "-");
     memset(atResp, 0, sizeof(atResp));
-    err = esp_modem_at(g_cat1.dce, "AT+QCCID", atResp, 500);
+    err = esp_modem_at_raw(g_cat1.dce, "AT+QCCID\r", atResp, "+QCCID", "+CME ERROR", 500);
     ESP_LOGI(TAG, "AT+QCCID=>%s", atResp);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(AT+QCCID) failed with %d(%s)", err, atResp);
@@ -604,7 +605,7 @@ static esp_err_t get_status(cellularStatusAttr_t *status)
     // {+QNWINFO: "FDD LTE","46011","LTE BAND 1",100}
     snprintf(status->networkType, sizeof(status->networkType), "%s", "-");
     memset(atResp, 0, sizeof(atResp));
-    err = esp_modem_at(g_cat1.dce, "AT+QNWINFO", atResp, 500);
+    err = esp_modem_at_raw(g_cat1.dce, "AT+QNWINFO\r", atResp, "+QNWINFO", "+CME ERROR", 500);
     ESP_LOGI(TAG, "AT+QNWINFO=>%s", atResp);
     if (err == ESP_OK && simCardReady) {
         char delimiters[] = ",\"";
@@ -1030,7 +1031,7 @@ void cat1_wait_open(void)
         ESP_LOGI(TAG, "Connected to PPP server");
     } else {
         ESP_LOGE(TAG, "Failed to connect to PPP server");
-        mqtt_stop();
+        push_stop();
     }
 
     // get_status(&g_cat1.status);
@@ -1057,7 +1058,7 @@ esp_err_t cat1_restart(void)
     snprintf(g_cat1.status.ipv4Dns, sizeof(g_cat1.status.ipv4Dns), "%s", "0.0.0.0");
 
     ESP_LOGI(TAG, "cat1_restart 1/3");
-    mqtt_stop();
+    push_stop();
     g_cat1.cat1_status = CAT1_STATUS_STOPED;
     esp_modem_destroy(g_cat1.dce);
     g_cat1.dce = NULL;

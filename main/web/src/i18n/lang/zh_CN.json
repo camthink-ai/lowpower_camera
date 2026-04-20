@@ -89,7 +89,12 @@
     "key": "密钥",
     "confirmClear": "确定要清除已选择的文件吗？",
     "needCaCert": "请先上传CA证书",
-    "needCertKeyPair": "客户端证书与私钥需成对上传"
+    "needCertKeyPair": "客户端证书与私钥需成对上传",
+    "pushMode": "推送模式",
+    "webhookUrl": "Webhook URL",
+    "webhookHeader": "自定义Header",
+    "webhookHeaderPlaceholder": "Authorization: Bearer token",
+    "webhookSave": "保存"
   },
   "sys": {
     "deviceMainte": "设备维护",

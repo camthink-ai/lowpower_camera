@@ -295,6 +295,7 @@ static esp_err_t csi_camera_init(void)
 
 static void csi_camera_deinit(void)
 {
+    esp_camera_deinit();
     // esp_camera_deinit() intentionally omitted if not provided in SDK
 }
 
@@ -554,6 +555,10 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
     }
     if (type == SNAP_ALARMIN && capture.bAlarmInCap == false) {
         ESP_LOGI(TAG, "snapshot fail, alarmIn is disabled");
+        return ESP_FAIL;
+    }
+    if (type == SNAP_PIR && capture.bAlarmInCap == false) {
+        ESP_LOGI(TAG, "snapshot fail, PIR is disabled");
         return ESP_FAIL;
     }
     // lightAttr_t light;

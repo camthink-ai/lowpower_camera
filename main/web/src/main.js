@@ -8,6 +8,7 @@ import { timeZoneOptions } from './utils';
 import Image from './view/image';
 import Capture from './view/capture';
 import Mqtt from './view/mqtt';
+import Webhook from './view/webhook';
 import Device from './view/device';
 import Wlan from './view/wlan';
 import Cellular from './view/cellular';
@@ -51,6 +52,10 @@ const App = {
         await this.getCaptureInfo(); // This will also call getTriggerInfo internally
         await this.getUploadInfo();
         await this.getDataReport();
+        await this.getPushModeInfo();
+        if (this.pushMode === 1) {
+            await this.getWebhookInfo();
+        }
         if (this.netmod === 'cat1') {
             await this.getCellularInfo();
         } else {
@@ -146,6 +151,7 @@ const App = {
     ...Image(),
     ...Capture(),
     ...Mqtt(),
+    ...Webhook(),
     ...Device(),
     ...Wlan(),
     ...Cellular(),

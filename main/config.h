@@ -120,6 +120,9 @@ extern "C" {
 #define KEY_PIR_BLIND       "pir:blind"
 #define KEY_PIR_PULSE       "pir:pulse"
 #define KEY_PIR_WINDOW      "pir:window"
+#define KEY_PUSH_MODE       "push:mode"     // 0=MQTT (default), 1=Webhook
+#define KEY_WEBHOOK_URL     "whk:url"
+#define KEY_WEBHOOK_HEADER  "whk:header"    // Full "Key: Value" string
 
 
 /**
@@ -130,7 +133,7 @@ typedef struct deviceInfo {
     char mac[MAX_LEN_32];
     char sn[MAX_LEN_32];
     char hardVersion[MAX_LEN_16];
-    char softVersion[MAX_LEN_16];
+    char softVersion[MAX_LEN_32];
     char model[MAX_LEN_16];
     char secretKey[MAX_LEN_16];
     char countryCode[MAX_LEN_3];
@@ -365,6 +368,14 @@ typedef struct pirAttr {
     uint8_t window; // [1:0] Window time (0-3), time = value * 2s + 2s
 } pirAttr_t;
 
+/**
+ * Webhook push attributes structure
+ */
+typedef struct webhookAttr {
+    char url[MAX_LEN_256];       // Webhook endpoint URL
+    char header[MAX_LEN_256];    // Custom header, e.g. "Authorization: Bearer xxx"
+} webhookAttr_t;
+
 esp_err_t cfg_init(void);
 esp_err_t cfg_deinit();
 void cfg_dump();
@@ -419,6 +430,8 @@ esp_err_t cfg_get_trigger_mode(uint8_t *mode);
 esp_err_t cfg_set_trigger_mode(uint8_t mode);
 esp_err_t cfg_get_pir_attr(pirAttr_t *pir);
 esp_err_t cfg_set_pir_attr(pirAttr_t *pir);
+esp_err_t cfg_get_webhook_attr(webhookAttr_t *webhook);
+esp_err_t cfg_set_webhook_attr(webhookAttr_t *webhook);
 
 #ifdef __cplusplus
 }

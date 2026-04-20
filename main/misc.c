@@ -413,9 +413,9 @@ uint8_t  misc_get_battery_voltage_rate()
     uint8_t rate = 0;
 
     voltage_mv = misc_get_battery_voltage() / 2;
-    if (voltage_mv < BATTERY_MIN_VOLTAGE) {
-        // maybe typec inserted
-        rate = 1;
+    if (voltage_mv <= BATTERY_MIN_VOLTAGE) {
+        // voltage_mv < 1000  maybe typec inserted
+        rate = voltage_mv < 1000 ? 0 : 1;
     } else {
         voltage_mv = MIN(MAX(voltage_mv, BATTERY_MIN_VOLTAGE), BATTERY_MAX_VOLTAGE);
         rate = (uint8_t)((voltage_mv - BATTERY_MIN_VOLTAGE) * 100 / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE));
@@ -602,7 +602,7 @@ static int misc_test(int argc, char **argv)
 }
 
 static esp_console_cmd_t g_cmd[] = {
-    {"misc", "misc [led/bat/light/pir] (cmd)", NULL, misc_test, NULL},
+    ESP_CONSOLE_CMD_INIT("misc", "misc [led/bat/light/pir] (cmd)", NULL, misc_test, NULL),
 };
 
 

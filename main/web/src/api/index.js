@@ -131,6 +131,12 @@ const URL = {
     deleteMQTTCert: baseUrl + "/network/deleteMqttCert",
     deleteMQTTKey: baseUrl + "/network/deleteMqttKey",
 
+    // Webhook
+    getWebhookParam: baseUrl + "/network/getWebhookParam",
+    setWebhookParam: baseUrl + "/network/setWebhookParam",
+    getPushMode: baseUrl + "/network/getPushMode",
+    setPushMode: baseUrl + "/network/setPushMode",
+
 };
 
 export { getData, postData, postFile, postFileBuffer, URL, postMqttFile };
