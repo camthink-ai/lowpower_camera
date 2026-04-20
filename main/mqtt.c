@@ -22,14 +22,14 @@
 #include "debug.h"
 #include "utils.h"
 #include "iot_mip.h"
+#include "push.h"
 
 // Event bit definitions for MQTT state tracking
 #define MQTT_START_BIT BIT(0)          // Client started
-#define MQTT_STOP_BIT BIT(1)           // Client stopped  
+#define MQTT_STOP_BIT BIT(1)           // Client stopped
 #define MQTT_CONNECT_BIT BIT(2)        // Connected to broker
 #define MQTT_DISCONNECT_BIT BIT(3)     // Disconnected from broker
 #define MQTT_PUBLISHED_BIT BIT(4)      // Message published
-#define MQTT_TASK_STOP_BIT BIT(5)      // Task should stop
 
 // Timeout constants (milliseconds)
 #define MQTT_START_TIMEOUT_MS (1000)           // Start timeout
@@ -39,8 +39,7 @@
 #define MQTT_PUBLISHED_TIMEOUT_MS (20000)      // Publish timeout
 
 // Buffer sizes
-#define MQTT_SEND_BUFFER_SIZE  (1536000)  // Send buffer size
-#define MQTT_RECV_BUFFER_SIZE 8192       // Receive buffer size
+#define MQTT_RECV_BUFFER_SIZE 8192       // Receive buffer size (used by MIP)
 
 #define TAG "-->MQTT"  // Logging tag
 
@@ -60,19 +59,16 @@ typedef struct mdMqtt {
     EventGroupHandle_t eventGroup;     // Event group for state tracking
     mqttAttr_t mqtt;                   // MQTT configuration
     void *client;                      // MQTT client handle
-    QueueHandle_t in;                  // Input queue for messages to send
-    QueueHandle_t out;                 // Output queue for failed messages
     bool isConnected;                  // Connection status
     SemaphoreHandle_t mutex;           // Mutex for thread safety
     void *sendBuf;                     // Send buffer
-    void *recvBuf;                     // Receive buffer
+    void *recvBuf;                     // Receive buffer (used by MIP)
     size_t sendBufSize;                // Send buffer size
     int8_t cfg_set_flag;               // Configuration flag
     subscribe_t sub;                   // Subscription info
     connect_status_cb status_cb;       // Connection status callback
     mqtt_t *mip;                       // MIP configuration
     esp_mqtt_client_config_t cfg;      // ESP MQTT client config
-    bool isOpen;                        // MQTT client opened flag
 } mdMqtt_t;
 
 static RTC_DATA_ATTR int g_sned_total = 0;
@@ -106,6 +102,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event, void *hand
                 xEventGroupClearBits(mqtt->eventGroup, MQTT_DISCONNECT_BIT);
                 xEventGroupSetBits(mqtt->eventGroup, MQTT_CONNECT_BIT);
                 storage_upload_start();
+                push_ready();
             }
             break;
         case MQTT_EVENT_DISCONNECTED:
@@ -128,6 +125,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event, void *hand
                 xEventGroupClearBits(mqtt->eventGroup, MQTT_DISCONNECT_BIT);
                 xEventGroupSetBits(mqtt->eventGroup, MQTT_CONNECT_BIT);
                 storage_upload_start();
+                push_ready();
             }
             break;
         case MQTT_EVENT_UNSUBSCRIBED:
@@ -179,24 +177,27 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 
 /**
- * Send message as JSON payload
- * @param mqtt MQTT state
- * @param node Queue node containing message data
- * @return ESP_OK on success, ESP_FAIL on error
+ * Build JSON payload string from a queueNode_t.
+ * Uses internal send buffer for base64 encoding.
+ * Caller must free the returned string with cJSON_free()
+ * @param node Queue node containing image data
+ * @return Allocated JSON string, or NULL on failure
  */
-static esp_err_t mqtt_send_by_json(mdMqtt_t *mqtt, queueNode_t *node)
+char *push_build_json_payload(queueNode_t *node)
 {
     esp_err_t res = ESP_OK;
     size_t picSize;
     deviceInfo_t device;
     char *snapType = NULL;
-    char *str = NULL;
-    char time[32];
+    char time_str[32];
     char header[] = "data:image/jpeg;base64,";
 
     switch (node->type) {
         case SNAP_ALARMIN:
             snapType = "Alarm in";
+            break;
+        case SNAP_PIR:
+            snapType = "PIR";
             break;
         case SNAP_BUTTON:
             snapType = "Button";
@@ -208,33 +209,29 @@ static esp_err_t mqtt_send_by_json(mdMqtt_t *mqtt, queueNode_t *node)
             snapType = "Unknown";
             break;
     }
-    memcpy((char *)mqtt->sendBuf, header, strlen(header));
-    // Calculate available buffer size after header (must subtract, not add)
+
+    memcpy((char *)g_MQ.sendBuf, header, strlen(header));
     size_t header_len = strlen(header);
-    size_t available_size = mqtt->sendBufSize - header_len;
-    
-    // Check if buffer is large enough for base64 encoding (base64 is ~4/3 of original size)
+    size_t available_size = g_MQ.sendBufSize - header_len;
+
     size_t required_size = ((node->len + 2) / 3) * 4;
     if (required_size > available_size) {
-        ESP_LOGE(TAG, "Buffer too small: required=%zu, available=%zu, header_len=%zu, node_len=%zu", 
-                 required_size, available_size, header_len, node->len);
-        return ESP_FAIL;
+        ESP_LOGE(TAG, "Buffer too small: required=%zu, available=%zu", required_size, available_size);
+        return NULL;
     }
-    
-    res = esp_crypto_base64_encode(mqtt->sendBuf + header_len, available_size, 
-                                   &picSize, node->data, node->len);
+
+    res = esp_crypto_base64_encode(g_MQ.sendBuf + header_len, available_size, &picSize, node->data, node->len);
     if (res < 0) {
-        ESP_LOGE(TAG, "esp_crypto_base64_encode failed: res=%d, node_len=%zu, available_size=%zu", 
-                 res, node->len, available_size);
-        return ESP_FAIL;
+        ESP_LOGE(TAG, "base64_encode failed");
+        return NULL;
     }
+
     cfg_get_device_info(&device);
     time_t t = node->pts / 1000;
-    strftime(time, sizeof(time), "%Y-%m-%d %H:%M:%S", localtime(&t));
-    /* create Student JSON object */
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", localtime(&t));
+
     cJSON *json = cJSON_CreateObject();
     cJSON *subJson = cJSON_CreateObject();
-    /* serialize data to JSON object. */
     cJSON_AddStringToObject(subJson, "devName", device.name);
     cJSON_AddStringToObject(subJson, "devMac", device.mac);
     cJSON_AddStringToObject(subJson, "devSn", device.sn);
@@ -243,119 +240,60 @@ static esp_err_t mqtt_send_by_json(mdMqtt_t *mqtt, queueNode_t *node)
     cJSON_AddNumberToObject(subJson, "battery", misc_get_battery_voltage_rate());
     cJSON_AddNumberToObject(subJson, "batteryVoltage", misc_get_battery_voltage());
     cJSON_AddStringToObject(subJson, "snapType", snapType);
-    cJSON_AddStringToObject(subJson, "localtime", time);
+    cJSON_AddStringToObject(subJson, "localtime", time_str);
     cJSON_AddNumberToObject(subJson, "imageSize", picSize + strlen(header));
-    cJSON_AddStringToObject(subJson, "image", mqtt->sendBuf);
+    cJSON_AddStringToObject(subJson, "image", (char *)g_MQ.sendBuf);
     cJSON_AddNumberToObject(json, "ts", node->pts);
     cJSON_AddItemToObject(json, "values", subJson);
-    str = cJSON_PrintUnformatted(json);
-    // ESP_LOGI(TAG, "mqtt_send_by_json: topic=%s, qos=%d", mqtt->mqtt.topic, mqtt->mqtt.qos);
+
+    char *str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    return str;
+}
+
+/**
+ * Publish a queueNode_t as JSON via MQTT
+ * @param node Queue node containing image data
+ * @return ESP_OK on success, ESP_FAIL on error
+ */
+esp_err_t mqtt_publish_node(queueNode_t *node)
+{
+    if (!g_MQ.isConnected) {
+        return ESP_FAIL;
+    }
+
+    char *json_str = push_build_json_payload(node);
+    if (json_str == NULL) {
+        return ESP_FAIL;
+    }
+
+    esp_err_t res;
     if (iot_mip_dm_is_enable()) {
-        res = iot_mip_dm_uplink_picture(str);
+        res = iot_mip_dm_uplink_picture(json_str);
     } else {
-        res = esp_mqtt_client_publish(mqtt->client, mqtt->mqtt.topic, str, 0, mqtt->mqtt.qos, 0);
-        if (mqtt->mqtt.qos == 0) {
+        mqttAttr_t mqtt;
+        cfg_get_mqtt_attr(&mqtt);
+        res = esp_mqtt_client_publish(g_MQ.client, mqtt.topic, json_str, 0, mqtt.qos, 0);
+        if (mqtt.qos == 0) {
             vTaskDelay(pdMS_TO_TICKS(500));
         }
     }
-    cJSON_Delete(json); // delete the cJSON object with all its sub-objects(sub-json)
-    cJSON_free(str);
-    return res;
-}
+    cJSON_free(json_str);
 
-/**
- * Publish message to MQTT broker
- * @param mqtt MQTT state
- * @param node Queue node containing message data
- * @return ESP_OK on success, ESP_FAIL on error
- */
-static esp_err_t mqtt_publish(mdMqtt_t *mqtt, queueNode_t *node)
-{
-    EventBits_t uxBits;
-    if (mqtt->isConnected) {
-        if (mqtt_send_by_json(mqtt, node) < 0) {
-            return ESP_FAIL;
-        }
-        if (mqtt->mqtt.qos == 0 || mqtt->mip != NULL) { // mqtt qos 0 or mip http upload to cloud platform does not need async wait;
-            return ESP_OK;
-        }
-    } else {
+    if (res < 0) {
         return ESP_FAIL;
     }
-    uxBits = xEventGroupWaitBits(g_MQ.eventGroup, MQTT_PUBLISHED_BIT, true, true, pdMS_TO_TICKS(MQTT_PUBLISHED_TIMEOUT_MS));
-    if (uxBits & MQTT_PUBLISHED_BIT) {
+
+    // For QoS > 0 and non-MIP, wait for publish ACK
+    mqttAttr_t mqtt;
+    cfg_get_mqtt_attr(&mqtt);
+    if (mqtt.qos == 0 || iot_mip_dm_is_enable()) {
         return ESP_OK;
-    } else {
-        return ESP_FAIL;
     }
-}
 
-/**
- * MQTT task that processes messages from input queue
- * @param self Pointer to MQTT state
- */
-static void task(mdMqtt_t *self)
-{
-    xEventGroupWaitBits(self->eventGroup, MQTT_CONNECT_BIT | MQTT_TASK_STOP_BIT, true, false,
-                        pdMS_TO_TICKS(MQTT_CONNECT_TIMEOUT_MS));
-
-    ESP_LOGI(TAG, "queue receive task running");
-    while (true) {
-        queueNode_t *node;
-        if (xQueueReceive(self->in, &node, portMAX_DELAY)) {
-            // time_t now, next_snapshot_time;
-            // time(&now);
-            // next_snapshot_time = now + calc_next_snapshot_time();
-            // // If the timestamp of the image is greater than the next system wake-up time discard the image.
-            // if (node->type == SNAP_TIMER &&
-            //     ((node->pts / 1000) > next_snapshot_time + CAPTURE_ERROR_THRESHOLD_S)) {
-            //     misc_show_time("Next snapshot time is:", next_snapshot_time);
-            //     misc_show_time("Discard the image pts is:", node->pts / 1000);
-            //     node->free_handler(node, EVENT_OK);
-            //     continue;
-            // }
-            // Correct the timestamp of the captured image according to the actual time.
-            if (node->from == FROM_CAMERA && node->ntp_sync_flag == 0) {
-                node->pts = node->pts + (system_get_time_delta() * 1000);
-                node->ntp_sync_flag = system_get_ntp_sync_flag();
-            }
-            // Check upload configuration and system mode to decide upload behavior
-            uploadAttr_t upload;
-            cfg_get_upload_attr(&upload);
-            modeSel_e currentMode = system_get_mode();
-            
-            if (upload.uploadMode == 0 || currentMode == MODE_UPLOAD) { //
-                // Instant upload mode, or upload mode - attempt immediate upload
-                ESP_LOGI(TAG, "PUSH ... (mode: %d, uploadMode: %d)", currentMode, upload.uploadMode);
-                if (mqtt_publish(self, node) != ESP_OK) {
-                    if (self->out) {
-                        ESP_LOGI(TAG, "PUSH FAIL, Save to flash");
-                        xQueueSend(self->out, &node, portMAX_DELAY);
-                    } else {
-                        // No storage queue available, free the node  
-                        ESP_LOGW(TAG, "PUSH FAIL, No storage queue available");
-                        node->free_handler(node, EVENT_FAIL);
-                    }
-                } else {
-                    ESP_LOGI(TAG, "PUSH SUCCESS");
-                    node->free_handler(node, EVENT_OK);
-                    g_sned_success += 1;
-                }
-            } else { // Scheduled upload mode
-                ESP_LOGI(TAG, "PUSH SKIP (mode: %d, uploadMode: %d)", currentMode, upload.uploadMode);
-                if (self->out) {
-                    xQueueSend(self->out, &node, portMAX_DELAY);
-                } else {
-                    // No storage queue available, free the node
-                    ESP_LOGW(TAG, "No storage queue available for scheduled upload");
-                    node->free_handler(node, EVENT_FAIL);
-                }
-            }
-            g_sned_total += 1;
-        }
-    }
-    ESP_LOGI(TAG, "Stop");
-    vTaskDelete(NULL);
+    EventBits_t uxBits = xEventGroupWaitBits(g_MQ.eventGroup, MQTT_PUBLISHED_BIT, true, true,
+                                              pdMS_TO_TICKS(MQTT_PUBLISHED_TIMEOUT_MS));
+    return (uxBits & MQTT_PUBLISHED_BIT) ? ESP_OK : ESP_FAIL;
 }
 
 /**
@@ -491,28 +429,19 @@ static esp_console_cmd_t g_cmd[] = {
     ESP_CONSOLE_CMD_INIT("sendrate", "mqtt send success rate", NULL, do_sendrate_cmd, NULL),
 };
 
-void mqtt_open(QueueHandle_t in, QueueHandle_t out)
+void mqtt_open(void)
 {
     memset(&g_MQ, 0, sizeof(mdMqtt_t));
-    g_MQ.in = in;
-    g_MQ.out = out;
     g_MQ.eventGroup = xEventGroupCreate();
     g_MQ.mutex = xSemaphoreCreateMutex();
-    g_MQ.sendBuf = malloc(MQTT_SEND_BUFFER_SIZE);
+    g_MQ.sendBuf = malloc(PUSH_SEND_BUFFER_SIZE);
     assert(g_MQ.sendBuf);
-    g_MQ.sendBufSize = MQTT_SEND_BUFFER_SIZE;
-    xEventGroupClearBits(g_MQ.eventGroup, MQTT_TASK_STOP_BIT);
-    xTaskCreatePinnedToCore((TaskFunction_t)task, TAG, 8 * 1024, &g_MQ, 4, NULL, 1);
+    g_MQ.sendBufSize = PUSH_SEND_BUFFER_SIZE;
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
-    g_MQ.isOpen = true;
 }
 
 void mqtt_start()
 {
-    if (!g_MQ.isOpen) {
-        return;
-    }
-
     if (g_MQ.isConnected) {
         return;
     }
@@ -527,18 +456,12 @@ void mqtt_start()
 
 void mqtt_stop()
 {
-    if (!g_MQ.isOpen) {
-        return;
-    }
-    xEventGroupSetBits(g_MQ.eventGroup, MQTT_TASK_STOP_BIT);
-    xSemaphoreTake(g_MQ.mutex, portMAX_DELAY);
     if (iot_mip_dm_is_enable()) {
         iot_mip_dm_stop();
     } else {
         mqtt_esp_stop(&g_MQ);
     }
     g_MQ.isConnected = false;
-    xSemaphoreGive(g_MQ.mutex);
     ESP_LOGI(TAG, "esp_mqtt_client_stop");
 }
 
@@ -554,15 +477,6 @@ void mqtt_close(void)
         free(g_MQ.sendBuf);
         g_MQ.sendBuf = NULL;
     }
-    if (g_MQ.eventGroup) {
-        vEventGroupDelete(g_MQ.eventGroup);
-        g_MQ.eventGroup = NULL;
-    }
-    if (g_MQ.mutex) {
-        vSemaphoreDelete(g_MQ.mutex);
-        g_MQ.mutex = NULL;
-    }
-
 }
 
 //---------------------------------mqtt mip---------------------------------

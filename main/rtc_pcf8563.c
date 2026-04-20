@@ -26,8 +26,6 @@
 #include <string.h>
 #include <sys/time.h>
 #include <inttypes.h>
-#include "driver/i2c.h"
-#include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -59,20 +57,6 @@
 
 // Alarm enable (AE) bit in alarm registers (bit7)
 #define BIT_AE                  (1 << 7)
-
-// INT pin used for wakeup
-#define PCF8563_INT_GPIO        GPIO_NUM_3
-
-// I2C bus configuration (shared with camera)
-#if CONFIG_SCCB_HARDWARE_I2C_PORT1
-    #define PCF8563_I2C_PORT    I2C_NUM_1
-#else
-    #define PCF8563_I2C_PORT    I2C_NUM_0
-#endif
-
-#define PCF8563_I2C_SDA         GPIO_NUM_4
-#define PCF8563_I2C_SCL         GPIO_NUM_5
-#define PCF8563_I2C_FREQ_HZ     100000      // 100kHz for PCF8563
 
 static bool g_is_initialized = false;
 
@@ -342,7 +326,7 @@ static esp_err_t pcf8563_init(void)
     }
 
     ESP_LOGI(TAG, "RTC initialized (I2C port %d, SDA=%d, SCL=%d, INT=%d)",
-             PCF8563_I2C_PORT, PCF8563_I2C_SDA, PCF8563_I2C_SCL, PCF8563_INT_GPIO);
+             PCF8563_I2C_PORT, PCF8563_I2C_SDA, PCF8563_I2C_SCL, PCF8563_INT_PIN);
     g_is_initialized = true;
 
     return ESP_OK;
@@ -569,5 +553,5 @@ void rtc_clear_alarm(void)
 
 uint64_t rtc_get_wakeup_mask(void)
 {
-    return (1ULL << PCF8563_INT_GPIO);
+    return (1ULL << PCF8563_INT_PIN);
 }

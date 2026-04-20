@@ -13,6 +13,7 @@
 #include "http.h"
 #include "wifi.h"
 #include "mqtt.h"
+#include "push.h"
 #include "sleep.h"
 #include "ota.h"
 #include "misc.h"
@@ -800,7 +801,7 @@ esp_err_t set_mqtt_param_handle(httpd_req_t *req)
         s2j_delete_json_obj(json);
         http_free_content(content);
         if (wifi_sta_is_connected() || netModule_is_cat1()) {
-            mqtt_restart();
+            push_restart();
         }
         return ESP_OK;
     }
@@ -899,7 +900,7 @@ esp_err_t set_platform_param_handle(httpd_req_t *req)
         s2j_delete_json_obj(json);
         http_free_content(content);
         if (wifi_sta_is_connected() || netModule_is_cat1()) {
-            mqtt_restart();
+            push_restart();
         }
         return ESP_OK;
     }
@@ -951,9 +952,9 @@ esp_err_t set_iot_param_handle(httpd_req_t *req)
             iot_mip_autop_enable(iot->autop_enable);
         }
         if (last_dm_enable != iot->dm_enable) {
-            mqtt_stop();
+            push_stop();
             iot_mip_dm_enable(iot->dm_enable);
-            mqtt_start();
+            push_start();
         }
         s2j_delete_struct_obj(iot);
         s2j_delete_json_obj(json);
@@ -1626,6 +1627,92 @@ static esp_err_t get_jpeg_stream_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t get_webhook_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    webhookAttr_t webhook;
+    clear_timeout();
+
+    httpd_resp_set_type(req, "application/json");
+    cfg_get_webhook_attr(&webhook);
+
+    s2j_create_json_obj(json_obj);
+    s2j_json_set_basic_element(json_obj, &webhook, string, url);
+    s2j_json_set_basic_element(json_obj, &webhook, string, header);
+    char *str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+    return ESP_OK;
+}
+
+esp_err_t set_webhook_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        s2j_create_struct_obj(webhook, webhookAttr_t);
+        cJSON *json = cJSON_Parse(content);
+        cfg_get_webhook_attr(webhook);
+        s2j_struct_get_basic_element(webhook, json, string, url);
+        s2j_struct_get_basic_element(webhook, json, string, header);
+        http_send_json_response(req, RES_OK);
+        cfg_set_webhook_attr(webhook);
+        s2j_delete_struct_obj(webhook);
+        s2j_delete_json_obj(json);
+        http_free_content(content);
+        if (wifi_sta_is_connected() || netModule_is_cat1()) {
+            push_restart();
+        }
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t get_push_mode_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    httpd_resp_set_type(req, "application/json");
+
+    uint8_t mode = 0;
+    cfg_get_u8(KEY_PUSH_MODE, &mode, 0);
+
+    cJSON *json_obj = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json_obj, "mode", mode);
+    char *str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    cJSON_Delete(json_obj);
+    return ESP_OK;
+}
+
+esp_err_t set_push_mode_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        cJSON *json = cJSON_Parse(content);
+        cJSON *mode_item = cJSON_GetObjectItem(json, "mode");
+        if (mode_item && cJSON_IsNumber(mode_item)) {
+            uint8_t mode = (uint8_t)mode_item->valueint;
+            cfg_set_u8(KEY_PUSH_MODE, mode);
+            http_send_json_response(req, RES_OK);
+        } else {
+            http_send_json_response(req, RES_FAIL);
+        }
+        cJSON_Delete(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
 static const httpd_uri_t g_webHandlers[] = {
     {
         .uri = "/",
@@ -1847,6 +1934,26 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/network/deleteMqttKey",
         .method = HTTP_POST,
         .handler = delete_mqtt_key_handle,
+    },
+    {
+        .uri = "/api/v1/network/getWebhookParam",
+        .method = HTTP_GET,
+        .handler = get_webhook_param_handle,
+    },
+    {
+        .uri = "/api/v1/network/setWebhookParam",
+        .method = HTTP_POST,
+        .handler = set_webhook_param_handle,
+    },
+    {
+        .uri = "/api/v1/network/getPushMode",
+        .method = HTTP_GET,
+        .handler = get_push_mode_handle,
+    },
+    {
+        .uri = "/api/v1/network/setPushMode",
+        .method = HTTP_POST,
+        .handler = set_push_mode_handle,
     },
 };
 

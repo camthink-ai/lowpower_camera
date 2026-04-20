@@ -25,6 +25,7 @@
 #include "cat1.h"
 #include "camera.h"
 #include "mqtt.h"
+#include "push.h"
 #include "pir.h"
 #include "net_module.h"
 #include "rtc_pcf8563.h"
@@ -385,26 +386,20 @@ void sleep_start(void)
         
         misc_show_time("wake will at", g_willWakeupTime);
     }
+    // Configure EXT1 wakeup: always enable RTC INT pin (active low)
+    uint64_t ext1_mask = 0;
+    // Configure RTC INT pin for deep sleep wakeup
+    ESP_LOGI(TAG, "Configured RTC INT pin (GPIO%d) for EXT1 wakeup", PCF8563_INT_PIN);
+    rtc_gpio_pullup_en(PCF8563_INT_PIN);
+    rtc_gpio_pulldown_dis(PCF8563_INT_PIN);
+    ext1_mask |= BIT64(PCF8563_INT_PIN);
 
     // Configure button wakeup
-    ESP_LOGI(TAG, "Enabling EXT0 wakeup on pin GPIO%d", BTN_WAKEUP_PIN);
+    ESP_LOGI(TAG, "Configured BTN INT pin (GPIO%d) for EXT1 wakeup", BTN_WAKEUP_PIN);
     rtc_gpio_pullup_en(BTN_WAKEUP_PIN);
     rtc_gpio_pulldown_dis(BTN_WAKEUP_PIN);
-    esp_sleep_enable_ext0_wakeup(BTN_WAKEUP_PIN, BTN_WAKEUP_LEVEL);
-
-    // Configure EXT1 wakeup: always enable RTC INT pin (active low)
-    uint64_t ext1_mask = rtc_get_wakeup_mask();
-
-    // Configure RTC INT pin for deep sleep wakeup
-    if (ext1_mask != 0) {            
-        int int_gpio = __builtin_ffsll(ext1_mask) - 1;
-        gpio_num_t rtc_gpio = (gpio_num_t)int_gpio;
-        ESP_LOGI(TAG, "Configured RTC INT pin (GPIO%d) for EXT1 wakeup", int_gpio);
-        rtc_gpio_pullup_en(rtc_gpio);
-        rtc_gpio_pulldown_dis(rtc_gpio);
-        ext1_mask |= BIT64(rtc_gpio);            
-    }
-
+    ext1_mask |= BIT64(BTN_WAKEUP_PIN);
+    
     uint8_t trigger_mode = TRIGGER_MODE_DISABLED;
     if(capture.bAlarmInCap == true){
         cfg_get_trigger_mode(&trigger_mode);
@@ -416,14 +411,15 @@ void sleep_start(void)
             esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
             rtc_gpio_pullup_dis(PIR_WAKEUP_PIN);
             rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
-            ESP_LOGI(TAG, "Enabling PIR wakeup on pin GPIO%d", PIR_WAKEUP_PIN);
+            esp_sleep_enable_ext0_wakeup(PIR_WAKEUP_PIN, PIR_WAKEUP_LEVEL);
+            ESP_LOGI(TAG, "Configured PIR INT pin (GPIO%d) for EXT0 wakeup", PIR_WAKEUP_PIN);
         } else if(trigger_mode == TRIGGER_MODE_ALARM){
             // Alarm input trigger mode
             // Combine external alarm input (active low) with PCF8563 INT pin
             rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
             rtc_gpio_pulldown_dis(ALARMIN_WAKEUP_PIN);
             ext1_mask |= BIT64(ALARMIN_WAKEUP_PIN);
-            ESP_LOGI(TAG, "Enabling ALARM wakeup on pin GPIO%d", ALARMIN_WAKEUP_PIN);
+            ESP_LOGI(TAG, "Configured ALARM INT pin (GPIO%d) for EXT1 wakeup", ALARMIN_WAKEUP_PIN);
         } else {
             // TRIGGER_MODE_DISABLED or invalid - no wakeup configured
             ESP_LOGI(TAG, "Trigger mode disabled or invalid, no external wakeup configured");
@@ -437,7 +433,7 @@ void sleep_start(void)
         ESP_LOGI(TAG, "Enabling EXT1 wakeup on mask 0x%016llx (ANY_LOW)", (unsigned long long)ext1_mask);
         esp_sleep_enable_ext1_wakeup(ext1_mask, ESP_EXT1_WAKEUP_ANY_LOW);
     }
-    mqtt_stop();
+    push_stop();
     wifi_close();
     cat1_close();
     
@@ -458,8 +454,8 @@ wakeupType_e sleep_wakeup_case()
 {
     switch (esp_sleep_get_wakeup_cause()) {
         case ESP_SLEEP_WAKEUP_EXT0: {
-            ESP_LOGI(TAG, "Wake up button");
-            return WAKEUP_BUTTON;
+            ESP_LOGI(TAG, "Wake up from PIR");
+            return WAKEUP_PIR;
         }
         case ESP_SLEEP_WAKEUP_EXT1: {
             uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
@@ -473,10 +469,19 @@ wakeupType_e sleep_wakeup_case()
                      (unsigned long long)wakeup_pin_mask);
             }
             // If wakeup from RTC INT pin, treat as timer wakeup
-            if (wakeup_pin_mask & rtc_get_wakeup_mask()) {
+            if (wakeup_pin_mask & BIT64(PCF8563_INT_PIN)) {
                 // Clear RTC alarm flag if wakeup from RTC
+                ESP_LOGI(TAG, "Wake up from RTC INT pin");
                 rtc_clear_alarm();
                 return WAKEUP_TIMER;
+            } else if (wakeup_pin_mask & BIT64(BTN_WAKEUP_PIN)) {
+                ESP_LOGI(TAG, "Wake up from button");
+                return WAKEUP_BUTTON;
+            } else if (wakeup_pin_mask & BIT64(ALARMIN_WAKEUP_PIN)) {
+                ESP_LOGI(TAG, "Wake up from ALARM_IN");
+                return WAKEUP_ALARMIN;
+            } else {
+                ESP_LOGW(TAG, "Wake up from EXT1 but mask is not 0x%llx", (unsigned long long)wakeup_pin_mask);
             }
             // other EXT1 sources (e.g. ALARM_IN)
             return WAKEUP_ALARMIN;

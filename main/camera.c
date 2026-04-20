@@ -557,6 +557,10 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
         ESP_LOGI(TAG, "snapshot fail, alarmIn is disabled");
         return ESP_FAIL;
     }
+    if (type == SNAP_PIR && capture.bAlarmInCap == false) {
+        ESP_LOGI(TAG, "snapshot fail, PIR is disabled");
+        return ESP_FAIL;
+    }
     // lightAttr_t light;
     // cfg_get_light_attr(&light);
     // camera_flash_led_ctrl(&light);

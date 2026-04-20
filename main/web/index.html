@@ -701,17 +701,26 @@
                         <div class="card-title">
                             {{ $t("mqtt.dataReport") }}
                         </div>
+                        <!-- Push Mode Toggle -->
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("mqtt.pushMode") }}</span>
+                            <span class="card-item-content">
+                                <div v-scope="MsSelect({value: pushMode, options: pushModeOptions})" v-if="pushModeMount" @change-select="changePushMode"></div>
+                            </span>
+                        </div>
+                        <!-- MQTT Form -->
+                        <div v-show="pushMode == 0">
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.status") }}</span
                             >
                             <span class="card-item-content">
-                                <span> 
-                                    {{ mqttPlatform.isConnected === 0 ? $t("cell.disconnected") : $t("cell.connected") }} 
+                                <span>
+                                    {{ mqttPlatform.isConnected === 0 ? $t("cell.disconnected") : $t("cell.connected") }}
                                 </span>
                             </span>
                         </div>
-                        
+
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.host") }}</span
@@ -976,8 +985,45 @@
                                 </button>
                             </span>
                         </div>
+                        </div>
+                        <!-- Webhook Form -->
+                        <div v-show="pushMode == 1">
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("mqtt.webhookUrl") }}</span>
+                            <span class="card-item-content">
+                                <input type="text"
+                                    v-model="webhook.url"
+                                    placeholder="https://example.com/webhook"
+                                    @blur="inputWebhookUrl"
+                                    maxlength="255"
+                                />
+                                <div class="error-input" v-show="webhookUrlError">
+                                    {{ $t("requiredField") }}
+                                </div>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("mqtt.webhookHeader") }}</span>
+                            <span class="card-item-content">
+                                <textarea
+                                    v-model="webhook.header"
+                                    :placeholder="$t('mqtt.webhookHeaderPlaceholder')"
+                                    @input="justifyAreaHeight($el)"
+                                    maxlength="255"
+                                ></textarea>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label"></span>
+                            <span class="card-item-content item-button">
+                                <button class="mini-primary" @click="setWebhookInfo">
+                                    {{ $t("mqtt.webhookSave") }}
+                                </button>
+                            </span>
+                        </div>
+                        </div>
                     </div>
-                    <!-- E MQTT Post -->
+                    <!-- E Data Report -->
 
                     <!-- S Device Maintenance -->
                     <div class="card device-card">

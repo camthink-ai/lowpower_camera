@@ -31,10 +31,27 @@
 #include <stdbool.h>
 #include <time.h>
 #include "esp_err.h"
+#include "driver/i2c.h"
+#include "driver/gpio.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// INT pin used for wakeup
+#define PCF8563_INT_PIN        GPIO_NUM_3
+#define PCF8563_INT_LEVEL       GPIO_ACTIVE_LOW
+
+// I2C bus configuration (shared with camera)
+#if CONFIG_SCCB_HARDWARE_I2C_PORT1
+    #define PCF8563_I2C_PORT    I2C_NUM_1
+#else
+    #define PCF8563_I2C_PORT    I2C_NUM_0
+#endif
+
+#define PCF8563_I2C_SDA         GPIO_NUM_4
+#define PCF8563_I2C_SCL         GPIO_NUM_5
+#define PCF8563_I2C_FREQ_HZ     100000      // 100kHz for PCF8563
 
 /**
  * @brief Synchronize system time from PCF8563

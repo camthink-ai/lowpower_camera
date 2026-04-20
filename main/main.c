@@ -35,6 +35,7 @@
 #include "storage.h"
 #include "camera.h"
 #include "mqtt.h"
+#include "push.h"
 #include "cat1.h"
 #include "iot_mip.h"
 #include "net_module.h"
@@ -277,6 +278,11 @@ static modeSel_e handle_deep_sleep_wakeup(snapType_e *snapType)
             sleep_reset_wakeup_todo();  // Clear pending todo since timer schedule is no longer valid
             *snapType = SNAP_ALARMIN;
             return MODE_SNAPSHOT;
+
+        case WAKEUP_PIR:
+            sleep_reset_wakeup_todo();  // Clear pending todo since PIR schedule is no longer valid
+            *snapType = SNAP_PIR;
+            return MODE_SNAPSHOT;
             
         case WAKEUP_BUTTON:
             *snapType = SNAP_BUTTON;
@@ -477,7 +483,7 @@ static esp_err_t init_queues_and_services(QueueHandle_t *xQueueMqtt, QueueHandle
     
     // Start services
     storage_open(*xQueueStorage, *xQueueMqtt);
-    mqtt_open(*xQueueMqtt, *xQueueStorage);
+    push_open(*xQueueMqtt, *xQueueStorage);
     
     return ESP_OK;
 }

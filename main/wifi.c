@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "utils.h"
 #include "mqtt.h"
+#include "push.h"
 #include "sleep.h"
 #include "http.h"
 #include "morse.h"
@@ -81,7 +82,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         if (iot_mip_autop_is_enable()) {
             iot_mip_autop_stop();
         }
-        mqtt_stop();
+        push_stop();
     }
     if (event_id == WIFI_EVENT_STA_CONNECTED) {
         ESP_LOGI(TAG, "WIFI_EVENT_STA_CONNECTED");
@@ -112,7 +113,7 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
         if(system_get_mode() != MODE_SCHEDULE){
             system_ntp_time(false);
         }
-        mqtt_start();
+        push_start();
     }
 }
 
