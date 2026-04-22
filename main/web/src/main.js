@@ -46,23 +46,28 @@ const App = {
      * and cannot use Promise.all for concurrent requests, easily causes server crash
      */
     async getInitData() {
-        await this.setDevTime(); // first sync time
-        await this.getDeviceInfo();
-        await this.getImageInfo();
-        await this.getCaptureInfo(); // This will also call getTriggerInfo internally
-        await this.getUploadInfo();
-        await this.getDataReport();
-        await this.getPushModeInfo();
-        if (this.pushMode === 1) {
-            await this.getWebhookInfo();
+        try {
+            await this.setDevTime(); // first sync time
+            await this.getDeviceInfo();
+            await this.getImageInfo();
+            await this.getCaptureInfo(); // This will also call getTriggerInfo internally
+            await this.getUploadInfo();
+            await this.getDataReport();
+            await this.getPushModeInfo();
+            if (this.pushMode === 1) {
+                await this.getWebhookInfo();
+            }
+            if (this.netmod === 'cat1') {
+                await this.getCellularInfo();
+            } else {
+                await this.getWlanInfo();
+            }
+
+            this.justifyAllArea();
+        } catch (e) {
+            console.error('getInitData failed', e);
+            this.alertMessage('error');
         }
-        if (this.netmod === 'cat1') {
-            await this.getCellularInfo();
-        } else {
-            await this.getWlanInfo();
-        }
-        
-        this.justifyAllArea();
     },
 
     // multi-language translation

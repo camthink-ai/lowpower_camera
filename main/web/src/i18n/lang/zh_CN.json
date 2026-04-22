@@ -32,6 +32,7 @@
     "intervalCap": "间隔抓图",
     "timeSet": "时间设置",
     "captureInterval": "抓图间隔",
+    "intervalAnchorTime": "间隔抓拍锚点时间",
     "openStableMs": "相机稳像延时",
     "openStableTip": "相机开启后等待此延时以保证画面稳定（毫秒）。值过小可能出现画面抖动或曝光不稳定；过大将增加首次开流等待时间。",
     "enableAlarmInCap": "启用触发抓图",

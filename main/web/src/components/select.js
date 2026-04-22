@@ -25,12 +25,25 @@ function MsSelect({ value, options }) {
             }
         },
         setSelectItem() {
-            const item = this.options.find(
-                (item) => item.value == this.selectValue
-            );
-            // manually trigger change on initialization to update value
-            this.handleOptionSelect(null, item, true);
-            this.selectedLabel = item.label;
+            if (!this.options || this.options.length === 0) {
+                this.selectedLabel = '';
+                return;
+            }
+
+            const originalValue = this.selectValue;
+            let item = this.options.find((item) => item.value == this.selectValue);
+            if (!item) {
+                // Fallback to first option when external value is empty/invalid.
+                item = this.options[0];
+                this.selectValue = item.value;
+            }
+
+            this.selectedLabel = item.label || '';
+
+            // Only notify parent on init if we had to change the value (fallback).
+            if (this.selectValue != originalValue) {
+                this.handleOptionSelect(null, item, true);
+            }
         },
         handleBlur(e) {
             const panel = this.$refs.select;
@@ -46,8 +59,9 @@ function MsSelect({ value, options }) {
          * @param {boolean} isInit only update value on initialization, do not send configuration
          */
         handleOptionSelect($event, option, isInit = false) {
+            if (!option) return;
             this.visible = false;
-            const isChanged = this.selectValue !== option.value;
+            const isChanged = this.selectValue != option.value;
             this.selectValue = option.value;
             this.selectedLabel = option.label;
             if (isChanged) {

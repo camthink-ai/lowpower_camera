@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "cat1.h"
 #include "camera.h"
+#include <stdlib.h>
 
 #define NVS_CFG_UNDEFINED "undefined"
 #define NVS_CFG_PARTITION "cfg"
@@ -868,6 +869,7 @@ esp_err_t cfg_get_cap_attr(capAttr_t *capture)
     get_u8(g_userHandle, KEY_CAP_TIME_COUNT, &capture->timedCount, 0);
     get_u32(g_userHandle, KEY_CAP_INTERVAL_V, &capture->intervalValue, 8);
     get_u8(g_userHandle, KEY_CAP_INTERVAL_U, &capture->intervalUnit, 1);
+    get_str(g_userHandle, KEY_CAP_INTERVAL_ANCHOR, capture->intervalAnchorTime, sizeof(capture->intervalAnchorTime), "00:00");
     get_u32(g_userHandle, KEY_CAP_CAM_WARMUP_MS, &capture->camWarmupMs, 5000);
     char key[32];
     for (size_t i = 0; i < capture->timedCount; i++) {
@@ -893,6 +895,7 @@ esp_err_t cfg_set_cap_attr(capAttr_t *capture)
     set_u8(g_userHandle, KEY_CAP_TIME_COUNT, capture->timedCount);
     set_u32(g_userHandle, KEY_CAP_INTERVAL_V, capture->intervalValue);
     set_u8(g_userHandle, KEY_CAP_INTERVAL_U, capture->intervalUnit);
+    set_str(g_userHandle, KEY_CAP_INTERVAL_ANCHOR, capture->intervalAnchorTime);
     set_u32(g_userHandle, KEY_CAP_CAM_WARMUP_MS, capture->camWarmupMs);
     char key[32];
     for (size_t i = 0; i < capture->timedCount; i++) {

@@ -375,6 +375,7 @@ esp_err_t get_cap_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &capture, int, scheCapMode);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalValue);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalUnit);
+    s2j_json_set_basic_element(json_obj, &capture, string, intervalAnchorTime);
     s2j_json_set_basic_element(json_obj, &capture, int, camWarmupMs);
     s2j_json_set_basic_element(json_obj, &capture, int, timedCount);
     s2j_json_set_struct_array_element_by_func(json_obj, &capture, timedNode_t, timedNodes, capture.timedCount);
@@ -412,6 +413,9 @@ esp_err_t set_cap_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(capture, json, int, scheCapMode);
         s2j_struct_get_basic_element(capture, json, int, intervalValue);
         s2j_struct_get_basic_element(capture, json, int, intervalUnit);
+        if (cJSON_HasObjectItem(json, "intervalAnchorTime")) {
+            s2j_struct_get_basic_element(capture, json, string, intervalAnchorTime);
+        }
         if (cJSON_HasObjectItem(json, "camWarmupMs")) {
             s2j_struct_get_basic_element(capture, json, int, camWarmupMs);
         }

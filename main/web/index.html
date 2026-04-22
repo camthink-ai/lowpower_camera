@@ -6,6 +6,12 @@
         <meta name="google" content="notranslate" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>CamThink</title>
+        <!-- Inline so UI stays hidden if external CSS fails (avoids raw {{ }} flash / FOUC on slow links) -->
+        <style>
+            [v-cloak] {
+                display: none !important;
+            }
+        </style>
         <!-- default component styles -->
         <link rel="stylesheet" href="./src/style/ui.css" />
         <!-- business function module styles -->
@@ -115,7 +121,8 @@
                                         v-model="threshold"
                                         min="0"
                                         max="100"
-                                        @change="setLightInfo()"
+                                        @input="onThresholdSliderInput($el)"
+                                        @change="onThresholdSliderChange($el)"
                                         v-effect="threshold;changeSlider($el)"
                                     />
                                 </span>
@@ -469,6 +476,34 @@
                                     v-if="timeIntervalUnitMount"
                                     @change-select="changeIntervalUnit"
                                 ></div>
+                            </span>
+                        </div>
+
+                        <div
+                            class="card-item interval-anchor-content"
+                            v-show="scheduledCaptureEnable && captureMode == 1"
+                        >
+                            <span class="card-item-label"
+                                >{{ $t("cap.intervalAnchorTime") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span class="number">
+                                    <input
+                                        type="text"
+                                        maxlength="2"
+                                        v-model="intervalAnchorHour"
+                                        v-effect="inputNumLimit('intervalAnchorHour')"
+                                        @blur="inputIntervalAnchorTime('intervalAnchorHour')"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="text"
+                                        maxlength="2"
+                                        v-model="intervalAnchorMinute"
+                                        v-effect="inputNumLimit('intervalAnchorMinute')"
+                                        @blur="inputIntervalAnchorTime('intervalAnchorMinute')"
+                                    />
+                                </span>
                             </span>
                         </div>
 

@@ -74,6 +74,17 @@
     margin-right: 10px;
 }
 
+.interval-anchor-content .number input {
+    width: 32px !important;
+    box-sizing: border-box;
+    padding-left: 0;
+    text-align: center;
+}
+
+.interval-anchor-content .number span {
+    font-weight: 700;
+}
+
 .capture-interval-select {
     width: 75px;
 }

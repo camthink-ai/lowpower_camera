@@ -74,6 +74,7 @@ extern "C" {
 #define KEY_CAP_TIME_COUNT  "cap:tCount"
 #define KEY_CAP_INTERVAL_V  "cap:iValue"
 #define KEY_CAP_INTERVAL_U  "cap:iUnit"
+#define KEY_CAP_INTERVAL_ANCHOR "cap:iAnchor" // Interval capture anchor time "HH:MM"
 #define KEY_CAP_CAM_WARMUP_MS "cap:camWarmupMs"
 #define KEY_UPLOAD_MODE     "upload:mode"
 #define KEY_UPLOAD_COUNT    "upload:count"
@@ -206,6 +207,7 @@ typedef struct capAttr {
     timedNode_t timedNodes[8]; //use for timed mode
     uint32_t intervalValue; // use for interval mode
     uint8_t  intervalUnit; // use for interval mode. 0: minutes, 1: hours, 2:day
+    char intervalAnchorTime[MAX_LEN_8]; // "HH:MM", used for interval mode
     uint32_t camWarmupMs; // camera warm-up delay in milliseconds
 } capAttr_t;
 

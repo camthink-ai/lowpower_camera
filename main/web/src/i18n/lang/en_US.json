@@ -32,6 +32,7 @@
     "intervalCap": "Interval Capture",
     "timeSet": "Time Setting",
     "captureInterval": "Capture Interval",
+    "intervalAnchorTime": "Interval Anchor Time",
     "openStableMs": "Camera Stabilization Delay ",
     "openStableTip": "Delay after camera opens to ensure image stabilization (milliseconds). Too small may cause unstable exposure; too large increases initial wait time.",
     "enableAlarmInCap": "Enable Trigger Capture",

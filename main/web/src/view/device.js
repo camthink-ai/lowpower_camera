@@ -18,6 +18,7 @@ async function downloadSessionLog() {
     a.remove();
     window.URL.revokeObjectURL(objUrl);
 }
+
 function Device() {
     return {
         // --Device Maintenance--

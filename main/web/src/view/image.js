@@ -116,39 +116,42 @@ function Image() {
         },
 
         lightMount: false,
+        _thresholdLightSaveTimer: null,
         async getImageInfo() {
-            const lightRes = await getData(URL.getLightParam);
-            this.supLight = lightRes.lightMode; // 0 - auto 1 - customize 2 - ON 3 - OFF
-            this.lightMount = true;
-            this.luminoSensity = lightRes.value;
-            this.threshold = lightRes.threshold;
-            this.duty = lightRes.duty;
-            this.startTimeHour = lightRes.startTime.split(":")[0];
-            this.startTimeMinute = lightRes.startTime.split(":")[1];
-            this.endTimeHour = lightRes.endTime.split(":")[0];
-            this.endTimeMinute = lightRes.endTime.split(":")[1];
+            try {
+                const lightRes = await getData(URL.getLightParam);
+                this.supLight = lightRes.lightMode; // 0 - auto 1 - customize 2 - ON 3 - OFF
+                this.luminoSensity = lightRes.value;
+                this.threshold = lightRes.threshold;
+                this.duty = lightRes.duty;
+                this.startTimeHour = lightRes.startTime.split(":")[0];
+                this.startTimeMinute = lightRes.startTime.split(":")[1];
+                this.endTimeHour = lightRes.endTime.split(":")[0];
+                this.endTimeMinute = lightRes.endTime.split(":")[1];
 
-            const camRes = await getData(URL.getCamParam);
-            this.brightness = camRes.brightness;
+                const camRes = await getData(URL.getCamParam);
+                this.brightness = camRes.brightness;
 
-            this.contrast = camRes.contrast;
-            this.saturation = camRes.saturation;
-            this.aeLevel = camRes.aeLevel;
-            this.agcEnable = camRes.bAgc ? true : false; // 1 true
-            this.gainCeil = camRes.gainCeiling;
-            this.gain = camRes.gain;
-            this.flipHorEnable = camRes.bHorizonetal ? true : false;
-            this.flipVerEnable = camRes.bVertical ? true : false;
-            this.frameSize = camRes.frameSize;
-            this.frameSizeMount = true;
-            this.quality = camRes.quality;
-            
-            // Apply quality limit after loading image info
-            this.applyQualityLimit();
-            
-            // Get HDR status for USB camera
-            this.hdrEnable = camRes.hdrEnable ? true : false;
-            return Promise.resolve();
+                this.contrast = camRes.contrast;
+                this.saturation = camRes.saturation;
+                this.aeLevel = camRes.aeLevel;
+                this.agcEnable = camRes.bAgc ? true : false; // 1 true
+                this.gainCeil = camRes.gainCeiling;
+                this.gain = camRes.gain;
+                this.flipHorEnable = camRes.bHorizonetal ? true : false;
+                this.flipVerEnable = camRes.bVertical ? true : false;
+                this.frameSize = camRes.frameSize;
+                this.quality = camRes.quality;
+
+                this.applyQualityLimit();
+
+                this.hdrEnable = camRes.hdrEnable ? true : false;
+            } catch (e) {
+                console.error('getImageInfo failed', e);
+            } finally {
+                this.lightMount = true;
+                this.frameSizeMount = true;
+            }
         },
         // refresh light sensitivity value
         async refreshLuminoSensity() {
@@ -171,6 +174,36 @@ function Image() {
                 endTime: `${this.endTimeHour}:${this.endTimeMinute}`,
             });
             return;
+        },
+
+        /** Debounced apply for threshold slider (reduces HTTP/MJPEG contention on weak links). */
+        onThresholdSliderInput($el) {
+            this.changeSlider($el);
+            if (this._thresholdLightSaveTimer) {
+                clearTimeout(this._thresholdLightSaveTimer);
+            }
+            this._thresholdLightSaveTimer = setTimeout(() => {
+                this._thresholdLightSaveTimer = null;
+                this.applyThresholdLightFromDevice();
+            }, 280);
+        },
+
+        async onThresholdSliderChange($el) {
+            this.changeSlider($el);
+            if (this._thresholdLightSaveTimer) {
+                clearTimeout(this._thresholdLightSaveTimer);
+                this._thresholdLightSaveTimer = null;
+            }
+            await this.applyThresholdLightFromDevice();
+        },
+
+        async applyThresholdLightFromDevice() {
+            try {
+                await this.setLightInfo();
+                await this.refreshLuminoSensity();
+            } catch (e) {
+                console.error('applyThresholdLightFromDevice', e);
+            }
         },
 
         async setCamInfo() {

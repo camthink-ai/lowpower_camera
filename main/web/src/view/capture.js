@@ -70,6 +70,8 @@ function Capture() {
         timeIntervalNum: 8,
         capIntervalError: false,
         timeIntervalUnit: 1,
+        intervalAnchorHour: '00',
+        intervalAnchorMinute: '00',
         // camera open stabilization delay (ms)
         camWarmupMs: 5000,
         uploadTimeSetDay: 7,
@@ -164,20 +166,30 @@ function Capture() {
         },
 
         async getCaptureInfo() {
-            const res = await getData(URL.getCapParam);
-            this.scheduledCaptureEnable = res.bScheCap ? true : false;
-            this.captureMode = res.scheCapMode; // 0: Timed Capture 1 : Interval Capture
-            this.captureMount = true;
-            this.timeCaptureList = res.timedNodes;
-            this.timeIntervalNum = res.intervalValue;
-            this.timeIntervalUnit = res.intervalUnit;
-            this.timeIntervalUnitMount = true;
-            this.capAlarmInEnable = res.bAlarmInCap ? true : false;
-            this.capButtonEnable = res.bButtonCap ? true : false;
-            this.camWarmupMs = res.camWarmupMs || 5000;
-            // After getting capture info, get trigger info
-            await this.getTriggerInfo();
-            return;
+            try {
+                const res = await getData(URL.getCapParam);
+                this.scheduledCaptureEnable = res.bScheCap ? true : false;
+                this.captureMode = res.scheCapMode; // 0: Timed Capture 1 : Interval Capture
+                this.timeCaptureList = res.timedNodes;
+                this.timeIntervalNum = res.intervalValue;
+                this.timeIntervalUnit = res.intervalUnit;
+                if (res.intervalAnchorTime && typeof res.intervalAnchorTime === 'string') {
+                    const parts = res.intervalAnchorTime.split(':');
+                    if (parts.length >= 2) {
+                        this.intervalAnchorHour = this.formatTimeNumber('hour', parts[0]);
+                        this.intervalAnchorMinute = this.formatTimeNumber('minute', parts[1]);
+                    }
+                }
+                this.capAlarmInEnable = res.bAlarmInCap ? true : false;
+                this.capButtonEnable = res.bButtonCap ? true : false;
+                this.camWarmupMs = res.camWarmupMs || 5000;
+                await this.getTriggerInfo();
+            } catch (error) {
+                console.error('Failed to get capture info:', error);
+            } finally {
+                this.captureMount = true;
+                this.timeIntervalUnitMount = true;
+            }
         },
         async getTriggerInfo() {
             try {
@@ -186,7 +198,7 @@ function Capture() {
                 if (this.capAlarmInEnable) {
                     // Ensure trigger mode is valid (1 or 2, not 0)
                     // If server returns 0, use saved trigger mode if available, otherwise default to 1
-                    const mode = res.trigger_mode || 0;
+                    const mode = Number(res.trigger_mode ?? 0);
                     if (mode > 0) {
                         this.triggerMode = mode;
                         // Update saved trigger mode when we get a valid value from server
@@ -300,7 +312,9 @@ function Capture() {
         },
         changeIntervalUnit({ detail }) {
             this.timeIntervalUnit = detail.value;
-            this.setCaptureInfo();
+            if (!detail.isInit) {
+                this.setCaptureInfo();
+            }
         },
 
         async setCaptureInfo() {
@@ -312,6 +326,7 @@ function Capture() {
                     timedCount: this.timeCaptureList.length,
                     intervalValue: Number(this.timeIntervalNum),
                     intervalUnit: Number(this.timeIntervalUnit),
+                    intervalAnchorTime: `${this.intervalAnchorHour}:${this.intervalAnchorMinute}`,
                     bAlarmInCap: Number(this.capAlarmInEnable),
                     bButtonCap: Number(this.capButtonEnable),
                     camWarmupMs: Number(this.camWarmupMs),
@@ -378,6 +393,19 @@ function Capture() {
                 default:
                     break;
             }
+        },
+        inputIntervalAnchorTime(type) {
+            switch (type) {
+                case 'intervalAnchorHour':
+                    this.intervalAnchorHour = this.formatTimeNumber('hour', this.intervalAnchorHour);
+                    break;
+                case 'intervalAnchorMinute':
+                    this.intervalAnchorMinute = this.formatTimeNumber('minute', this.intervalAnchorMinute);
+                    break;
+                default:
+                    break;
+            }
+            this.setCaptureInfo();
         },
         inputUploadTime(type) {
             switch (type) {
