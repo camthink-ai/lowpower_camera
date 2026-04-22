@@ -201,12 +201,15 @@ img.logo {
     width: 80px;
 }
 
-/* Upgrade + Download: same fixed width, right edge aligns with Browse row’s second button */
-.device-card .card-item-content button.device-card-action-btn {
+/* Upgrade / Download / MQTT / Cellular outline actions: same footprint */
+.device-card .card-item-content button.device-card-action-btn,
+.mqtt-card .card-item-content.item-button button.device-card-action-btn,
+.cellular-card .card-item-content button.device-card-action-btn {
     margin: 8px;
     width: 100px;
     max-width: 100px;
     min-width: 100px;
+    height: 32px;
     box-sizing: border-box;
     white-space: nowrap;
     padding-left: 4px;
@@ -258,10 +261,24 @@ img.logo {
 .mqtt-card .item-button {
     justify-content: flex-end;
 }
-.mqtt-card .item-button button {
+.mqtt-card .item-button button:not(.device-card-action-btn) {
     width: 82px;
 }
 
+
+/* Sleep mode: full-width outline button */
+.footer #btn-sleep.plain {
+    width: 100%;
+    height: 40px;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+/* Dialog: OK + Cancel both plain — match footer slot height from ui.css */
+.dialog-footer > button.plain {
+    height: 34px;
+    box-sizing: border-box;
+}
 
 /* tailwind style */
 .mr-5 {

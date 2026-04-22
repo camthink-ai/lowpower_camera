@@ -108,6 +108,8 @@ const URL = {
     setDevSleep: baseUrl + "/system/setDevSleep",
     setDevTime: baseUrl + "/system/setDevTime",
     exportSessionLog: baseUrl + "/system/exportSessionLog",
+    exportConfig: baseUrl + "/system/exportConfig",
+    importConfig: baseUrl + "/system/importConfig",
 
     // Cellular
     getCellularParam: baseUrl + "/network/getCellularParam",

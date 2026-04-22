@@ -122,7 +122,17 @@
     "ntpSync": "网络同步时间",
     "exportSessionLog": "运行日志",
     "exportSessionLogBtn": "下载",
-    "exportSessionLogTip": "下载最近3次启动的运行日志（按时间从旧到新合并为一个文本）"
+    "exportSessionLogTip": "下载最近3次启动的运行日志（按时间从旧到新合并为一个文本）",
+    "configuration": "配置",
+    "export": "导出",
+    "import": "导入",
+    "exportConfigTip": "导出用户配置（INI）。不含设备上的 MQTT TLS 证书文件。",
+    "importConfigTip": "选择 INI 备份导入。设备上的 MQTT 证书不会被修改。",
+    "noConfigFileSpecified": "请选择配置文件。",
+    "reallyImportConfig": "确定导入该配置吗？将覆盖当前用户配置（不含 MQTT 证书文件）。",
+    "importConfigSuccess": "导入成功！建议刷新页面以使全部设置生效。",
+    "importConfigFailed": "导入失败，请确认文件为有效的 NE101 配置备份（含 [Hardware] model=NE101）。",
+    "importConfigWait": "正在导入配置，请稍候…"
   },
   "wlan": {
     "gateWayConnect": "网关连接",

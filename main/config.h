@@ -392,6 +392,7 @@ void cfg_get_str(const char *key, char *value, size_t length, const char *def);
 void cfg_erase_key(const char *key);
 
 esp_err_t cfg_import(char *data, size_t len);
+esp_err_t cfg_export_userspace_ini(char *buf, size_t buf_sz, size_t *written);
 esp_err_t cfg_user_erase_all();
 esp_err_t cfg_set_firmware_crc32(uint32_t crc);
 uint32_t cfg_get_firmware_crc32();

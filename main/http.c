@@ -1362,6 +1362,76 @@ static esp_err_t export_session_log_handle(httpd_req_t *req)
     return session_log_http_export(req);
 }
 
+static esp_err_t export_config_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    char *out = (char *)malloc(OTA_CFG_MAX_SIZE);
+    if (out == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "malloc failed");
+        return ESP_FAIL;
+    }
+    size_t written = 0;
+    esp_err_t err = cfg_export_userspace_ini(out, OTA_CFG_MAX_SIZE, &written);
+    if (err != ESP_OK) {
+        free(out);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "export failed");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"ne101_config.ini\"");
+    esp_err_t send = httpd_resp_send(req, out, written);
+    free(out);
+    return send;
+}
+
+static esp_err_t import_config_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    if (req->content_len <= 0 || req->content_len > (int)OTA_CFG_MAX_SIZE) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_OK;
+    }
+    char *body = (char *)malloc((size_t)req->content_len);
+    if (body == NULL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    int remaining = req->content_len;
+    int received = 0;
+    int timeout = 0;
+    char *buf = malloc(HTTP_BUFF_MAX_SIZE);
+    if (buf == NULL) {
+        free(body);
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    char *ptr = body;
+    while (remaining > 0) {
+        if ((received = httpd_req_recv(req, buf, MIN(remaining, HTTP_BUFF_MAX_SIZE))) <= 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout++ < 3) {
+                continue;
+            }
+            free(buf);
+            free(body);
+            http_send_json_response(req, RES_FAIL);
+            return ESP_FAIL;
+        }
+        memcpy(ptr, buf, received);
+        ptr += received;
+        remaining -= received;
+    }
+    free(buf);
+    if (cfg_import(body, (size_t)req->content_len) == ESP_OK) {
+        http_send_json_response(req, RES_OK);
+    } else {
+        http_send_json_response(req, RES_FAIL);
+    }
+    free(body);
+    return ESP_OK;
+}
+
 static esp_err_t upload_to_path(httpd_req_t *req, const char *path)
 {
     ESP_LOGI(TAG, "upload_to_path %s", path);
@@ -1907,6 +1977,16 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/system/exportSessionLog",
         .method = HTTP_GET,
         .handler = export_session_log_handle,
+    },
+    {
+        .uri = "/api/v1/system/exportConfig",
+        .method = HTTP_GET,
+        .handler = export_config_handle,
+    },
+    {
+        .uri = "/api/v1/system/importConfig",
+        .method = HTTP_POST,
+        .handler = import_config_handle,
     },
     // certificate upload (three static paths, directly write to LittleFS)
     {

@@ -122,7 +122,17 @@
     "ntpSync": "Network Time Sync",
     "exportSessionLog": "Session log",
     "exportSessionLogBtn": "Download",
-    "exportSessionLogTip": "Download last 3 boots’ logs merged (oldest first, one text file)"
+    "exportSessionLogTip": "Download last 3 boots’ logs merged (oldest first, one text file)",
+    "configuration": "Configuration",
+    "export": "Export",
+    "import": "Import",
+    "exportConfigTip": "Export user settings as INI. MQTT TLS certificate files on the device are not included.",
+    "importConfigTip": "Choose an INI backup to import. MQTT TLS cert files on the device are not changed.",
+    "noConfigFileSpecified": "Please choose a configuration file.",
+    "reallyImportConfig": "Import this file? It will overwrite current user settings (MQTT cert files are not changed).",
+    "importConfigSuccess": "Import succeeded. Refresh the page so all settings apply.",
+    "importConfigFailed": "Import failed. Ensure the file is a valid NE101 backup (includes [Hardware] model=NE101).",
+    "importConfigWait": "Importing configuration, please wait…"
   },
   "wlan": {
     "gateWayConnect": "Gateway Connection",

@@ -19,6 +19,23 @@ async function downloadSessionLog() {
     window.URL.revokeObjectURL(objUrl);
 }
 
+async function downloadExportedConfig() {
+    const res = await fetch(URL.exportConfig, { method: "GET" });
+    if (!res.ok) {
+        throw new Error("export config failed");
+    }
+    const blob = await res.blob();
+    const objUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = "ne101_config.ini";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(objUrl);
+}
+
 function Device() {
     return {
         // --Device Maintenance--
@@ -32,7 +49,7 @@ function Device() {
         autoProEnable: true,
         developEnable: true,
         upgradeFile: null,
-        upgradeFilename: "",
+        configImportFile: null,
         countryCode: "",
         // module type
         camera: "CSI", // "USB" | "CSI"
@@ -97,30 +114,26 @@ function Device() {
                 this.alertMessage("error");
             }
         },
-        handleBrowse() {
-            const file = document.getElementById("file");
-            file.click();
+        handleFirmwareUpgradeClick() {
+            const el = document.getElementById("file");
+            if (el) {
+                el.value = "";
+                el.click();
+            }
         },
         fileChange() {
             try {
                 const inputEl = document.getElementById("file");
                 if (inputEl == null || inputEl.files.length == 0) return;
-                this.upgradeFilename = inputEl.files[0].name;
                 this.upgradeFile = inputEl.files[0];
+                this.showTipsDialog(
+                    $t("sys.reallyUpgradeFirmware"),
+                    true,
+                    this.confirmUpgrade
+                );
             } catch (error) {
                 console.debug("choice file err:", error);
             }
-        },
-        handleUpgrade() {
-            if (!this.upgradeFile || this.upgradeFile.name == "") {
-                this.showTipsDialog($t("sys.noFirmSpecified"));
-                return;
-            }
-            this.showTipsDialog(
-                $t("sys.reallyUpgradeFirmware"),
-                true,
-                this.confirmUpgrade
-            );
         },
         showDialogUpgrade: false,
         dialogUpgradeProp: {},
@@ -197,6 +210,100 @@ function Device() {
                 console.error(e);
                 this.alertMessage("error");
             }
+        },
+        async exportConfig() {
+            try {
+                await downloadExportedConfig();
+            } catch (e) {
+                console.error(e);
+                this.alertMessage("error");
+            }
+        },
+        handleConfigImportClick() {
+            const el = document.getElementById("configImportFile");
+            if (el) {
+                el.value = "";
+                el.click();
+            }
+        },
+        configFileChange() {
+            try {
+                const inputEl = document.getElementById("configImportFile");
+                if (inputEl == null || inputEl.files.length === 0) return;
+                this.configImportFile = inputEl.files[0];
+                this.showTipsDialog(
+                    $t("sys.reallyImportConfig"),
+                    true,
+                    this.confirmConfigImport
+                );
+            } catch (error) {
+                console.debug("config file choice err:", error);
+            }
+        },
+        async confirmConfigImport() {
+            const that = this;
+            const file = this.configImportFile;
+            if (!file) {
+                this.showTipsDialog($t("sys.noConfigFileSpecified"));
+                return;
+            }
+            nextTick(() => {
+                that.showUpgradeDialog($t("sys.importConfigWait"));
+            });
+            const reader = new FileReader();
+            reader.readAsText(file, "UTF-8");
+            reader.onload = async function () {
+                try {
+                    const text =
+                        typeof reader.result === "string"
+                            ? reader.result
+                            : "";
+                    const res = await fetch(URL.importConfig, {
+                        method: "POST",
+                        mode: "cors",
+                        headers: {
+                            "Content-Type": "text/plain; charset=utf-8",
+                        },
+                        body: text,
+                    });
+                    const data = await res.json();
+                    that.dialogVisible = false;
+                    nextTick(() => {
+                        if (res.ok && data.result === 1000) {
+                            that.showTipsDialog(
+                                $t("sys.importConfigSuccess"),
+                                false,
+                                that.onReload
+                            );
+                        } else {
+                            that.showTipsDialog(
+                                $t("sys.importConfigFailed"),
+                                false,
+                                that.onReload
+                            );
+                        }
+                    });
+                } catch (error) {
+                    that.dialogVisible = false;
+                    nextTick(() => {
+                        that.showTipsDialog(
+                            $t("sys.importConfigFailed"),
+                            false,
+                            that.onReload
+                        );
+                    });
+                }
+            };
+            reader.onerror = function () {
+                that.dialogVisible = false;
+                nextTick(() => {
+                    that.showTipsDialog(
+                        $t("sys.importConfigFailed"),
+                        false,
+                        that.onReload
+                    );
+                });
+            };
         },
         /** remove cloud ecosystem developer platform related parameters */
         // async setIotParam() {

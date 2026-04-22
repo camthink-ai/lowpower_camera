@@ -1013,7 +1013,8 @@
                             <span class="card-item-label"></span>
                             <span class="card-item-content item-button">
                                 <button
-                                    class="mini-primary"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     @click="setDataReport"
                                 >
                                     {{ $t("mqtt.save") }}
@@ -1051,7 +1052,11 @@
                         <div class="card-item">
                             <span class="card-item-label"></span>
                             <span class="card-item-content item-button">
-                                <button class="mini-primary" @click="setWebhookInfo">
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    @click="setWebhookInfo"
+                                >
                                     {{ $t("mqtt.webhookSave") }}
                                 </button>
                             </span>
@@ -1152,36 +1157,50 @@
                                 >{{ $t("sys.upgradeFirmware") }}</span
                             >
                             <span class="card-item-content">
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    @click="handleFirmwareUpgradeClick"
+                                >
+                                    {{ $t("sys.upgrade") }}
+                                </button>
                                 <input
                                     type="file"
                                     id="file"
                                     hidden
                                     @change="fileChange"
                                 />
-                                <input
-                                    type="text"
-                                    v-model="upgradeFilename"
-                                    readonly
-                                />
                             </span>
                         </div>
                         <div class="card-item">
-                            <span class="card-item-label"></span>
+                            <span class="card-item-label"
+                                >{{ $t("sys.configuration") }}</span
+                            >
                             <span class="card-item-content">
+                                <!-- buttons first so .device-card button:nth-child(1) matches export (same as Browse row) -->
                                 <button
-                                    class="plain"
-                                    @click="handleBrowse"
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    :title="$t('sys.exportConfigTip')"
+                                    @click="exportConfig"
                                 >
-                                    {{ $t("sys.browse") }}
+                                    {{ $t("sys.export") }}
                                 </button>
                                 <button
                                     type="button"
                                     class="plain device-card-action-btn"
-                                    style="color: #333333; border-color: #B1B1B1;"
-                                    @click="handleUpgrade"
+                                    :title="$t('sys.importConfigTip')"
+                                    @click="handleConfigImportClick"
                                 >
-                                    {{ $t("sys.upgrade") }}
+                                    {{ $t("sys.import") }}
                                 </button>
+                                <input
+                                    type="file"
+                                    id="configImportFile"
+                                    hidden
+                                    accept=".ini,.txt,text/plain"
+                                    @change="configFileChange"
+                                />
                             </span>
                         </div>
                         <div class="card-item">
@@ -1194,7 +1213,6 @@
                                 <button
                                     type="button"
                                     class="plain device-card-action-btn"
-                                    style="color: #333333; border-color: #B1B1B1;"
                                     :title="$t('sys.exportSessionLogTip')"
                                     @click="exportSessionLog"
                                 >
@@ -1406,7 +1424,8 @@
                             <span class="card-item-label"></span>
                             <span class="card-item-content item-button">
                                 <button
-                                    class="mini-primary"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     @click="setCellularInfo"
                                     :class="{'disabled-btn': saveLoading}"
                                 >
@@ -1452,7 +1471,8 @@
 
                     <footer class="footer">
                         <button
-                            class="primary"
+                            type="button"
+                            class="plain"
                             id="btn-sleep"
                             @click="handleSleepMode"
                         >
@@ -1668,7 +1688,8 @@
                             <span class="card-item-label"></span>
                             <span class="card-item-content">
                                 <button
-                                    class="mini-primary"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     @click="goBackCell"
                                 >
                                     {{ $t("cell.back") }}
@@ -1760,10 +1781,11 @@
             </div>
             <!-- 按钮操作区域 -->
             <div class="dialog-footer">
-                <button class="primary" v-show="showBtnOK" @click="handleOK">
+                <button type="button" class="plain" v-show="showBtnOK" @click="handleOK">
                     {{ btnOkText }}
                 </button>
                 <button
+                    type="button"
                     class="plain"
                     v-show="showBtnCancel"
                     @click="handleCancel"
