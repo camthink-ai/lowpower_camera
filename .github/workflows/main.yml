@@ -2,12 +2,12 @@ name: Build ESP32 Project
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ '**' ]
     tags:
       - 'V*'
       - 'v*'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ '**' ]
   workflow_dispatch:
 
 env:
@@ -67,16 +67,28 @@ jobs:
           local file=$1
           local config_name=$2
           local enable=$3
-          
+
           [ ! -f "$file" ] && return 0
-          
-          # Disable config first
+
+          # Normalize enable to "true"/"false"
+          if [ "$enable" != "true" ]; then
+            enable="false"
+          fi
+
+          # If a set line exists, convert it to the "not set" form first
           sed -i "s/^${config_name}=.*/# ${config_name} is not set/" "$file" 2>/dev/null || true
-          sed -i "s/^# ${config_name} is not set/${config_name}=y/" "$file" 2>/dev/null || true
-          
+
+          # Ensure there is at least a commented "not set" line to match against
+          if ! grep -q "^# ${config_name} is not set" "$file" 2>/dev/null; then
+            echo "# ${config_name} is not set" >> "$file"
+          fi
+
+          # Only enable when explicitly requested
           if [ "$enable" = "true" ]; then
-            sed -i "s/# ${config_name} is not set/${config_name}=y/" "$file"
+            sed -i "s/^# ${config_name} is not set/${config_name}=y/" "$file"
             echo "✓ Enabled ${config_name} in $(basename "$file")"
+          else
+            echo "✓ Left ${config_name} disabled in $(basename "$file")"
           fi
         }
         
