@@ -94,10 +94,6 @@ function Device() {
                 try {
                     await postData(URL.setDevInfo, {
                         name: this.deviceName,
-                        mac: this.macAddress,
-                        sn: this.sn,
-                        hardVersion: this.hardwareVer,
-                        softVersion: this.firmwareVer,
                     });
                 } catch (error) {
                     this.alertMessage("error");

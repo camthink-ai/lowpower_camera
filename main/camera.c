@@ -14,6 +14,7 @@
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include <sys/param.h>
+#include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
 #include <esp_timer.h>
@@ -126,9 +127,12 @@ static void csi_camera_fb_return(camera_fb_t *fb)
  */
 static void camera_queue_node_free(queueNode_t *node, nodeEvent_e event)
 {
-    if (node && node->context) {
-        camera_fb_return((camera_fb_t *)node->context); // Return frame buffer
-        free(node); // Free node memory
+    if (node) {
+        if (node->data) {
+            free(node->data);
+            node->data = NULL;
+        }
+        free(node);
         ESP_LOGI(TAG, "camera_queue_node_free");
         camera_lock();
         g_mdCamera.captureCount--;  // Decrement active capture count
@@ -147,26 +151,35 @@ static void camera_queue_node_free(queueNode_t *node, nodeEvent_e event)
  */
 static queueNode_t *camera_queue_node_malloc(camera_fb_t *frame, snapType_e type)
 {
-    queueNode_t *node = calloc(1, sizeof(queueNode_t));
-    if (node) {
-        // Initialize node fields
-        node->from = FROM_CAMERA;
-        node->pts = get_time_ms();
-        node->type = type;
-        node->data = frame->buf;
-        node->len = frame->len;
-        node->context = frame;
-        node->free_handler = camera_queue_node_free;
-        node->ntp_sync_flag = system_get_ntp_sync_flag();
-        
-        ESP_LOGI(TAG, "camera_queue_node_malloc");
-        camera_lock();
-        g_mdCamera.captureCount++;  // Increment active capture count
-        sleep_clear_event_bits(SLEEP_SNAPSHOT_STOP_BIT);  // Signal active capture
-        camera_unlock();
-        return node;
+    if (!frame || frame->len == 0 || !frame->buf) {
+        return NULL;
     }
-    return NULL;  // Allocation failed
+    uint8_t *copy = malloc(frame->len);
+    if (!copy) {
+        ESP_LOGE(TAG, "camera_queue_node_malloc: jpeg copy alloc failed len=%zu", frame->len);
+        return NULL;
+    }
+    memcpy(copy, frame->buf, frame->len);
+
+    queueNode_t *node = calloc(1, sizeof(queueNode_t));
+    if (!node) {
+        free(copy);
+        return NULL;
+    }
+    node->from = FROM_CAMERA;
+    node->pts = get_time_ms();
+    node->type = type;
+    node->data = copy;
+    node->len = frame->len;
+    node->free_handler = camera_queue_node_free;
+    node->ntp_sync_flag = system_get_ntp_sync_flag();
+
+    ESP_LOGI(TAG, "camera_queue_node_malloc (heap copy %zu bytes)", frame->len);
+    camera_lock();
+    g_mdCamera.captureCount++;
+    sleep_clear_event_bits(SLEEP_SNAPSHOT_STOP_BIT);
+    camera_unlock();
+    return node;
 }
 
 /**
@@ -411,11 +424,6 @@ static esp_err_t init_camera(mdCamera_t *handle)
 esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
 {
     struct mdCamera *handle = &g_mdCamera;
-    if (system_get_mode() != MODE_CONFIG){
-        lightAttr_t light;
-        cfg_get_light_attr(&light);
-        camera_flash_led_ctrl(&light);
-    }
     if (ESP_OK != init_camera(handle)) {
         sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT); // if no subsequent snapshot tasks, will enter sleep;
         return ESP_FAIL;
@@ -428,6 +436,12 @@ esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
     // wait for sensor stable with configurable delay
     capAttr_t capAttr;
     cfg_get_cap_attr(&capAttr);
+    /* In snapshot mode, enable fill light before warmup so exposure can settle. */
+    if (system_get_mode() == MODE_SNAPSHOT) {
+        lightAttr_t light;
+        cfg_get_light_attr(&light);
+        camera_flash_led_ctrl(&light);
+    }
     ESP_LOGI(TAG, "wait for sensor stable with configurable delay %d ms", (int)capAttr.camWarmupMs);
     vTaskDelay(pdMS_TO_TICKS(capAttr.camWarmupMs));
     sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT);          // if no subsequent snapshot tasks, will enter sleep;
@@ -561,9 +575,11 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
         ESP_LOGI(TAG, "snapshot fail, PIR is disabled");
         return ESP_FAIL;
     }
-    // lightAttr_t light;
-    // cfg_get_light_attr(&light);
-    // camera_flash_led_ctrl(&light);
+    /* Flash LED (fill light) is decided at snapshot time, so CONFIG button snapshot
+     * can also use flash when ambient is dark. */
+    lightAttr_t light;
+    cfg_get_light_attr(&light);
+    camera_flash_led_ctrl(&light);
     ESP_LOGI(TAG, "camera_snapshot Start");
     // esp_camera_fb_return(esp_camera_fb_get());
     h->bSnapShot = true;
@@ -580,6 +596,7 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
                     camera_queue_node_free(node, EVENT_FAIL);
                 }
             }
+            camera_fb_return(frame);
         }
         vTaskDelay(pdMS_TO_TICKS(50));
         if (count == 0) {
@@ -592,7 +609,9 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
     } else {
         h->bSnapShotSuccess = true;
     }
-    // camera_flash_led_close();
+    /* Close flash after capture; indicator LED will return to its previous state
+     * via misc LED state machine (CONFIG hold_on keeps it on). */
+    misc_flash_led_close();
     if (type == SNAP_TIMER) {
         sleep_set_last_capture_time(time(NULL));
     }

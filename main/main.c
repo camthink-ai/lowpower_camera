@@ -366,7 +366,6 @@ static void common_init(void)
 static void handle_snapshot_mode(snapType_e snapType, QueueHandle_t xQueueMqtt, 
                                   QueueHandle_t xQueueStorage)
 {
-    misc_led_blink(STATUS_LED_BLINK_COUNT, STATUS_LED_BLINK_INTERVAL);
     ESP_LOGI(TAG, "snapshot mode");
     uint8_t need_netModule = 0;
     ntpSync_t ntp_sync;
@@ -405,8 +404,9 @@ static void handle_snapshot_mode(snapType_e snapType, QueueHandle_t xQueueMqtt,
  */
 static void handle_config_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
 {
-    misc_led_blink(STATUS_LED_BLINK_COUNT, STATUS_LED_BLINK_INTERVAL);
     ESP_LOGI(TAG, "config mode");
+    /* Indicator LED is only effective in CONFIG mode: hold it on. */
+    misc_led_able(1);
     
     http_open();
     sleep_reset_wakeup_todo();
@@ -424,7 +424,6 @@ static void handle_config_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
  */
 static void handle_schedule_mode(void)
 {
-    misc_led_blink(STATUS_LED_BLINK_COUNT, STATUS_LED_BLINK_INTERVAL);
     ESP_LOGI(TAG, "schedule mode");
     
     netModule_open(main_mode);
@@ -437,7 +436,6 @@ static void handle_schedule_mode(void)
  */
 static void handle_upload_mode(void)
 {
-    misc_led_blink(STATUS_LED_BLINK_COUNT, STATUS_LED_BLINK_INTERVAL);
     ESP_LOGI(TAG, "upload mode");
     
     netModule_open(main_mode);

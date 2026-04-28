@@ -48,6 +48,8 @@ typedef enum {
     LED_MODE_LIGHT,
 } LED_MODE_E;
 
+static void misc_pwm_ctrl(uint8_t enable, uint8_t duty);
+
 ledc_timer_config_t ledc_timer = {
     .speed_mode       = LEDC_LOW_SPEED_MODE,
     .timer_num        = LEDC_TIMER_0,
@@ -382,9 +384,33 @@ uint8_t misc_get_light_value_rate()
     uint8_t rate;
     uint32_t sum = 0;
     uint8_t n = ADC_SUM_N;
+    bool restore_led = false;
+    bool prev_hold_on = false;
+    bool prev_light_state = false;
+    LED_MODE_E prev_mode = LED_MODE_LIGHT;
 
     // misc_io_set(LIGHT_POWER_IO, LIGHT_POWER_ON);
     // vTaskDelay(pdMS_TO_TICKS(20));
+
+    /* The indicator LED is physically close to the light sensor; turn it off
+     * during sampling to avoid influencing the ADC reading. */
+    if (g_misc.led.mutex) {
+        xSemaphoreTake(g_misc.led.mutex, portMAX_DELAY);
+        prev_hold_on = g_misc.led.hold_on;
+        prev_light_state = g_misc.led.light_state;
+        prev_mode = g_misc.led.mode;
+
+        if (prev_mode == LED_MODE_LIGHT && (prev_hold_on || prev_light_state)) {
+            restore_led = true;
+            g_misc.led.hold_on = 0;
+            g_misc.led.light_state = 0;
+            g_misc.led.light_update = 0;
+            misc_pwm_ctrl(0, 0);
+            ESP_LOGI(TAG, "restore_led");
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+
     while (n) {
         do {
             ret = adc_oneshot_read(g_misc.adc1_unit_handle, LIGHT_DET_ADC1_CHN, &raw);
@@ -397,6 +423,17 @@ uint8_t misc_get_light_value_rate()
             // ESP_LOGI(TAG, "voltage %d", voltage);
         }
     }
+
+    if (g_misc.led.mutex) {
+        if (restore_led) {
+            g_misc.led.mode = prev_mode;
+            g_misc.led.hold_on = prev_hold_on;
+            g_misc.led.light_state = prev_light_state;
+            g_misc.led.light_update = 1;
+        }
+        xSemaphoreGive(g_misc.led.mutex);
+    }
+
     // misc_io_set(LIGHT_POWER_IO, LIGHT_POWER_OFF);
     voltage = sum / ADC_SUM_N;
     voltage = MIN(MAX(voltage, LIGHT_MIN_SENS), LIGHT_MAX_SENS);
@@ -431,7 +468,7 @@ int misc_get_battery_voltage()
     return g_misc.voltage;
 }
 
-void misc_pwm_ctrl(uint8_t enable, uint8_t duty)
+static void misc_pwm_ctrl(uint8_t enable, uint8_t duty)
 {
     static int is_pause = 1;
     static int _duty;
@@ -484,6 +521,36 @@ void misc_led_able(uint8_t is_able)
 {
     xSemaphoreTake(g_misc.led.mutex, portMAX_DELAY);
     g_misc.led.hold_on = is_able;
+    if (is_able) {
+        g_misc.led.light_state = 1;
+        g_misc.led.light_update = 1;
+    }
+    xSemaphoreGive(g_misc.led.mutex);
+}
+
+void misc_led_off(void)
+{
+    if (!g_misc.led.mutex) {
+        return;
+    }
+
+    xSemaphoreTake(g_misc.led.mutex, portMAX_DELAY);
+    g_misc.led.hold_on = 0;
+    g_misc.led.blink_cnt = 0;
+    g_misc.led.light_state = 0;
+
+    if (g_misc.led.timer_state == 1) {
+        esp_timer_stop(g_misc.led.timer);
+        g_misc.led.timer_state = 0;
+    }
+
+    if (g_misc.led.mode == LED_MODE_FLASH) {
+        g_misc.led.mode = LED_MODE_LIGHT;
+    }
+
+    g_misc.led.light_duty = PWM_MIN_DUTY;
+    misc_pwm_ctrl(0, 0);
+    g_misc.led.light_update = 0;
     xSemaphoreGive(g_misc.led.mutex);
 }
 

@@ -69,7 +69,6 @@ typedef struct queueNode {
     snapType_e type;           ///< Snapshot type
     cameaFrom_e from;          ///< Data source
     uint64_t pts;              ///< Timestamp in milliseconds
-    void *context;             ///< Context pointer
     void (*free_handler)(struct queueNode *node, nodeEvent_e event); ///< Cleanup handler
     void *data;                ///< Data pointer
     size_t len;                ///< Data length

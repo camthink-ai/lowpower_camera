@@ -142,6 +142,8 @@ static esp_err_t get_root_handler(httpd_req_t *req)
     const uint32_t len = root_end - root_start;
     clear_timeout();
     httpd_resp_set_type(req, "text/html");
+    /* Avoid stale shell: dist HTML carries ?v= on JS/CSS; must not cache HTML long. */
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, root_start, len);
     ESP_LOGI(TAG, "Serve root");
     return ESP_OK;
@@ -171,7 +173,8 @@ static esp_err_t get_js_handler(httpd_req_t *req)
     const uint32_t len = js_end - js_start;
     clear_timeout();
     httpd_resp_set_type(req, "text/javascript");
-    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=604800");
+    /* Do not long-cache: URL may repeat across builds; OTA users must pick up new bundle. */
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, (const char *)js_start, len);
     return ESP_OK;
 }
@@ -185,6 +188,7 @@ static esp_err_t get_css_handler(httpd_req_t *req)
     const uint32_t len = css_end - css_start;
     clear_timeout();
     httpd_resp_set_type(req, "text/css");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, (const char *)css_start, len);
     return ESP_OK;
 }

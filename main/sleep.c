@@ -641,6 +641,10 @@ void sleep_start(void)
     cfg_get_cap_attr(&capture);
     time(&now);
     misc_show_time("now sleep at", now);
+
+    /* Ensure all LEDs are off before entering deep sleep. */
+    misc_led_off();
+    misc_flash_led_close();
     
     // Calculate and set timer wakeup
     
