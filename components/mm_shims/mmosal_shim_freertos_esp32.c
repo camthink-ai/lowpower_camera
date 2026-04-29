@@ -12,6 +12,7 @@
 #include "freertos/timers.h"
 #include "rom/ets_sys.h"
 #include "esp_debug_helpers.h"
+#include "esp_idf_version.h"
 #include "esp_private/startup_internal.h"
 
 #include "mmosal.h"
@@ -125,7 +126,11 @@ void mmosal_impl_assert(void)
 /* Function to be called as part of the secondary initialization. See [System
  * Initialization](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-guides/startup.html#system-initialization)
  * for more information. */
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+ESP_SYSTEM_INIT_FN(mmosal_dump_failure_info, CORE, BIT(0), 999)
+#else
 ESP_SYSTEM_INIT_FN(mmosal_dump_failure_info, BIT(0), 999)
+#endif
 {
     if (preserved_failure_info.magic == ASSERT_INFO_MAGIC)
     {

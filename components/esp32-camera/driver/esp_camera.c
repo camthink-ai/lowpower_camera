@@ -330,6 +330,7 @@ esp_err_t esp_camera_init(const camera_config_t *config)
 
     if (pix_format == PIXFORMAT_JPEG) {
         s_state->sensor.set_quality(&s_state->sensor, config->jpeg_quality);
+        ESP_LOGI(TAG, "JPEG quality: %d", config->jpeg_quality);
     }
     s_state->sensor.init_status(&s_state->sensor);
 
@@ -357,13 +358,14 @@ esp_err_t esp_camera_deinit()
 }
 
 #define FB_GET_TIMEOUT (4000 / portTICK_PERIOD_MS)
+#define FB_GET_TRY_TIMES 5
 
 camera_fb_t *esp_camera_fb_get()
 {
     if (s_state == NULL) {
         return NULL;
     }
-    camera_fb_t *fb = cam_take(FB_GET_TIMEOUT);
+    camera_fb_t *fb = cam_take(FB_GET_TIMEOUT, FB_GET_TRY_TIMES);
     //set the frame properties
     if (fb) {
         fb->width = resolution[s_state->sensor.status.framesize].width;

@@ -430,6 +430,10 @@ void parse_vs_frame_mjpeg_desc(const uint8_t *buff, uint8_t *frame_idx, uint16_t
 void parse_vs_format_frame_based_desc(const uint8_t *buff, uint8_t *format_idx, uint8_t *frame_num, enum uvc_frame_format *fmt);
 void parse_vs_frame_frame_based_desc(const uint8_t *buff, uint8_t *frame_idx, uint16_t *width, uint16_t *height, uint8_t *interval_type, const uint32_t **pp_interval, uint32_t *dflt_interval);
 void print_uvc_header_desc(const uint8_t *buff, uint8_t sub_class);
+void print_vc_input_terminal_desc(const uint8_t *buff);
+void print_vc_output_terminal_desc(const uint8_t *buff);
+void print_vc_camera_terminal_desc(const uint8_t *buff);
+void print_vc_processing_unit_desc(const uint8_t *buff);
 void print_device_descriptor(const uint8_t *buff);
 void print_ep_desc(const uint8_t *buff);
 #ifdef __cplusplus

@@ -25,6 +25,7 @@ typedef enum sleepBits {
     SLEEP_NO_OPERATION_TIMEOUT_BIT = BIT(2),   // No operation timeout
     SLEEP_SCHEDULE_DONE_BIT = BIT(3),          // Scheduled tasks complete
     SLEEP_MIP_DONE_BIT = BIT(4),               // MIP operations complete
+    SLEEP_NO_DEBUG_BIT = BIT(5),               // No debug mode
 } sleepBits_e;
 
 /**
@@ -34,6 +35,7 @@ typedef enum wakeupType {
     WAKEUP_UNDEFINED = 0,  // Unknown wakeup source
     WAKEUP_BUTTON,         // Button press wakeup
     WAKEUP_ALARMIN,        // Alarm input wakeup
+    WAKEUP_PIR,            // PIR wakeup
     WAKEUP_TIMER,          // Timer wakeup
 } wakeupType_e;
 
@@ -45,6 +47,7 @@ typedef enum wakeupTodo {
     WAKEUP_TODO_SNAPSHOT,      // Take snapshot
     WAKEUP_TODO_CONFIG,        // Enter config mode
     WAKEUP_TODO_SCHEDULE,      // Perform scheduled tasks
+    WAKEUP_TODO_UPLOAD,        // Perform upload tasks
 } wakeupTodo_e;
 
 /* Initialize compensation controller */
@@ -68,9 +71,16 @@ int time_compensation(time_t time_sec);
 
 /**
  * Calculate next wakeup time in seconds
+ * @param bUpdateWakeupTodo Whether to update the wakeup todo list
  * @return Seconds until next wakeup
  */
-uint32_t calc_wakeup_time_seconds();
+uint32_t calc_wakeup_time_seconds(bool bUpdateWakeupTodo);
+
+/**
+ * Calculate next snapshot time
+ * @return Seconds until next snapshot
+ */
+uint32_t calc_next_snapshot_time();
 
 /**
  * Get the wakeup source that triggered system startup
@@ -114,10 +124,27 @@ void sleep_start();
 wakeupTodo_e sleep_get_wakeup_todo();
 
 /**
- * Set action to perform after wakeup
  * @param todo Wakeup action
+ * @param priority Priority of the action, 0 is the highest priority, 7 is the lowest priority
  */
-void sleep_set_wakeup_todo(wakeupTodo_e todo);
+void sleep_set_wakeup_todo(wakeupTodo_e todo, uint8_t priority);
+
+/**
+ * Clear action to perform after wakeup
+ * @param priority Priority of the action, 0 is the highest priority, 7 is the lowest priority
+ */
+void sleep_clear_wakeup_todo(uint8_t priority);
+
+/**
+ * Check if there is any action to perform after wakeup
+ * @return true if there is any action to perform, false otherwise
+ */
+bool sleep_has_wakeup_todo();
+
+/**
+ * Reset wakeup todo list
+ */
+void sleep_reset_wakeup_todo();
 
 /**
  * Set timestamp of last capture
@@ -132,10 +159,40 @@ void sleep_set_last_capture_time(time_t time);
 time_t sleep_get_last_capture_time(void);
 
 /**
+ * Set timestamp of last upload
+ * @param time Timestamp to set
+ */
+void sleep_set_last_upload_time(time_t time);
+
+/**
+ * Get timestamp of last upload
+ * @return Last upload timestamp
+ */
+time_t sleep_get_last_upload_time(void);
+
+/**
+ * Set timestamp of last schedule
+ * @param time Timestamp to set
+ */
+void sleep_set_last_schedule_time(time_t time);
+
+/**
+ * Get timestamp of last schedule
+ * @return Last schedule timestamp
+ */
+time_t sleep_get_last_schedule_time(void);
+
+/**
  * Check if alarm input should trigger restart
  * @return 1 if should restart, 0 otherwise
  */
 uint32_t sleep_is_alramin_goto_restart();
+
+/**
+ * Check if the will wakeup time is reached
+ * @return true if the time is reached, false otherwise
+ */
+bool sleep_is_will_wakeup_time_reached(void);
 
 #ifdef __cplusplus
 }

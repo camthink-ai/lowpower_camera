@@ -18,7 +18,11 @@
     "gain": "增益等级",
     "flipHorizon": "水平翻转",
     "flipVertical": "垂直翻转",
-    "lightBrightness": "光照亮度"
+    "lightBrightness": "光照亮度",
+    "hdr": "宽动态",
+    "resolution": "分辨率",
+    "quality": "图片质量",
+    "qualityTip": "JPEG图片质量参数，范围4-63（最小值为4）。值越小图片质量越好但文件越大；值越大图片质量越差但文件越小。建议值：10-20（高质量），30-40（中等质量），50-63（低质量）。注意：修改此参数后需重启设备才能生效。高分辨率下太高的图片质量（值过小）可能会抓图失败，建议高分辨率时适当降低图片质量。"
   },
   "cap": {
     "captureSetting": "抓图设置",
@@ -28,12 +32,30 @@
     "intervalCap": "间隔抓图",
     "timeSet": "时间设置",
     "captureInterval": "抓图间隔",
-    "enableAlarmInCap": "启用Alarm-In抓图",
+    "intervalAnchorTime": "间隔抓拍锚点时间",
+    "openStableMs": "相机稳像延时",
+    "openStableTip": "相机开启后等待此延时以保证画面稳定（毫秒）。值过小可能出现画面抖动或曝光不稳定；过大将增加首次开流等待时间。",
+    "enableAlarmInCap": "启用触发抓图",
     "enableCapButton": "启用抓图按键",
+    "triggerMode": "触发模式",
+    "triggerModeDisabled": "全部关闭",
+    "triggerModeAlarm": "Alarm触发",
+    "triggerModePIR": "PIR触发",
+    "pirSettings": "PIR参数设置",
+    "pirSensitivity": "灵敏度",
+    "pirBlindTime": "盲区时间",
+    "pirPulseCount": "脉冲计数",
+    "pirWindowTime": "窗口时间",
+    "pirPulseUnit": "t",
+    "pirIntSource": "中断源",
+    "pirAdcSource": "ADC源",
     "min": "分钟",
     "h": "小时",
     "d": "天",
-    "m": "月"
+    "m": "月",
+    "uploadMode": "图片上传模式",
+    "immediatelyUpload": "即拍即传",
+    "scheduleUpload": "定时上传"
   },
   "week": {
     "Daily": "每天",
@@ -49,8 +71,9 @@
     "mqttSetting": "MQTT设置",
     "enable": "启用",
     "host": "主机",
-    "port": "MQTT端口号",
+    "port": "端口",
     "topic": "主题",
+    "protocol": "协议",
     "username": "用户名",
     "password": "密码",
     "save": "保存",
@@ -61,7 +84,18 @@
     "httpPort": "HTTP端口号",
     "qos": "QoS",
     "clientId": "客户端ID",
-    "status": "状态"
+    "status": "状态",
+    "CaCert": "CA证书",
+    "cert": "证书",
+    "key": "密钥",
+    "confirmClear": "确定要清除已选择的文件吗？",
+    "needCaCert": "请先上传CA证书",
+    "needCertKeyPair": "客户端证书与私钥需成对上传",
+    "pushMode": "推送模式",
+    "webhookUrl": "Webhook URL",
+    "webhookHeader": "自定义Header",
+    "webhookHeaderPlaceholder": "Authorization: Bearer token",
+    "webhookSave": "保存"
   },
   "sys": {
     "deviceMainte": "设备维护",
@@ -75,6 +109,7 @@
     "upgradeFirmware": "升级文件",
     "browse": "浏览",
     "upgrade": "升级",
+    "clear": "清空",
     "noFirmSpecified": "请选择一个文件。",
     "unFileFormat": "文件格式不符合。",
     "reallyUpgradeFirmware": "确定更新固件吗？",
@@ -83,7 +118,21 @@
     "updateSuccess": "升级成功！",
     "upgradeFailedTryAgain": "升级失败！请重试。",
     "autoProvision": "自动预配置",
-    "DevelopPlatformTake": "开发者平台接管"
+    "DevelopPlatformTake": "开发者平台接管",
+    "ntpSync": "网络同步时间",
+    "exportSessionLog": "运行日志",
+    "exportSessionLogBtn": "下载",
+    "exportSessionLogTip": "下载最近3次启动的运行日志（按时间从旧到新合并为一个文本）",
+    "configuration": "配置",
+    "export": "导出",
+    "import": "导入",
+    "exportConfigTip": "导出用户配置（INI）。不含设备上的 MQTT TLS 证书文件。",
+    "importConfigTip": "选择 INI 备份导入。设备上的 MQTT 证书不会被修改。",
+    "noConfigFileSpecified": "请选择配置文件。",
+    "reallyImportConfig": "确定导入该配置吗？将覆盖当前用户配置（不含 MQTT 证书文件）。",
+    "importConfigSuccess": "导入成功！建议刷新页面以使全部设置生效。",
+    "importConfigFailed": "导入失败，请确认文件为有效的 NE101 配置备份（含 [Hardware] model=NE101）。",
+    "importConfigWait": "正在导入配置，请稍候…"
   },
   "wlan": {
     "gateWayConnect": "网关连接",
@@ -103,6 +152,11 @@
   "saveSuccess": "保存成功！",
   "ok": "确定",
   "cancel": "取消",
+  "file": {
+    "empty": "文件为空，请选择有效文件",
+    "tooLarge": "文件过大，不能超过 {size}MB",
+    "invalidExt": "文件格式不支持，请选择证书或密钥文件"
+  },
   "cell": {
     "cellular": "蜂窝",
     "cellularStatus": "蜂窝状态",
@@ -122,6 +176,9 @@
     "imsi": "IMSI",
     "iccid": "ICCID",
     "isp": "运营商",
+    "ispSelect": "运营商选择",
+    "ispAuto": "自动",
+    "ispVerizon": "Verizon",
     "networkType": "网络类型",
     "plmnId": "PLMN ID",
     "lac": "位置区码",
@@ -152,5 +209,14 @@
     "Registered (Roaming)": "已注册（漫游）",
     "Registering": "注册中",
     "saveTip": "请等待模组重启..."
+  },
+  "debug": {
+    "title": "调试",
+    "pingTest": "Ping 测试",
+    "pingHostPlaceholder": "主机或IP",
+    "ping": "Ping",
+    "pinging": "Ping 中...",
+    "pingError": "Ping 失败",
+    "back": "返回"
   }
 }

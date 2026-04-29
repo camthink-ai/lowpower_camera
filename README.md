@@ -1,13 +1,14 @@
 # LowPower Camera
+![NE101](https://resources.camthink.ai/wiki/img/neoeyes-ne101-series/overview/Module.png)
 
 ## Project Overview
-
 This project is a low-power image acquisition solution based on the CamThink Event Camera NeoEyes NE101. The main features include:
 
 - Support for multiple trigger conditions to wake up autonomously
 - Low-power image acquisition
 - Transmission of image data to the cloud via MQTT protocol
-
+  
+[Quick Start](https://wiki.camthink.ai/docs/neoeyes-ne101-series/quick-start) 
 ## Hardware Preparation
 
 ### Required Equipment
@@ -19,7 +20,7 @@ This project is a low-power image acquisition solution based on the CamThink Eve
 1. CAT1 Cellular Communication Module
 2. Halow WIFI Module
 
-> For detailed hardware specifications, please refer to the [hardware introduction document](link).
+> For detailed hardware specifications, please refer to the [hardware introduction document](https://wiki.camthink.ai/docs/NeoEyes%20NE101%20Series/Overview).
 
 ## Software Environment Setup
 
@@ -52,7 +53,7 @@ cd lowpower_camera
 
 ### Step 1: Hardware Connection
 
-Please refer to the [hardware connection guide](link) to complete the device wiring.
+Please refer to the [hardware connection guide](https://wiki.camthink.ai/docs/NeoEyes%20NE101%20Series/Quick%20Start) to complete the device wiring.
 
 ### Step 2: Set Target Chip
 
@@ -78,7 +79,17 @@ idf.py -p /dev/ttyUSB0 flash
 ```bash
 idf.py monitor
 ```
+## Star History
+[![Star History Chart](https://api.star-history.com/svg?repos=camthink-ai/lowpower_camera&type=Date)](https://star-history.com/#camthink-ai/lowpower_camera&Date)
 
 ## Technical Support and Feedback
 
 If you encounter any issues during usage, please submit relevant [issues](https://github.com/camthink-ai/lowpower_camera/issues), and we will respond as soon as possible.
+
+## License
+
+This software is released under a **Dual-License** model.  
+- *Community Edition License*   
+- *Commercial Edition License*
+  
+Please see the full terms in [LICENSE](./LICENSE)  

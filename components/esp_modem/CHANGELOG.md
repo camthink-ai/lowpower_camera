@@ -1,5 +1,195 @@
 # Changelog
 
+## [2.0.0](https://github.com/espressif/esp-protocols/commits/modem-v2.0.0)
+
+### Breaking changes
+
+- inc headers for AT command definitions are no longer used directly, but pregenerated into *.h(pp) ([Use generated AT command definitions for IDE navigation](https://github.com/espressif/esp-protocols/commit/e2fa1110))
+
+### Features
+
+- Add support for multiple connection in AT based example ([2826287d](https://github.com/espressif/esp-protocols/commit/2826287d))
+- Add enhanced URC observer API ([4889dd6f](https://github.com/espressif/esp-protocols/commit/4889dd6f))
+- Support esp-modem use without PPP ([858f8570](https://github.com/espressif/esp-protocols/commit/858f8570), [#851](https://github.com/espressif/esp-protocols/issues/851))
+- Modem simulator based on esp-at ([e5787e3d](https://github.com/espressif/esp-protocols/commit/e5787e3d))
+
+### Bug Fixes
+
+- Update tests and examples to use modem-v2.0 ([4aa0e4ba](https://github.com/espressif/esp-protocols/commit/4aa0e4ba))
+- Replace MQTT client with simple ping command ([0ccaf2c0](https://github.com/espressif/esp-protocols/commit/0ccaf2c0))
+- Replace MQTT client with simple ping command ([9b2b1f68](https://github.com/espressif/esp-protocols/commit/9b2b1f68))
+- Update example to use optional mqtt deps ([3141d6ca](https://github.com/espressif/esp-protocols/commit/3141d6ca))
+- Minor fixed in the test code ([e772ce67](https://github.com/espressif/esp-protocols/commit/e772ce67))
+- Add missing set_echo() C wrapper ([d1e67080](https://github.com/espressif/esp-protocols/commit/d1e67080), [#926](https://github.com/espressif/esp-protocols/issues/926))
+- Fix modem console dependencies ([453be4cd](https://github.com/espressif/esp-protocols/commit/453be4cd))
+- Address build issues ([018ba58e](https://github.com/espressif/esp-protocols/commit/018ba58e))
+- Fix driver dependency issue on v6.0 ([67c682d9](https://github.com/espressif/esp-protocols/commit/67c682d9))
+- Fix CI build issues with IDFv6.0 ([15140e04](https://github.com/espressif/esp-protocols/commit/15140e04))
+- Add support for ESP-AT based tcp-client example ([14d3cb6b](https://github.com/espressif/esp-protocols/commit/14d3cb6b))
+- Use idf-build-apps for building target tests ([e9d9b3a8](https://github.com/espressif/esp-protocols/commit/e9d9b3a8))
+- Make MQTT public broker endpoint configurable ([6d541194](https://github.com/espressif/esp-protocols/commit/6d541194))
+- Fix URC handling in DTE data callback ([93029946](https://github.com/espressif/esp-protocols/commit/93029946))
+- Use another public broker for examples and tests ([fac2edbe](https://github.com/espressif/esp-protocols/commit/fac2edbe))
+- Fix incompatible iterator in std::search() in new gcc ([ed0f6334](https://github.com/espressif/esp-protocols/commit/ed0f6334))
+- Fix autodetect to support ACFC mode in PPP frames ([8b328a69](https://github.com/espressif/esp-protocols/commit/8b328a69), [#801](https://github.com/espressif/esp-protocols/issues/801))
+- Fix get_network_registration_state() to accept two params ([5f54d907](https://github.com/espressif/esp-protocols/commit/5f54d907), [#826](https://github.com/espressif/esp-protocols/issues/826))
+- Consume buffer after handled URC ([6eceb28f](https://github.com/espressif/esp-protocols/commit/6eceb28f))
+- Use generated AT command definitions for IDE navigation ([e2fa1110](https://github.com/espressif/esp-protocols/commit/e2fa1110), !BREAKING)
+
+## [1.4.0](https://github.com/espressif/esp-protocols/commits/modem-v1.4.0)
+
+### Features
+
+- added config_edrx api function ([74b7d85d](https://github.com/espressif/esp-protocols/commit/74b7d85d))
+- added sqn_gm02s connect function ([b97dfc08](https://github.com/espressif/esp-protocols/commit/b97dfc08))
+- add support for sequans GM02S modem ([8560f021](https://github.com/espressif/esp-protocols/commit/8560f021))
+
+### Bug Fixes
+
+- Fix cmux log message ([6ed672da](https://github.com/espressif/esp-protocols/commit/6ed672da))
+- fixed minor code mistakes. ([317faf89](https://github.com/espressif/esp-protocols/commit/317faf89))
+- handle nullptr in DTE constructors to prevent invalid access ([95b56600](https://github.com/espressif/esp-protocols/commit/95b56600))
+
+## [1.3.0](https://github.com/espressif/esp-protocols/commits/modem-v1.3.0)
+
+### Features
+
+- Add mode detection to the example ([18f196fa](https://github.com/espressif/esp-protocols/commit/18f196fa))
+- Support for pausing network in C-API ([1db83cd1](https://github.com/espressif/esp-protocols/commit/1db83cd1))
+- Add support for pausing netif ([247f1681](https://github.com/espressif/esp-protocols/commit/247f1681), [#699](https://github.com/espressif/esp-protocols/issues/699))
+
+### Bug Fixes
+
+- Minor cleanup of pppos example ([5e929902](https://github.com/espressif/esp-protocols/commit/5e929902))
+- Fix PPP mode detection to accept LCP/conf ([c989c6ad](https://github.com/espressif/esp-protocols/commit/c989c6ad))
+- Refine mode switch data->command ([8b6ea331](https://github.com/espressif/esp-protocols/commit/8b6ea331), [#692](https://github.com/espressif/esp-protocols/issues/692))
+- Detect serial ports properly ([0cb59ff8](https://github.com/espressif/esp-protocols/commit/0cb59ff8))
+- Fix CMUX enter to ignore URC before transition ([1284f66d](https://github.com/espressif/esp-protocols/commit/1284f66d), [#669](https://github.com/espressif/esp-protocols/issues/669))
+
+## [1.2.1](https://github.com/espressif/esp-protocols/commits/modem-v1.2.1)
+
+### Bug Fixes
+
+- Use higher GPIO range to support new chips ([428fdbbd](https://github.com/espressif/esp-protocols/commit/428fdbbd), [#558](https://github.com/espressif/esp-protocols/issues/558))
+- Remove tests and support for IDFv4.4, added IDFv5.4 ([433a033f](https://github.com/espressif/esp-protocols/commit/433a033f))
+- Fix typo GENETIC -> GENERIC in mode types ([090b1ff8](https://github.com/espressif/esp-protocols/commit/090b1ff8), [#667](https://github.com/espressif/esp-protocols/issues/667))
+- Add support for URC handler into C-API ([295d99df](https://github.com/espressif/esp-protocols/commit/295d99df), [#180](https://github.com/espressif/esp-protocols/issues/180))
+
+## [1.2.0](https://github.com/espressif/esp-protocols/commits/modem-v1.2.0)
+
+### Features
+
+- Add support for guessing mode ([52598e5f](https://github.com/espressif/esp-protocols/commit/52598e5f))
+- Delete CMUX internal implementation even if terminal exit fails ([0e0cbd6b](https://github.com/espressif/esp-protocols/commit/0e0cbd6b))
+- Add support for handling URC ([1b6a3b3b](https://github.com/espressif/esp-protocols/commit/1b6a3b3b), [#180](https://github.com/espressif/esp-protocols/issues/180))
+- add ability to change ESP_MODEM_C_API_STR_MAX from Kconfig ([17909892](https://github.com/espressif/esp-protocols/commit/17909892))
+- Added target test config with CHAP authentication ([f8ae7def](https://github.com/espressif/esp-protocols/commit/f8ae7def))
+- example add esp32p4 usb support ([adafeae5](https://github.com/espressif/esp-protocols/commit/adafeae5))
+- Publish mbedtls component ([0140455f](https://github.com/espressif/esp-protocols/commit/0140455f))
+- host test support of the latest ESP-IDF release ([3f74b4e8](https://github.com/espressif/esp-protocols/commit/3f74b4e8))
+
+### Bug Fixes
+
+- Fix console example to use urc/detect features ([1a9eaf3e](https://github.com/espressif/esp-protocols/commit/1a9eaf3e))
+- Update target test builds to use external Catch2 ([554f022c](https://github.com/espressif/esp-protocols/commit/554f022c))
+- Fix arguments names when spawn esp_modem_xxx declarations ([b6792c52](https://github.com/espressif/esp-protocols/commit/b6792c52))
+- Remove catch dependency ([c3480768](https://github.com/espressif/esp-protocols/commit/c3480768))
+- Examples: use local configs for MQTT topic/data ([f5c13b92](https://github.com/espressif/esp-protocols/commit/f5c13b92))
+- Fixed clang-tidy warnings ([70fa3af7](https://github.com/espressif/esp-protocols/commit/70fa3af7))
+- Fix CI build per IDFv5.3 ([d0c17ef0](https://github.com/espressif/esp-protocols/commit/d0c17ef0))
+- Fixed UART task to check for buffered data periodically ([4bdd90cc](https://github.com/espressif/esp-protocols/commit/4bdd90cc), [#536](https://github.com/espressif/esp-protocols/issues/536))
+- Cleanup unused configs from PPPoS example ([08a62ccc](https://github.com/espressif/esp-protocols/commit/08a62ccc))
+- Update CMUX example with SIM7070_gnss cleaned-up ([56fe5327](https://github.com/espressif/esp-protocols/commit/56fe5327))
+- Update console example with SIM7070_gnss format comments ([5baaf542](https://github.com/espressif/esp-protocols/commit/5baaf542))
+- Fix remaining print format warnings ([3b80181d](https://github.com/espressif/esp-protocols/commit/3b80181d))
+
+### Updated
+
+- docs(modem): Fix esp_modem_at_raw() description (C-API) ([492a6a00](https://github.com/espressif/esp-protocols/commit/492a6a00))
+- ci(common): updated github actions(checkout, upload, download) v3 to 4, Ubuntu 20.04 to v22.04 ([a23a0027](https://github.com/espressif/esp-protocols/commit/a23a0027))
+
+## [1.1.0](https://github.com/espressif/esp-protocols/commits/modem-v1.1.0)
+
+### Features
+
+- Added support for at_raw() command ([ae38110](https://github.com/espressif/esp-protocols/commit/ae38110), [#471](https://github.com/espressif/esp-protocols/issues/471))
+- Added iperf test for PPP netifs ([976e98d](https://github.com/espressif/esp-protocols/commit/976e98d))
+- Added test that performs OTA to exercise modem layers ([f2223dd](https://github.com/espressif/esp-protocols/commit/f2223dd))
+
+### Bug Fixes
+
+- Fixed OTA test to gracefully fail with no verification ([1dc4299](https://github.com/espressif/esp-protocols/commit/1dc4299))
+- Added C-API to configure APN ([ce7dadd](https://github.com/espressif/esp-protocols/commit/ce7dadd), [#485](https://github.com/espressif/esp-protocols/issues/485))
+- Fixed AT commands to copy strings to prevent overrides ([741d166](https://github.com/espressif/esp-protocols/commit/741d166), [#463](https://github.com/espressif/esp-protocols/issues/463))
+- Fixed incorrect dial command format ([0998f3d](https://github.com/espressif/esp-protocols/commit/0998f3d), [#433](https://github.com/espressif/esp-protocols/issues/433))
+- Fixed documentation and example on creating custom device ([577de67](https://github.com/espressif/esp-protocols/commit/577de67), [#452](https://github.com/espressif/esp-protocols/issues/452))
+- Removed CI jobs for IDF v4.2 ([d88cd61](https://github.com/espressif/esp-protocols/commit/d88cd61))
+- Fixed OAT test to verify server cert and CN ([edc3e72](https://github.com/espressif/esp-protocols/commit/edc3e72))
+- Fixed set_pdp_context() command timeout ([1d80cbc](https://github.com/espressif/esp-protocols/commit/1d80cbc), [#455](https://github.com/espressif/esp-protocols/issues/455))
+
+### Updated
+
+- docs(modem): Added description of manual test procedure ([68ce794](https://github.com/espressif/esp-protocols/commit/68ce794))
+
+## [1.0.5](https://github.com/espressif/esp-protocols/commits/modem-v1.0.5)
+
+### Major changes
+
+- Added support for implementing user defined modules in standard C-API ([Support for custom modules with C-API](https://github.com/espressif/esp-protocols/commit/0254d50))
+
+### Bug Fixes
+
+- Added test injecting unexpected replies ([b220d1e](https://github.com/espressif/esp-protocols/commit/b220d1e), [#426](https://github.com/espressif/esp-protocols/issues/426))
+- Fixed inconsistent state on data after OK ([bf99f28](https://github.com/espressif/esp-protocols/commit/bf99f28), [#426](https://github.com/espressif/esp-protocols/issues/426))
+- TLS example: Added restore session support in mbedtls-wrap ([79d38e5](https://github.com/espressif/esp-protocols/commit/79d38e5))
+- Fixed examples to show netif on ppp-changed event ([a70b197](https://github.com/espressif/esp-protocols/commit/a70b197))
+- remove unused GNU Make based buildsystem files ([d6b6f63](https://github.com/espressif/esp-protocols/commit/d6b6f63))
+- specify override_path in example manifest files ([5b78da4](https://github.com/espressif/esp-protocols/commit/5b78da4))
+- Added test-cases that exercise mode transitions ([aff571d](https://github.com/espressif/esp-protocols/commit/aff571d))
+- Fixed mode transitions between any state and UNDEF ([93cb2ca](https://github.com/espressif/esp-protocols/commit/93cb2ca), [#320](https://github.com/espressif/esp-protocols/issues/320))
+- Fixed API docs within doxygen comments ([020b407](https://github.com/espressif/esp-protocols/commit/020b407))
+- Support for custom modules with C-API ([0254d50](https://github.com/espressif/esp-protocols/commit/0254d50))
+- Fix CRLF issue with esp_modem_c_api.cpp ([2661b4d](https://github.com/espressif/esp-protocols/commit/2661b4d))
+
+### Updated
+
+- ci(common): Created reusable action for host and coverage tests ([9ad04de](https://github.com/espressif/esp-protocols/commit/9ad04de))
+
+## [1.0.4](https://github.com/espressif/esp-protocols/commits/modem-v1.0.4)
+
+### Bug Fixes
+
+- Added USB runner with ESP32S2 with A7670 ([edeb936](https://github.com/espressif/esp-protocols/commit/edeb936))
+- Extend docs on AT client example ([1f2ceed](https://github.com/espressif/esp-protocols/commit/1f2ceed))
+- Fix pytest exclusion, gitignore, and changelog checks ([2696221](https://github.com/espressif/esp-protocols/commit/2696221))
+- Fix DTE to post fragments to parsers for USB term ([1db1e15](https://github.com/espressif/esp-protocols/commit/1db1e15))
+- Fix DUAL_MODE regression from cb6e03ac ([2aada0f](https://github.com/espressif/esp-protocols/commit/2aada0f))
+- Fix AT client example to use custom AT processing ([1a5ba98](https://github.com/espressif/esp-protocols/commit/1a5ba98), [#352](https://github.com/espressif/esp-protocols/issues/352))
+
+## [1.0.3](https://github.com/espressif/esp-protocols/commits/modem-v1.0.3)
+
+### Bug Fixes
+
+- Fix to allow MSC frame (SIM800 CMUX) after v1.0.2 ([8d5947e](https://github.com/espressif/esp-protocols/commit/8d5947e), [#366](https://github.com/espressif/esp-protocols/issues/366))
+- Add CMUX example to target tests ([4f2ebaa](https://github.com/espressif/esp-protocols/commit/4f2ebaa))
+
+## [1.0.2](https://github.com/espressif/esp-protocols/commits/modem-v1.0.2)
+
+### Features
+
+- Add factory method for simple creation of custom DCEs ([4cf9e50](https://github.com/espressif/esp-protocols/commit/4cf9e50))
+- Support custom transport in AT TCP client example ([ae629ed](https://github.com/espressif/esp-protocols/commit/ae629ed))
+
+### Bug Fixes
+
+- Fix host test race with async read and d'structor ([c89d42f](https://github.com/espressif/esp-protocols/commit/c89d42f))
+- More error handling in cmux protocol ([8edbac6](https://github.com/espressif/esp-protocols/commit/8edbac6))
+- Fix netif to set PPP config in C++ way ([5287432](https://github.com/espressif/esp-protocols/commit/5287432))
+- Fix vfs terminal not to reset read_cb() automatically ([25a35e2](https://github.com/espressif/esp-protocols/commit/25a35e2))
+- Fix netif data race causing PPP startup delays ([c8c0507](https://github.com/espressif/esp-protocols/commit/c8c0507), [#308](https://github.com/espressif/esp-protocols/issues/308))
+- Added support for inflatable buffer ([cb6e03a](https://github.com/espressif/esp-protocols/commit/cb6e03a), [#272](https://github.com/espressif/esp-protocols/issues/272))
+- Fix LoadProhibited after failed CMUX initialization (IDFGH-10845) ([60c87dd](https://github.com/espressif/esp-protocols/commit/60c87dd))
+
 ## [1.0.1](https://github.com/espressif/esp-protocols/commits/modem-v1.0.1)
 
 ### Bug Fixes

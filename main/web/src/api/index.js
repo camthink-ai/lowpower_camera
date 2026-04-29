@@ -1,4 +1,4 @@
-// 使用Fetch原生API并根据请求类型进行封装
+// use native Fetch API and encapsulate based on request type
 
 function getData(url = "") {
     return fetch(url, {
@@ -12,7 +12,10 @@ function getData(url = "") {
             if (response.ok) return response.json();
             else return Promise.reject(response.json());
         })
-        .catch((error) => console.error(error));
+        .catch((error) => {
+            console.error(error);
+            return Promise.reject(error);
+        });
 }
 function postData(url = "", data = {}) {
     return fetch(url, {
@@ -32,7 +35,24 @@ function postData(url = "", data = {}) {
             return Promise.reject();
         });
 }
-// 传输文件
+
+// upload MQTTS file
+function postMqttFile(url = "",fileName = "", formData) {
+    return fetch(url, {
+        method: "POST",
+        body: formData,
+        headers: {
+            "Content-Type": "application/octet-stream",
+            "X-File-Name": fileName,
+        },
+    })
+        .then((response) => {
+            if (response.ok) return response.json();
+            else return Promise.reject(response.json());
+        })
+        .catch((error) => console.error(error));
+}
+// transfer file
 function postFile(url = "", formData) {
     return fetch(url, {
         method: "POST",
@@ -47,7 +67,7 @@ function postFile(url = "", formData) {
         })
         .catch((error) => console.error(error));
 }
-// 传输二进制文件
+// transfer binary file
 function postFileBuffer(url = "", formData) {
     return fetch(url, {
         method: "POST",
@@ -80,19 +100,48 @@ const URL = {
     setDevInfo: baseUrl + "/system/setDevInfo",
     getDevBattery: baseUrl + "/system/getDevBattery",
     setDevUpgrade: baseUrl + "/system/setDevUpgrade",
+    getDevNtpSync: baseUrl + "/system/getDevNtpSync",
+    setDevNtpSync: baseUrl + "/system/setDevNtpSync",
     getWifiList: baseUrl + "/network/getWifiList",
     getWifiParam: baseUrl + "/network/getWifiParam",
     setWifiParam: baseUrl + "/network/setWifiParam",
     setDevSleep: baseUrl + "/system/setDevSleep",
     setDevTime: baseUrl + "/system/setDevTime",
+    exportSessionLog: baseUrl + "/system/exportSessionLog",
+    exportConfig: baseUrl + "/system/exportConfig",
+    importConfig: baseUrl + "/system/importConfig",
 
     // Cellular
     getCellularParam: baseUrl + "/network/getCellularParam",
     setCellularParam: baseUrl + "/network/setCellularParam",
     sendCellularCommand: baseUrl + "/network/sendCellularCommand",
     getCellularStatus: baseUrl + "/network/getCellularStatus",
+    pingTest: baseUrl + "/network/pingTest",
     getIoTParam: baseUrl + "/network/getIoTParam",
     setIotParam: baseUrl + "/network/setIoTParam",
+
+    // scheduled upload
+    setUploadParam: baseUrl + "/capture/setUploadParam",
+    getUploadParam: baseUrl + "/capture/getUploadParam",
+
+    // Trigger and PIR
+    getTriggerParam: baseUrl + "/capture/getTriggerParam",
+    setTriggerParam: baseUrl + "/capture/setTriggerParam",
+
+    // MQTTFiles
+    uploadMQTTCa: baseUrl + "/network/uploadMqttCa",
+    uploadMQTTCert: baseUrl + "/network/uploadMqttCert",
+    uploadMQTTKey: baseUrl + "/network/uploadMqttKey",
+    deleteMQTTCa: baseUrl + "/network/deleteMqttCa",
+    deleteMQTTCert: baseUrl + "/network/deleteMqttCert",
+    deleteMQTTKey: baseUrl + "/network/deleteMqttKey",
+
+    // Webhook
+    getWebhookParam: baseUrl + "/network/getWebhookParam",
+    setWebhookParam: baseUrl + "/network/setWebhookParam",
+    getPushMode: baseUrl + "/network/getPushMode",
+    setPushMode: baseUrl + "/network/setPushMode",
+
 };
 
-export { getData, postData, postFile, postFileBuffer, URL };
+export { getData, postData, postFile, postFileBuffer, URL, postMqttFile };

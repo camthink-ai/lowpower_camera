@@ -10,19 +10,31 @@
 #include "esp_timer.h"
 #include "debug.h"
 #include "misc.h"
+#include "config.h"
 
 #define TAG "-->PIR"
 
-// Read mode sensor configuration values
-uint8_t SENS_C = 0x0f; //[7:0] Sensitivity setting, recommended to set greater than 20. If the environment has no interference, it can be set to a minimum value of 10. The smaller the value, the more sensitive, but the easier it is to trigger false alarms. (Effective in interrupt mode, ineffective in read mode)
-uint8_t BLIND_C= 0x03; //[3:0] The time to ignore motion detection after the interrupt output switches back to 0, range: 0.5s ~ 8s, interrupt time = register value * 0.5s + 0.5s. (Effective in interrupt mode, ineffective in read mode)
-uint8_t PULSE_C= 0x01; //[1:0] Pulse counter, the number of pulses required to be reached within the window time. Range: 1 ~ 4 signed pulses, pulse count = register value + 1. The larger the value, the stronger the anti-interference ability, but the sensitivity is slightly reduced. (Effective in interrupt mode, ineffective in read mode)
-uint8_t WINDOW_C= 0x00; //[1:0] Window time, range: 2s~8s, window time = register value * 2s + 2s. (Effective in interrupt mode, ineffective in read mode)
-uint8_t MOTION_C =0x01; //[0] Must be 1
-uint8_t INT_C= 0x00; // Interrupt source. 0 = motion detection, 1 = raw data from the filter. Read mode must be set to 1.
-uint8_t VOLT_C =0x00; //[1:0] Multiplex ADC resources. The input sources selectable for the ADC are as follows: PIR signal BFP output = 0; PIR signal LPF output = 1; power supply voltage = 2; temperature sensor = 3; choose as needed
-uint8_t SUPP_C = 0x00; // Set to 0
-uint8_t RSV_C = 0x00; // Set to 0
+// Fixed values (not configurable)
+#define MOTION_C 0x01  //[0] Must be 1
+#define SUPP_C 0x00    // Set to 0
+#define RSV_C 0x00     // Set to 0
+
+// Configuration values (loaded from config)
+// Sensitivity: 0-255, recommended > 20, minimum 10 (no interference)
+// Smaller values = more sensitive but easier false alarms
+static uint8_t SENS_C = 0x0f;   //[7:0] Sensitivity setting
+// Blind time: 0-15, range 0.5s ~ 8s
+// Formula: interrupt time = register value * 0.5s + 0.5s
+static uint8_t BLIND_C = 0x03;  //[3:0] Blind time
+// Pulse count: 0-3, range 1 ~ 4
+// Formula: pulse count = register value + 1
+// Larger value = stronger anti-interference but slightly reduced sensitivity
+static uint8_t PULSE_C = 0x01;  //[1:0] Pulse counter
+// Window time: 0-3, range 2s ~ 8s
+// Formula: window time = register value * 2s + 2s
+static uint8_t WINDOW_C = 0x00; //[1:0] Window time
+static uint8_t INT_C = 0x00;    //[0] Interrupt source: 0 = motion detection
+static uint8_t VOLT_C = 0x00;   //[1:0] ADC source: 0 = PIR BFP output
 
 static uint8_t SENS_W, BLIND_W, PULSE_W, WINDOW_W, MOTION_W, INT_W, VOLT_W, SUPP_W, RSV_W;
 static uint8_t PIR_OUT, DATA_H, DATA_L, SENS_R, BLIND_R, PULSE_R, WINDOW_R, MOTION_R, INT_R;
@@ -158,6 +170,18 @@ static void CONFIG_W()
 //======= Initialize sensor configuration parameters ==============================
 static void CONFIG_INI()
 {
+    // Load configuration from NVS
+    pirAttr_t pir_attr;
+    cfg_get_pir_attr(&pir_attr);
+    
+    SENS_C = pir_attr.sens;
+    BLIND_C = pir_attr.blind;
+    PULSE_C = pir_attr.pulse;
+    WINDOW_C = pir_attr.window;
+    // Fixed values (not configurable)
+    INT_C = 0x00;  // Interrupt source: 0 = motion detection
+    VOLT_C = 0x00; // ADC source: 0 = PIR BFP output
+    
     SENS_W = SENS_C;  
     BLIND_W = BLIND_C;
     PULSE_W = PULSE_C;
@@ -167,6 +191,24 @@ static void CONFIG_INI()
     VOLT_W = VOLT_C;
     SUPP_W = SUPP_C;
     RSV_W = RSV_C;
+}
+
+// Update PIR configuration from NVS
+void pir_update_config(void)
+{
+    pirAttr_t pir_attr;
+    cfg_get_pir_attr(&pir_attr);
+    
+    SENS_C = pir_attr.sens;
+    BLIND_C = pir_attr.blind;
+    PULSE_C = pir_attr.pulse;
+    WINDOW_C = pir_attr.window;
+    // Fixed values remain unchanged
+    INT_C = 0x00;
+    VOLT_C = 0x00;
+    
+    ESP_LOGI(TAG, "PIR config updated: SENS=0x%02x, BLIND=0x%02x, PULSE=0x%02x, WINDOW=0x%02x",
+             SENS_C, BLIND_C, PULSE_C, WINDOW_C);
 }
 
 //====== Read Nbit ====================
@@ -308,7 +350,7 @@ void pir_init(uint8_t is_first)
         for(i = 0; i < PIR_INIT_RETRY; i++){
             err = CFG_CHK();
             if(err != 0){
-                ESP_LOGD(TAG,"pir_init err:%d", err);
+                ESP_LOGW(TAG,"pir_init err:%d", err);
             }else{
                 break;
             }

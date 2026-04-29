@@ -42,6 +42,26 @@ extern "C" {
 #define KEY_IMG_GAINCEILING "img:gceiling"
 #define KEY_IMG_HOR         "img:bHor"
 #define KEY_IMG_VER         "img:bVer"
+#define KEY_IMG_FRAMESIZE   "img:framesize"
+
+#define KEY_IMG_QUALITY     "img:quality"
+#define KEY_IMG_SHARPNESS   "img:sharpness"
+#define KEY_IMG_DENOISE     "img:denoise"
+#define KEY_IMG_EFFECT      "img:effect"
+#define KEY_IMG_AWB         "img:bAwb"
+#define KEY_IMG_AWB_GAIN    "img:bAwbGain"
+#define KEY_IMG_WB_MODE     "img:wbMode"
+#define KEY_IMG_AEC         "img:bAec"
+#define KEY_IMG_AEC2        "img:bAec2"
+#define KEY_IMG_AEC_VALUE   "img:aecValue"
+#define KEY_IMG_BPC         "img:bBpc"
+#define KEY_IMG_WPC         "img:bWpc"
+#define KEY_IMG_RAW_GMA     "img:bRawGma"
+#define KEY_IMG_LENC        "img:bLenc"
+#define KEY_IMG_DCW         "img:bDcw"
+#define KEY_IMG_COLORBAR    "img:bColorbar"
+#define KEY_IMG_HDR         "img:hdr"
+
 #define KEY_LIGHT_MODE      "light:mode"
 #define KEY_LIGHT_THRESHOLD "light:thr"
 #define KEY_LIGHT_STIME     "light:stime"
@@ -54,6 +74,13 @@ extern "C" {
 #define KEY_CAP_TIME_COUNT  "cap:tCount"
 #define KEY_CAP_INTERVAL_V  "cap:iValue"
 #define KEY_CAP_INTERVAL_U  "cap:iUnit"
+#define KEY_CAP_INTERVAL_ANCHOR "cap:iAnchor" // Interval capture anchor time "HH:MM"
+#define KEY_CAP_CAM_WARMUP_MS "cap:camWarmupMs"
+#define KEY_UPLOAD_MODE     "upload:mode"
+#define KEY_UPLOAD_COUNT    "upload:count"
+#define KEY_UPLOAD_INTERVAL_V "upload:iValue"
+#define KEY_UPLOAD_INTERVAL_U "upload:iUnit"
+#define KEY_UPLOAD_RETRY    "upload:retry"
 #define KEY_PLATFORM_TYPE   "plat:type"
 #define KEY_SNS_HTTP_PORT   "sns:httpPort"
 #define KEY_MQTT_ENABLE     "mqtt:enable"
@@ -64,6 +91,10 @@ extern "C" {
 #define KEY_MQTT_QOS        "mqtt:qos"
 #define KEY_MQTT_USER       "mqtt:user"
 #define KEY_MQTT_PASSWORD   "mqtt:password"
+#define KEY_MQTT_TLS_ENABLE "mqtt:tlsEnable"
+#define KEY_MQTT_CA_NAME    "mqtt:caName"
+#define KEY_MQTT_CERT_NAME  "mqtt:certName"
+#define KEY_MQTT_KEY_NAME   "mqtt:keyName"
 #define KEY_WIFI_SSID       "wifi:ssid"
 #define KEY_WIFI_PASSWORD   "wifi:password"
 #define KEY_IOT_AUTOP       "iot:autop"
@@ -75,6 +106,7 @@ extern "C" {
 #define KEY_SYS_SCHE_TIME   "sys:scheTime"
 #define KEY_SYS_TIME_ZONE   "sys:tz"
 #define KEY_SYS_TIME_ERR_RATE "sys:errRate"
+#define KEY_SYS_NTP_SYNC    "sys:bNtpSync"
 #define KEY_CFG_CRC32       "cfg:crc32"
 #define KEY_CAT1_IMEI       "cat1:imei"
 #define KEY_CAT1_APN        "cat1:apn"
@@ -82,7 +114,16 @@ extern "C" {
 #define KEY_CAT1_PASSWORD   "cat1:password"
 #define KEY_CAT1_PIN        "cat1:pin"
 #define KEY_CAT1_AUTH_TYPE  "cat1:authType"
+#define KEY_CAT1_ISP_SELECT "cat1:ispSelect"
 #define KEY_CAT1_BAUD_RATE  "cat1:baudRate"
+#define KEY_TRIGGER_MODE    "trigger:mode"
+#define KEY_PIR_SENS        "pir:sens"
+#define KEY_PIR_BLIND       "pir:blind"
+#define KEY_PIR_PULSE       "pir:pulse"
+#define KEY_PIR_WINDOW      "pir:window"
+#define KEY_PUSH_MODE       "push:mode"     // 0=MQTT (default), 1=Webhook
+#define KEY_WEBHOOK_URL     "whk:url"
+#define KEY_WEBHOOK_HEADER  "whk:header"    // Full "Key: Value" string
 
 
 /**
@@ -91,9 +132,9 @@ extern "C" {
 typedef struct deviceInfo {
     char name[MAX_LEN_32];
     char mac[MAX_LEN_32];
-    char sn[MAX_LEN_16];
+    char sn[MAX_LEN_32];
     char hardVersion[MAX_LEN_16];
-    char softVersion[MAX_LEN_16];
+    char softVersion[MAX_LEN_32];
     char model[MAX_LEN_16];
     char secretKey[MAX_LEN_16];
     char countryCode[MAX_LEN_3];
@@ -117,15 +158,33 @@ typedef struct lightAttr {
  * Image processing attributes structure
  */
 typedef struct imgAttr {
-    int8_t brightness; // -2 ~ 2
-    int8_t contrast; // -2 ~ 2
-    int8_t saturation; // -2 ~ 2
-    int8_t aeLevel; // -2 ~ 2
-    uint8_t bAgc; // 0，1
-    uint8_t gain; // 0 ~ 30 if agc = 0
-    uint8_t gainCeiling; // 0 ~ 6 (2x-128x) if agc = 1
-    uint8_t bHorizonetal; // 0
-    uint8_t bVertical; // 0
+    uint8_t quality;            // image quality (0 to 63)
+    int8_t brightness;          // brightness adjustment (-2 to 2) #
+    int8_t contrast;            // contrast adjustment (-2 to 2) #
+    int8_t saturation;          // saturation adjustment (-2 to 2) #
+    int8_t sharpness;           // sharpness adjustment (-2 to 2)
+    uint8_t denoise;            // denoise level (0 to 8)
+    uint8_t specialEffect;      // special effect mode (0-6, e.g. black & white, vintage, negative, etc.)
+    uint8_t bAwb;               // auto white balance switch (1: on, 0: off)
+    uint8_t bAwbGain;           // manual white balance gain switch
+    uint8_t wbMode;             // white balance mode (0-4, different enum values represent different white balance settings)
+    uint8_t bAec;               // auto exposure control switch
+    uint8_t bAec2;              // secondary auto exposure control
+    int8_t aeLevel;             // auto exposure level adjustment (-2 to 2) #
+    uint16_t aecValue;          // manual exposure value (0-1200)
+    uint8_t bAgc;               // auto gain control switch #
+    uint8_t gain;               // manual gain value (0-30 or 64) #
+    uint8_t gainCeiling;        // maximum allowed gain (0-6) (2x-128x) #
+    uint8_t bBpc;               // black point correction switch
+    uint8_t bWpc;               // white point correction switch
+    uint8_t bRawGma;            // Gamma correction switch
+    uint8_t bLenc;              // lens distortion correction switch
+    uint8_t bHorizonetal;       // horizontal mirror switch #
+    uint8_t bVertical;          // vertical flip switch #
+    uint8_t frameSize;          // resolution setting (framesize_t enum value) #
+    uint8_t bDcw;               // downsampling switch
+    uint8_t bColorbar;          // color bar test pattern switch (for debugging)
+    uint8_t hdrEnable;          // HDR enable/disable for USB camera
 } imgAttr_t;
 
 /**
@@ -134,7 +193,7 @@ typedef struct imgAttr {
 typedef struct timedCapNode {
     uint8_t day; //0:sunday 1: monday, 2: tuesday, 3: wednesday ... 7: everyday,
     char time[MAX_LEN_32]; // xx:xx:xx
-} timedCapNode_t;
+} timedNode_t;
 
 /**
  * Capture attributes structure
@@ -145,10 +204,22 @@ typedef struct capAttr {
     uint8_t bButtonCap;
     uint8_t scheCapMode; // 0: timed 1: interval
     uint8_t timedCount; //use for timed mode
-    timedCapNode_t timedNodes[8]; //use for timed mode
+    timedNode_t timedNodes[8]; //use for timed mode
     uint32_t intervalValue; // use for interval mode
     uint8_t  intervalUnit; // use for interval mode. 0: minutes, 1: hours, 2:day
+    char intervalAnchorTime[MAX_LEN_8]; // "HH:MM", used for interval mode
+    uint32_t camWarmupMs; // camera warm-up delay in milliseconds
 } capAttr_t;
+
+/**
+ * Data upload management attributes structure
+ */
+typedef struct uploadAttr {
+    uint8_t uploadMode; // 0: instant upload, 1: scheduled upload
+    uint8_t timedCount; // number of scheduled upload times
+    timedNode_t timedNodes[10]; // scheduled upload times (max 10)
+    uint8_t retryCount; // retry count for failed uploads (default 3)
+} uploadAttr_t;
 
 /**
  * MQTT connection attributes structure
@@ -162,6 +233,10 @@ typedef struct mqttAttr {
     uint32_t port;
     uint8_t qos;
     uint32_t httpPort;
+    uint8_t tlsEnable;
+    char caName[MAX_LEN_128];
+    char certName[MAX_LEN_128];
+    char keyName[MAX_LEN_128];
 } mqttAttr_t;
 
 /**
@@ -194,14 +269,14 @@ typedef enum {
  * Sensing platform attributes structure
  */
 typedef struct sensingPlatformAttr {
-    // 感知平台固定值
+    // sensing platform fixed values
     uint8_t platformType;
     char platformName[MAX_LEN_32];
-    // 可配置参数
+    // configurable parameters
     char host[MAX_LEN_128];
     uint32_t mqttPort;
     uint32_t httpPort;
-    // 不可配置参数
+    // non-configurable parameters
     char topic[MAX_LEN_128];
     char username[MAX_LEN_64];
     char password[MAX_LEN_64];
@@ -213,10 +288,10 @@ typedef struct sensingPlatformAttr {
  * MQTT platform attributes structure
  */
 typedef struct mqttPlatformAttr {
-    // MQTT平台固定值
+    // MQTT platform fixed values
     uint8_t platformType;
     char platformName[MAX_LEN_32];
-    // 可配置参数
+    // configurable parameters
     char host[MAX_LEN_128];
     uint32_t mqttPort;
     char topic[MAX_LEN_128];
@@ -225,6 +300,10 @@ typedef struct mqttPlatformAttr {
     char username[MAX_LEN_64];
     char password[MAX_LEN_64];
     uint8_t isConnected;
+    uint8_t tlsEnable; // 0: disable, 1: enable
+    char caName[MAX_LEN_128];
+    char certName[MAX_LEN_128];
+    char keyName[MAX_LEN_128];
 } mqttPlatformAttr_t;
 
 /**
@@ -240,10 +319,10 @@ typedef struct platformParamAttr {
  * IoT service attributes structure
  */
 typedef struct IoTAttr {
-    uint8_t autop_enable; // 用于开启和关闭Auto-P（RPS）服务
-    uint8_t dm_enable; // 用于开启和关闭与开发者平台的远程管理服务
-    uint8_t autop_done; // 用于标记Auto-P（RPS）服务Profile是否已经下载完成
-    uint8_t dm_done; // 用于标记与开发者平台的远程管理服务Profile是否已经下载完成
+    uint8_t autop_enable; // used to enable and disable Auto-P (RPS) service
+    uint8_t dm_enable; // used to enable and disable remote management service with developer platform
+    uint8_t autop_done; // used to mark whether Auto-P (RPS) service Profile has been downloaded
+    uint8_t dm_done; // used to mark whether remote management service Profile with developer platform has been downloaded
 } IoTAttr_t;
 
 /**
@@ -261,15 +340,43 @@ typedef enum  {
  * Cellular parameters structure
  */
 typedef struct cellularParamAttr {
-    // 不可配置参数
+    // non-configurable parameters
     char imei[MAX_LEN_32];
-    // 可配置参数
+    // configurable parameters
+    char isp_select[MAX_LEN_16];  /* "auto" or "verizon" - ISP selection for PDP context */
     char apn[MAX_LEN_32];
     char user[MAX_LEN_64];
     char password[MAX_LEN_64];
     char pin[MAX_LEN_32];
     uint8_t authentication;
 } cellularParamAttr_t;
+
+/**
+ * Trigger mode enumeration
+ */
+typedef enum {
+    TRIGGER_MODE_DISABLED = 0,  // All triggers disabled
+    TRIGGER_MODE_ALARM = 1,     // Alarm input trigger
+    TRIGGER_MODE_PIR = 2        // PIR trigger
+} triggerMode_e;
+
+/**
+ * PIR sensor configuration structure
+ */
+typedef struct pirAttr {
+    uint8_t sens;    // [7:0] Sensitivity setting (0-255), recommended > 20, minimum 10
+    uint8_t blind;  // [3:0] Blind time after interrupt (0-15), time = value * 0.5s + 0.5s
+    uint8_t pulse;  // [1:0] Pulse counter (0-3), pulse count = value + 1
+    uint8_t window; // [1:0] Window time (0-3), time = value * 2s + 2s
+} pirAttr_t;
+
+/**
+ * Webhook push attributes structure
+ */
+typedef struct webhookAttr {
+    char url[MAX_LEN_256];       // Webhook endpoint URL
+    char header[MAX_LEN_256];    // Custom header, e.g. "Authorization: Bearer xxx"
+} webhookAttr_t;
 
 esp_err_t cfg_init(void);
 esp_err_t cfg_deinit();
@@ -285,6 +392,7 @@ void cfg_get_str(const char *key, char *value, size_t length, const char *def);
 void cfg_erase_key(const char *key);
 
 esp_err_t cfg_import(char *data, size_t len);
+esp_err_t cfg_export_userspace_ini(char *buf, size_t buf_sz, size_t *written);
 esp_err_t cfg_user_erase_all();
 esp_err_t cfg_set_firmware_crc32(uint32_t crc);
 uint32_t cfg_get_firmware_crc32();
@@ -304,6 +412,8 @@ esp_err_t cfg_get_light_attr(lightAttr_t *light);
 esp_err_t cfg_set_light_attr(lightAttr_t *light);
 esp_err_t cfg_get_cap_attr(capAttr_t *capture);
 esp_err_t cfg_set_cap_attr(capAttr_t *capture);
+esp_err_t cfg_get_upload_attr(uploadAttr_t *upload);
+esp_err_t cfg_set_upload_attr(uploadAttr_t *upload);
 esp_err_t cfg_get_mqtt_attr(mqttAttr_t *mqtt);
 esp_err_t cfg_set_mqtt_attr(mqttAttr_t *mqtt);
 esp_err_t cfg_get_wifi_attr(wifiAttr_t *wifi);
@@ -316,7 +426,15 @@ esp_err_t cfg_get_cellular_param_attr(cellularParamAttr_t *cellularParam);
 esp_err_t cfg_set_cellular_param_attr(cellularParamAttr_t *cellularParam);
 esp_err_t cfg_get_cellular_baud_rate(uint32_t *baudRate);
 esp_err_t cfg_set_cellular_baud_rate(uint32_t baudRate);
+esp_err_t cfg_set_ntp_sync(uint8_t enable);
+esp_err_t cfg_get_ntp_sync(uint8_t *enable);
 bool cfg_is_undefined(char *value);
+esp_err_t cfg_get_trigger_mode(uint8_t *mode);
+esp_err_t cfg_set_trigger_mode(uint8_t mode);
+esp_err_t cfg_get_pir_attr(pirAttr_t *pir);
+esp_err_t cfg_set_pir_attr(pirAttr_t *pir);
+esp_err_t cfg_get_webhook_attr(webhookAttr_t *webhook);
+esp_err_t cfg_set_webhook_attr(webhookAttr_t *webhook);
 
 #ifdef __cplusplus
 }

@@ -9,8 +9,8 @@
 }
 
 /* Timed Capture */
-.capture-card .card-list {
-    /* 列表数据为空仍显示四行的空间 */
+.capture-card .capture-interval-content {
+    /* still show space for 4 rows when list data is empty */
     height: 192px;
 }
 .capture-time-content .card-item-content {
@@ -21,7 +21,7 @@
     white-space: nowrap;
 }
 .capture-mode-select .ms-select{
-    width: 155px;
+    width: 160px;
 }
 .capture-time-select .ms-select {
     width: 82px;
@@ -39,7 +39,13 @@
     padding-left: 0;
     text-align: center;
 }
-/* 间隔冒号加粗 */
+
+ .capture-card  .upload-time-list{
+   height: 240px;
+}
+
+
+/* interval colon bold */
 .capture-time-content .number span {
     font-weight: 700;
 }
@@ -68,6 +74,17 @@
     margin-right: 10px;
 }
 
+.interval-anchor-content .number input {
+    width: 32px !important;
+    box-sizing: border-box;
+    padding-left: 0;
+    text-align: center;
+}
+
+.interval-anchor-content .number span {
+    font-weight: 700;
+}
+
 .capture-interval-select {
     width: 75px;
 }
@@ -76,4 +93,23 @@
 }
 .capture-interval-select .ms-select .ms-select-dropdown{
     width: 100% !important;
+}
+
+/* Trigger Mode Select - same width as supplement light */
+.capture-card .trigger-mode-select .ms-select {
+    width: 160px;
+}
+
+/* PIR Parameters Input */
+.pir-param-input {
+    max-width: 50px;
+    margin-right: 10px;
+    text-align: center;
+}
+
+.pir-param-unit {
+    width: 12px;
+    margin-left: 0;
+    color: #666;
+    font-size: 14px;
 }

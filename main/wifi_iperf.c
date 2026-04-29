@@ -15,6 +15,7 @@
 #include "argtable3/argtable3.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_idf_version.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
@@ -682,6 +683,9 @@ void register_wifi_iperf(void)
         .help = "iperf command",
         .hint = NULL,
         .func = &wifi_cmd_iperf,
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+        .context = NULL,
+#endif
         .argtable = &iperf_args
     };
 

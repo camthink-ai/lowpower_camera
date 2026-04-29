@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -66,6 +66,18 @@ public:
     int write(DTE_Command command);
 
     /**
+     * @brief send data to the selected terminal, by default (without term_id argument)
+     * this API works the same as write: sends data to the secondary terminal, which is
+     * typically used as data terminal (for networking).
+     *
+     * @param data Data pointer to write
+     * @param len Data len to write
+     * @param term_id Terminal id: Primary if id==0, Secondary if id==1
+     * @return number of bytes written
+     */
+    int send(uint8_t *data, size_t len, int term_id = 1);
+
+    /**
      * @brief Reading from the underlying terminal
      * @param d Returning the data pointer of the received payload
      * @param len Length of the data payload
@@ -79,6 +91,13 @@ public:
      */
     void set_read_cb(std::function<bool(uint8_t *data, size_t len)> f);
 
+    /**
+     * @brief Sets read callback for manual command processing
+     * Note that this API also locks the command API, which can only be used
+     * after you remove the callback by dte->on_read(nullptr)
+     *
+     * @param on_data Function to be called when a command response is available
+     */
     void on_read(got_line_cb on_data) override;
 
     /**
@@ -86,6 +105,53 @@ public:
      * @param f Function to be called on DTE error
      */
     void set_error_cb(std::function<void(terminal_error err)> f);
+
+#ifdef CONFIG_ESP_MODEM_URC_HANDLER
+    /**
+     * @brief Allow setting a line callback for all incoming data
+     * @param line_cb
+     */
+    void set_urc_cb(got_line_cb line_cb)
+    {
+        command_cb.urc_handler = std::move(line_cb);
+    }
+
+    /**
+     * @brief Enhanced URC handler with buffer consumption control
+     * @param buffer_info Information about the current buffer state
+     * @return Information about how much of the buffer to consume
+     */
+    struct UrcBufferInfo {
+        const uint8_t* buffer_start;        // Start of entire buffer
+        size_t buffer_total_size;           // Total buffer size
+        size_t processed_offset;            // Offset of already processed data
+        size_t new_data_size;               // Size of new data since last call
+        const uint8_t* new_data_start;      // Pointer to start of new data
+        bool is_command_active;             // Whether a command is currently waiting for response
+    };
+
+    enum class UrcConsumeResult {
+        CONSUME_NONE,           // Don't consume anything, continue waiting
+        CONSUME_PARTIAL,        // Consume only part of the buffer
+        CONSUME_ALL             // Consume entire buffer
+    };
+
+    struct UrcConsumeInfo {
+        UrcConsumeResult result;
+        size_t consume_size;    // How many bytes to consume (0 = none, SIZE_MAX = all)
+    };
+
+    typedef std::function<UrcConsumeInfo(const UrcBufferInfo &)> enhanced_urc_cb;
+
+    /**
+     * @brief Set enhanced URC callback with buffer consumption control
+     * @param enhanced_cb Enhanced callback that can control buffer consumption
+     */
+    void set_enhanced_urc_cb(enhanced_urc_cb enhanced_cb)
+    {
+        command_cb.enhanced_urc_handler = std::move(enhanced_cb);
+    }
+#endif
 
     /**
      * @brief Sets the DTE to desired mode (Command/Data/Cmux)
@@ -108,6 +174,19 @@ public:
      */
     command_result command(const std::string &command, got_line_cb got_line, uint32_t time_ms, char separator) override;
 
+    /**
+     * @brief Allows this DTE to recover from a generic connection issue
+     *
+     * @return true if success
+     */
+    bool recover();
+
+    /**
+     * @brief Set internal command callbacks to the underlying terminal.
+     * Here we capture command replies to be processed by supplied command callbacks in  struct command_cb.
+     */
+    void set_command_callbacks();
+
 protected:
     /**
      * @brief Allows for locking the DTE
@@ -122,10 +201,38 @@ protected:
     }
     friend class Scoped<DTE>;                               /*!< Declaring "Scoped<DTE> lock(dte)" locks this instance */
 private:
-    static const size_t GOT_LINE = SignalGroup::bit0;       /*!< Bit indicating response available */
 
+    void handle_error(terminal_error err);                  /*!< Performs internal error handling */
     [[nodiscard]] bool setup_cmux();                        /*!< Internal setup of CMUX mode */
-    [[nodiscard]] bool exit_cmux();                         /*!< Exit of CMUX mode */
+    [[nodiscard]] bool exit_cmux();                         /*!< Exit of CMUX mode and cleanup  */
+    void exit_cmux_internal();                              /*!< Cleanup CMUX */
+
+#ifdef CONFIG_ESP_MODEM_URC_HANDLER
+    /**
+     * @brief Buffer state tracking for enhanced URC processing
+     */
+    struct BufferState {
+        size_t total_processed = 0;         /*!< Total bytes processed by URC handlers */
+        size_t last_urc_processed = 0;      /*!< Last offset processed by URC */
+        bool command_waiting = false;       /*!< Whether command is waiting for response */
+        size_t command_start_offset = 0;    /*!< Where current command response started */
+    } buffer_state;
+
+    /**
+     * @brief Update buffer state when new data arrives
+     * @param new_data_size Size of new data added to buffer
+     */
+    void update_buffer_state(size_t new_data_size);
+
+    /**
+     * @brief Create URC buffer information for enhanced handlers
+     * @param data Buffer data pointer
+     * @param consumed Already consumed bytes
+     * @param len New data length
+     * @return UrcBufferInfo structure with complete buffer context
+     */
+    UrcBufferInfo create_urc_info(uint8_t* data, size_t consumed, size_t len);
+#endif
 
     Lock internal_lock{};                                   /*!< Locks DTE operations */
     unique_buffer buffer;                                   /*!< DTE buffer */
@@ -133,9 +240,80 @@ private:
     std::shared_ptr<Terminal> primary_term;                 /*!< Reference to the primary terminal (mostly for sending commands) */
     std::shared_ptr<Terminal> secondary_term;               /*!< Secondary terminal for this DTE */
     modem_mode mode;                                        /*!< DTE operation mode */
-    SignalGroup signal;                                     /*!< Event group used to signal request-response operations */
-    command_result result;                                  /*!< Command result of the currently exectuted command */
     std::function<bool(uint8_t *data, size_t len)> on_data; /*!< on data callback for current terminal */
+    std::function<void(terminal_error err)> user_error_cb;  /*!< user callback on error event from attached terminals */
+
+#ifdef CONFIG_ESP_MODEM_USE_INFLATABLE_BUFFER_IF_NEEDED
+    /**
+     * @brief Implements an extra buffer that is used to capture partial reads from underlying terminals
+     * when we run out of the standard buffer
+     */
+    struct extra_buffer {
+        extra_buffer(): buffer(nullptr) {}
+        ~extra_buffer()
+        {
+            delete buffer;
+        }
+        std::vector<uint8_t> *buffer;
+        size_t consumed{0};
+        void grow(size_t need_size);
+        void deflate()
+        {
+            grow(0);
+            consumed = 0;
+        }
+        [[nodiscard]] uint8_t *begin() const
+        {
+            return &buffer->at(0);
+        }
+        [[nodiscard]] uint8_t *current() const
+        {
+            return &buffer->at(0) + consumed;
+        }
+    } inflatable;
+#endif // CONFIG_ESP_MODEM_USE_INFLATABLE_BUFFER_IF_NEEDED
+
+    /**
+     * @brief This abstracts command callback processing and implements its locking, signaling of completion and timeouts.
+     */
+    struct command_cb {
+#ifdef CONFIG_ESP_MODEM_URC_HANDLER
+        got_line_cb urc_handler {};                             /*!< URC callback if enabled */
+        enhanced_urc_cb enhanced_urc_handler {};                /*!< Enhanced URC callback with consumption control */
+#endif
+        static const size_t GOT_LINE = SignalGroup::bit0;       /*!< Bit indicating response available */
+        got_line_cb got_line;                                   /*!< Supplied command callback */
+        Lock line_lock{};                                       /*!< Command callback locking mechanism */
+        char separator{};                                       /*!< Command reply separator (end of line/processing unit) */
+        command_result result{};                                /*!< Command return code */
+        SignalGroup signal;                                     /*!< Event group used to signal request-response operations */
+        bool process_line(uint8_t *data, size_t consumed, size_t len, DTE* dte = nullptr);  /*!< Lets the processing callback handle one line (processing unit) */
+        bool wait_for_line(uint32_t time_ms)                    /*!< Waiting for command processing */
+        {
+            return signal.wait_any(command_cb::GOT_LINE, time_ms);
+        }
+        void set(got_line_cb l, char s = '\n')                  /*!< Sets the command callback atomically */
+        {
+            Scoped<Lock> lock(line_lock);
+            if (l) {
+                // if we set the line callback, we have to reset the signal and the result
+                signal.clear(GOT_LINE);
+                result = command_result::TIMEOUT;
+            } else {
+                // if we clear the line callback, we check consistency (since we've locked the line processing)
+                if (signal.is_any(command_cb::GOT_LINE) && result == command_result::TIMEOUT) {
+                    ESP_MODEM_THROW_IF_ERROR(ESP_ERR_INVALID_STATE);
+                }
+            }
+            got_line = std::move(l);
+            separator = s;
+        }
+        void give_up()                                          /*!< Reports other than timeout error when processing replies (out of buffer) */
+        {
+            result = command_result::FAIL;
+            signal.set(GOT_LINE);
+        }
+    } command_cb;                                               /*!< Command callback utility class */
 };
 
 /**

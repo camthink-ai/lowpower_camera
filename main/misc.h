@@ -81,14 +81,16 @@ void misc_flash_led_open();
 void misc_flash_led_close();
 /* Enable/disable status LED */
 void misc_led_able(uint8_t is_able);
+/* Force indicator LED fully off (stop blink/hold/PWM) */
+void misc_led_off(void);
 /* Blink status LED */
 void misc_led_blink(uint8_t blink_cnt, uint16_t blink_interval);
 /* Get light sensor reading as percentage */
 uint8_t misc_get_light_value_rate();
 /* Get battery voltage as percentage */
 uint8_t misc_get_battery_voltage_rate();
-/* Read raw battery voltage */
-uint8_t misc_read_battery_voltage();
+/* Get actual battery voltage in mV */
+int misc_get_battery_voltage();
 /* Set flash LED PWM duty cycle */
 void misc_set_flash_duty(int duty);
 #ifdef __cplusplus

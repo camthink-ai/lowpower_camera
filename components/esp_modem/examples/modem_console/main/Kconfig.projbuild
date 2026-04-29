@@ -10,7 +10,7 @@ menu "Example Configuration"
                 Connect to modem via UART.
         config EXAMPLE_SERIAL_CONFIG_USB
             bool "USB"
-            depends on IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
+            depends on IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4
             help
                 Connect to modem via USB (CDC-ACM class). For IDF version >= 4.4.
     endchoice
@@ -36,6 +36,11 @@ menu "Example Configuration"
             bool "BG96"
             help
                 Quectel BG96 is a series of LTE Cat M1/Cat NB1/EGPRS module.
+        config EXAMPLE_MODEM_DEVICE_EC20
+            depends on EXAMPLE_SERIAL_CONFIG_USB
+            bool "EC20"
+            help
+                Quectel EC20 is a series of LTE Cat M4 module.
         config EXAMPLE_MODEM_DEVICE_SIM7000
             depends on EXAMPLE_SERIAL_CONFIG_UART
             bool "SIM7000"
@@ -103,28 +108,28 @@ menu "Example Configuration"
         config EXAMPLE_MODEM_UART_TX_PIN
             int "TXD Pin Number"
             default 25
-            range 0 31
+            range 0 56
             help
                 Pin number of UART TX.
 
         config EXAMPLE_MODEM_UART_RX_PIN
             int "RXD Pin Number"
             default 26
-            range 0 31
+            range 0 56
             help
                 Pin number of UART RX.
 
         config EXAMPLE_MODEM_UART_RTS_PIN
             int "RTS Pin Number"
             default 27
-            range 0 31
+            range 0 56
             help
                 Pin number of UART RTS.
 
         config EXAMPLE_MODEM_UART_CTS_PIN
             int "CTS Pin Number"
             default 23
-            range 0 31
+            range 0 56
             help
                 Pin number of UART CTS.
 
@@ -174,7 +179,7 @@ menu "Example Configuration"
     config EXAMPLE_MODEM_PWRKEY_PIN
         int "PWRKEY Pin Number"
         default 18
-        range 0 31
+        range 0 56
         help
             Pin number connected to modem's power key pin.
 endmenu

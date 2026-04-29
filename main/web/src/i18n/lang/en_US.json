@@ -18,7 +18,11 @@
     "gain": "Gain",
     "flipHorizon": "Flip Horizontal",
     "flipVertical": "Flip Vertical",
-    "lightBrightness": "Light Brightness"
+    "lightBrightness": "Light Brightness",
+    "hdr": "HDR",
+    "resolution": "Resolution",
+    "quality": "Image Quality",
+    "qualityTip": "JPEG image quality parameter, range 4-63 (minimum value is 4). Lower values mean better quality but larger file size; higher values mean lower quality but smaller file size. Recommended values: 10-20 (high quality), 30-40 (medium quality), 50-63 (low quality). Note: Changes to this parameter will take effect after device restart. At high resolutions, too high image quality (too low value) may cause capture failure. It is recommended to reduce image quality appropriately at high resolutions."
   },
   "cap": {
     "captureSetting": "Capture Setting",
@@ -28,12 +32,30 @@
     "intervalCap": "Interval Capture",
     "timeSet": "Time Setting",
     "captureInterval": "Capture Interval",
-    "enableAlarmInCap": "Enable Alarm-In Capture",
+    "intervalAnchorTime": "Interval Anchor Time",
+    "openStableMs": "Camera Stabilization Delay ",
+    "openStableTip": "Delay after camera opens to ensure image stabilization (milliseconds). Too small may cause unstable exposure; too large increases initial wait time.",
+    "enableAlarmInCap": "Enable Trigger Capture",
     "enableCapButton": "Enable Capture Button",
+    "triggerMode": "Trigger Mode",
+    "triggerModeDisabled": "Disabled",
+    "triggerModeAlarm": "Alarm Input",
+    "triggerModePIR": "PIR Sensor",
+    "pirSettings": "PIR Settings",
+    "pirSensitivity": "Sensitivity",
+    "pirBlindTime": "Blind Time",
+    "pirPulseCount": "Pulse Count",
+    "pirWindowTime": "Window Time",
+    "pirPulseUnit": "t",
+    "pirIntSource": "Interrupt Source",
+    "pirAdcSource": "ADC Source",
     "min": "min",
     "h": "h",
     "d": "d",
-    "m": "m"
+    "m": "m",
+    "uploadMode": "Image Upload Mode",
+    "immediatelyUpload": "Instant Upload",
+    "scheduleUpload": "Scheduled Upload"
   },
   "week": {
     "Daily": "Daily",
@@ -49,8 +71,9 @@
     "mqttSetting": "MQTT Settings",
     "enable": "Enable",
     "host": "Host",
-    "port": "MQTT Port",
+    "port": "Port",
     "topic": "Topic",
+    "protocol": "Protocol",
     "username": "Username",
     "password": "Password",
     "save": "Save",
@@ -61,7 +84,18 @@
     "httpPort": "HTTP Port",
     "qos": "QoS",
     "clientId": "Client ID",
-    "status": "Status"
+    "status": "Status",
+    "CaCert": "CA Certificate",
+    "cert": "Client Certificate",
+    "key": "Client Key",
+    "confirmClear": "Confirm Clear",
+    "needCaCert": "Please upload CA certificate first",
+    "needCertKeyPair": "Client certificate and private key must be provided together",
+    "pushMode": "Push Mode",
+    "webhookUrl": "Webhook URL",
+    "webhookHeader": "Custom Header",
+    "webhookHeaderPlaceholder": "Authorization: Bearer token",
+    "webhookSave": "Save"
   },
   "sys": {
     "deviceMainte": "Device Maintenance",
@@ -75,6 +109,7 @@
     "upgradeFirmware": "Upgrade Firmware",
     "browse": "Browse",
     "upgrade": "Upgrade",
+    "clear": "Clear",
     "noFirmSpecified": "No firmware specified.",
     "unFileFormat": "Unknown file format.",
     "reallyUpgradeFirmware": "Do you really want to upgrade the firmware?",
@@ -83,7 +118,21 @@
     "updateSuccess": "Update successed!",
     "upgradeFailedTryAgain": "Upgrade failed! Please try again.",
     "autoProvision": "Auto Provision",
-    "DevelopPlatformTake": "Development Platform Takeover"
+    "DevelopPlatformTake": "Development Platform Takeover",
+    "ntpSync": "Network Time Sync",
+    "exportSessionLog": "Session log",
+    "exportSessionLogBtn": "Download",
+    "exportSessionLogTip": "Download last 3 boots’ logs merged (oldest first, one text file)",
+    "configuration": "Configuration",
+    "export": "Export",
+    "import": "Import",
+    "exportConfigTip": "Export user settings as INI. MQTT TLS certificate files on the device are not included.",
+    "importConfigTip": "Choose an INI backup to import. MQTT TLS cert files on the device are not changed.",
+    "noConfigFileSpecified": "Please choose a configuration file.",
+    "reallyImportConfig": "Import this file? It will overwrite current user settings (MQTT cert files are not changed).",
+    "importConfigSuccess": "Import succeeded. Refresh the page so all settings apply.",
+    "importConfigFailed": "Import failed. Ensure the file is a valid NE101 backup (includes [Hardware] model=NE101).",
+    "importConfigWait": "Importing configuration, please wait…"
   },
   "wlan": {
     "gateWayConnect": "Gateway Connection",
@@ -103,6 +152,11 @@
   "saveSuccess": "Save successfully!",
   "ok": "OK",
   "cancel": "Cancel",
+  "file": {
+    "empty": "File is empty. Please choose a valid file.",
+    "tooLarge": "File is too large. Max {size}MB.",
+    "invalidExt": "Unsupported format. Please choose a cert or key file."
+  },
   "cell": {
     "cellular": "Cellular",
     "cellularStatus": "Cellular Status",
@@ -122,6 +176,9 @@
     "imsi": "IMSI",
     "iccid": "ICCID",
     "isp": "ISP",
+    "ispSelect": "ISP Selection",
+    "ispAuto": "Auto",
+    "ispVerizon": "Verizon",
     "networkType": "Network Type",
     "plmnId": "PLMN ID",
     "lac": "LAC",
@@ -152,5 +209,14 @@
     "Registered (Roaming)": "Registered (Roaming)",
     "Registering": "Registering",
     "saveTip": "Please wait for the module to restart..."
+  },
+  "debug": {
+    "title": "Debug",
+    "pingTest": "Ping Test",
+    "pingHostPlaceholder": "Host or IP",
+    "ping": "Ping",
+    "pinging": "Pinging...",
+    "pingError": "Ping failed",
+    "back": "Back"
   }
 }

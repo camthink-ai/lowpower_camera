@@ -199,7 +199,9 @@ hcd_port_handle_t _usb_port_init(hcd_port_callback_t callback, void *callback_ar
     ret = hcd_install(&hcd_config);
     UVC_CHECK_GOTO(ESP_OK == ret, "HCD Install failed", hcd_init_err);
     hcd_port_config_t port_cfg = {
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
         .fifo_bias = HCD_PORT_FIFO_BIAS_BALANCED,
+#endif
         .callback = callback,
         .callback_arg = callback_arg,
         .context = phy_handle,

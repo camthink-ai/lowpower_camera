@@ -5,8 +5,9 @@ function Image() {
         // --Image Adjustment--
         supLight: 0,
         luminoSensity: 60,
-        threshold: 58, // 光照阈值
-        duty: 50, // 补光亮度
+        threshold: 58, // light threshold
+        duty: 50, // fill light brightness
+        hdrEnable: false, // HDR enable/disable for USB camera
         startTimeHour: "23",
         startTimeMinute: "00",
         endTimeHour: "07",
@@ -30,6 +31,73 @@ function Image() {
             },
         ],
 
+        frameSize: 14, // default FRAMESIZE_FHD (1920x1080)
+        frameSizeMount: false, // whether resolution data has been loaded
+        frameSizeOption: [
+            {
+                label: "320×240",
+                value: 5, // FRAMESIZE_QVGA
+                width: 320,
+                height: 240,
+            },
+            {
+                label: "640×480",
+                value: 8, // FRAMESIZE_VGA
+                width: 640,
+                height: 480,
+            },
+            {
+                label: "800×600",
+                value: 9, // FRAMESIZE_SVGA
+                width: 800,
+                height: 600,
+            },
+            {
+                label: "1024×768",
+                value: 10, // FRAMESIZE_XGA
+                width: 1024,
+                height: 768,
+            },
+            {
+                label: "1280×720",
+                value: 11, // FRAMESIZE_HD
+                width: 1280,
+                height: 720,
+            },
+            {
+                label: "1280×1024",
+                value: 12, // FRAMESIZE_SXGA
+                width: 1280,
+                height: 1024,
+            },
+            {
+                label: "1600×1200",
+                value: 13, // FRAMESIZE_UXGA
+                width: 1600,
+                height: 1200,
+            },
+            {
+                label: "1920×1080",
+                value: 14, // FRAMESIZE_FHD
+                width: 1920,
+                height: 1080,
+            },
+            {
+                label: "2048×1536",
+                value: 17, // FRAMESIZE_QXGA
+                width: 2048,
+                height: 1536,
+            },
+            {
+                label: "2560×1920",
+                value: 21, // FRAMESIZE_QSXGA
+                width: 2560,
+                height: 1920,
+            },
+        ],
+        quality: 12, // image quality (0-63, higher value means lower quality)
+        // Global minimum JPEG quality for all resolutions
+        MIN_JPEG_QUALITY: 4,
         brightness: 0,
         contrast: 0,
         saturation: 0,
@@ -48,33 +116,44 @@ function Image() {
         },
 
         lightMount: false,
+        _thresholdLightSaveTimer: null,
         async getImageInfo() {
-            const lightRes = await getData(URL.getLightParam);
-            this.supLight = lightRes.lightMode; // 0 - auto 1 - customize 2 - ON 3 - OFF
-            this.lightMount = true;
-            this.luminoSensity = lightRes.value;
-            this.threshold = lightRes.threshold;
-            this.duty = lightRes.duty;
-            this.startTimeHour = lightRes.startTime.split(":")[0];
-            this.startTimeMinute = lightRes.startTime.split(":")[1];
-            this.endTimeHour = lightRes.endTime.split(":")[0];
-            this.endTimeMinute = lightRes.endTime.split(":")[1];
+            try {
+                const lightRes = await getData(URL.getLightParam);
+                this.supLight = lightRes.lightMode; // 0 - auto 1 - customize 2 - ON 3 - OFF
+                this.luminoSensity = lightRes.value;
+                this.threshold = lightRes.threshold;
+                this.duty = lightRes.duty;
+                this.startTimeHour = lightRes.startTime.split(":")[0];
+                this.startTimeMinute = lightRes.startTime.split(":")[1];
+                this.endTimeHour = lightRes.endTime.split(":")[0];
+                this.endTimeMinute = lightRes.endTime.split(":")[1];
 
-            const camRes = await getData(URL.getCamParam);
-            this.brightness = camRes.brightness;
+                const camRes = await getData(URL.getCamParam);
+                this.brightness = camRes.brightness;
 
-            this.contrast = camRes.contrast;
-            this.saturation = camRes.saturation;
-            this.aeLevel = camRes.aeLevel;
-            this.agcEnable = camRes.bAgc ? true : false; // 1 true
-            this.gainCeil = camRes.gainCeiling;
-            this.gain = camRes.gain;
-            this.flipHorEnable = camRes.bHorizonetal ? true : false;
-            this.flipVerEnable = camRes.bVertical ? true : false;
+                this.contrast = camRes.contrast;
+                this.saturation = camRes.saturation;
+                this.aeLevel = camRes.aeLevel;
+                this.agcEnable = camRes.bAgc ? true : false; // 1 true
+                this.gainCeil = camRes.gainCeiling;
+                this.gain = camRes.gain;
+                this.flipHorEnable = camRes.bHorizonetal ? true : false;
+                this.flipVerEnable = camRes.bVertical ? true : false;
+                this.frameSize = camRes.frameSize;
+                this.quality = camRes.quality;
 
-            return Promise.resolve();
+                this.applyQualityLimit();
+
+                this.hdrEnable = camRes.hdrEnable ? true : false;
+            } catch (e) {
+                console.error('getImageInfo failed', e);
+            } finally {
+                this.lightMount = true;
+                this.frameSizeMount = true;
+            }
         },
-        // 刷新光敏值
+        // refresh light sensitivity value
         async refreshLuminoSensity() {
             const { value } = await getData(URL.getLightParam);
             this.luminoSensity = value;
@@ -97,6 +176,36 @@ function Image() {
             return;
         },
 
+        /** Debounced apply for threshold slider (reduces HTTP/MJPEG contention on weak links). */
+        onThresholdSliderInput($el) {
+            this.changeSlider($el);
+            if (this._thresholdLightSaveTimer) {
+                clearTimeout(this._thresholdLightSaveTimer);
+            }
+            this._thresholdLightSaveTimer = setTimeout(() => {
+                this._thresholdLightSaveTimer = null;
+                this.applyThresholdLightFromDevice();
+            }, 280);
+        },
+
+        async onThresholdSliderChange($el) {
+            this.changeSlider($el);
+            if (this._thresholdLightSaveTimer) {
+                clearTimeout(this._thresholdLightSaveTimer);
+                this._thresholdLightSaveTimer = null;
+            }
+            await this.applyThresholdLightFromDevice();
+        },
+
+        async applyThresholdLightFromDevice() {
+            try {
+                await this.setLightInfo();
+                await this.refreshLuminoSensity();
+            } catch (e) {
+                console.error('applyThresholdLightFromDevice', e);
+            }
+        },
+
         async setCamInfo() {
             await postData(URL.setCamParam, {
                 brightness: Number(this.brightness),
@@ -108,8 +217,40 @@ function Image() {
                 gain: Number(this.gain),
                 bHorizonetal: Number(this.flipHorEnable),
                 bVertical: Number(this.flipVerEnable),
+                frameSize: Number(this.frameSize),
+                quality: Number(this.quality),
+                hdrEnable: Number(this.hdrEnable),
             });
             return;
+        },
+
+        changeFrameSize({ detail }) {
+            this.frameSize = detail.value;
+            // Apply quality limit when resolution changes
+            this.applyQualityLimit();
+            if (!detail.isInit) {
+                this.setCamInfo();
+            }
+        },
+        changeQuality() {
+            // limit quality value to range 0-63
+            if (this.quality < 0) {
+                this.quality = 0;
+            } else if (this.quality > 63) {
+                this.quality = 63;
+            }
+            // Apply global quality limit (minimum 4)
+            this.applyQualityLimit();
+            this.setCamInfo();
+        },
+        /**
+         * Apply JPEG quality limit - global minimum quality is 4
+         */
+        applyQualityLimit() {
+            if (this.quality < this.MIN_JPEG_QUALITY) {
+                console.warn(`JPEG quality ${this.quality} is below minimum ${this.MIN_JPEG_QUALITY}, limiting to ${this.MIN_JPEG_QUALITY}. This change will take effect after the next device restart.`);
+                this.quality = this.MIN_JPEG_QUALITY;
+            }
         },
 
         async setImgAdjustDefault() {
@@ -117,7 +258,7 @@ function Image() {
             this.brightness = 0;
             this.contrast = 0;
             this.saturation = 0;
-            // 移除无用配置项
+            // remove unused configuration items
             // this.aeLevel = 0;
             // this.agcEnable = true;
             // this.gainCeil = 3;
@@ -128,7 +269,7 @@ function Image() {
         },
 
         /**
-         * 根据不同的输入框执行不同的格式处理与请求
+         * execute different format processing and requests based on different input boxes
          * @param {string} type
          */
         inputLightTime(type) {
@@ -160,7 +301,7 @@ function Image() {
                 default:
                     break;
             }
-            // 当输入时间相同时，后面的时间增加一分钟
+            // when input times are the same, add one minute to the later time
             if (
                 this.startTimeHour == this.endTimeHour &&
                 this.startTimeMinute == this.endTimeMinute
@@ -177,7 +318,7 @@ function Image() {
         /**
          *
          * @param {string} type hour | minute
-         * @return {string} 格式化后的时间
+         * @return {string} formatted time
          */
         formatTimeNumber(type, rawNum) {
             let result = "";
@@ -193,7 +334,7 @@ function Image() {
         },
 
         /**
-         * 时间增加一分钟
+         * add one minute to time
          * @param {string|number} hour
          * @param {string|number} minute
          * @return {string} "hour:minute"

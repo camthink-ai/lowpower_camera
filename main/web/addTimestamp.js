@@ -2,29 +2,29 @@
 import { readdirSync, statSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
-const outputPath = "dist"; // 输出文件夹
+const outputPath = "dist"; // output folder
 const timestamp = new Date().getTime();
 
-// 递归处理文件夹内的文件
+// recursively process files in folder
 function processFiles(folder) {
     const files = readdirSync(folder);
     for (const file of files) {
         const filePath = join(folder, file);
         const stats = statSync(filePath);
         if (stats.isFile()) {
-            // 如果是文件，添加时间戳参数
+            // if it's a file, add timestamp parameter
             addTimestamp(filePath);
         } else if (stats.isDirectory()) {
-            // 如果是文件夹，递归处理
+            // if it's a folder, process recursively
             processFiles(filePath);
         }
     }
 }
 
-// 为文件添加时间戳参数
+// add timestamp parameter to file
 function addTimestamp(filePath) {
     if (filePath.endsWith(".html")) {
-        // 只处理 HTML 文件
+        // only process HTML files
         const content = readFileSync(filePath, "utf-8");
         const updatedContent = content.replace(
             /(href=.*?\.css)|(src=.*?\.js)/g,
@@ -36,5 +36,5 @@ function addTimestamp(filePath) {
     }
 }
 
-// 处理输出文件夹
+// process output folder
 processFiles(outputPath);

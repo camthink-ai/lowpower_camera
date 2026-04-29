@@ -90,6 +90,11 @@ void wifi_set_mac(uint8_t *mac_hex);
  */
 esp_netif_t * wifi_get_Apnetif(void);
 
+/**
+ * Clear wifi timeout counter
+ */
+void wifi_clear_timeout(void);
+
 #ifdef __cplusplus
 }
 #endif

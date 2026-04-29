@@ -30,7 +30,10 @@
 #include "misc.h"
 #include "debug.h"
 #include "esp_sleep.h"
+#include "session_log.h"
 #include "pir.h"
+#include "http.h"
+#include "wifi.h"
 
 #define TAG "-->MISC"
 
@@ -44,6 +47,8 @@ typedef enum {
     LED_MODE_FLASH         =  0,
     LED_MODE_LIGHT,
 } LED_MODE_E;
+
+static void misc_pwm_ctrl(uint8_t enable, uint8_t duty);
 
 ledc_timer_config_t ledc_timer = {
     .speed_mode       = LEDC_LOW_SPEED_MODE,
@@ -84,7 +89,6 @@ typedef struct miscLed {
 typedef struct miscBtn {
     button_handle_t handle;
     button_event_t  event;
-    bool is_wake;
     int64_t press_time;
 } miscBtn_t;
 /**
@@ -94,7 +98,7 @@ typedef struct mdMisc {
     bool isInit;                    ///< Initialization flag
     miscBtn_t btn;                  ///< Button handler
     miscLed_t led;                  ///< LED control state
-    uint8_t voltage;                ///< Last measured battery voltage
+    uint32_t voltage;                ///< Last measured battery voltage
     adc_oneshot_unit_handle_t adc1_unit_handle; ///< ADC1 unit handle
     adc_oneshot_unit_handle_t adc2_unit_handle; ///< ADC2 unit handle  
     adc_cali_handle_t adc1_cali_handle; ///< ADC1 calibration handle
@@ -127,6 +131,13 @@ static void button_single_click_cb(void *arg, void *priv)
     ESP_LOGI(TAG, "BUTTON_SINGLE_CLICK");
     if (system_get_mode() == MODE_CONFIG && camera_snapshot(SNAP_BUTTON, 1) == ESP_OK) {
         misc_led_blink(1, 1000);
+        wifi_clear_timeout();
+        http_clear_timeout();
+    }else if(system_get_mode() != MODE_CONFIG){
+        sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG, 0);
+        esp_sleep_enable_timer_wakeup(100000ULL);
+        session_log_close_for_sleep();
+        esp_deep_sleep_start();
     }
 }
 
@@ -140,17 +151,7 @@ static void button_double_click_cb(void *arg, void *priv)
 static void button_long_press_start_cb(void *arg, void *priv)
 {
     ESP_LOGI(TAG, "BUTTON_LONG_PRESS_START");
-
-    if(system_get_mode() == MODE_CONFIG){
-        misc_led_blink(2, 500);
-    }
     g_misc.btn.event = BUTTON_LONG_PRESS_START;
-
-    if(g_misc.isInit == 1 && system_get_mode() != MODE_CONFIG){
-        sleep_set_wakeup_todo(WAKEUP_TODO_CONFIG);
-        esp_sleep_enable_timer_wakeup(100000ULL);
-        esp_deep_sleep_start();
-    }
 }
 
 static void button_long_press_hold_cb(void *arg, void *priv)
@@ -162,29 +163,6 @@ static void button_long_press_hold_cb(void *arg, void *priv)
         g_misc.reset_flag = 1;
         g_misc.btn.press_time = esp_timer_get_time();
     }
-}
-
-static void button_mode_det(uint8_t* mode)
-{
-    if(g_misc.btn.is_wake == 1){
-        while(1){
-            vTaskDelay(pdMS_TO_TICKS(100));
-            if(g_misc.btn.event == BUTTON_NONE_PRESS || g_misc.btn.event == BUTTON_PRESS_UP){
-                *mode = MODE_WORK;
-                ESP_LOGI(TAG, "misc_btn_mode_det MODE_WORK\r\n");
-                return;
-            }else if(g_misc.btn.event == BUTTON_LONG_PRESS_START){
-                *mode = MODE_CONFIG;
-                ESP_LOGI(TAG, "misc_btn_mode_det MODE_CONFIG\r\n");
-                return;
-            }
-        }
-    }
-}
-
-void misc_set_btnWakeFlag(void)
-{
-    g_misc.btn.is_wake = 1;
 }
 
 static void button_start()
@@ -314,14 +292,13 @@ static void adc_calibration_deinit(void)
     adc_oneshot_del_unit(g_misc.adc2_unit_handle);
 }
 
-static uint8_t  get_battery_voltage_rate()
+static int  get_adc_voltage_mv()
 {
     esp_err_t ret = ESP_OK;
     int voltage = 0;
-    uint32_t sum = 0;
+    int sum = 0;
     int raw;
     uint8_t n = ADC_SUM_N;
-    uint8_t rate;
 
     // misc_io_set(BATTERY_POWER_IO, BATTERY_POWER_ON);
     // vTaskDelay(pdMS_TO_TICKS(50));
@@ -330,24 +307,16 @@ static uint8_t  get_battery_voltage_rate()
             ret = adc_oneshot_read(g_misc.adc2_unit_handle, BATTERY_DET_ADC2_CHN, &raw);
         } while (ret == ESP_ERR_INVALID_STATE);
         if (g_misc.adc2_cali_handle) {
+            raw = MIN(raw, 4000);
             ESP_ERROR_CHECK(adc_cali_raw_to_voltage(g_misc.adc2_cali_handle, raw, &voltage));
             n--;
-            // ESP_LOGI(TAG, "voltage %d", voltage);
+            // ESP_LOGI(TAG, "voltage %d raw %d", voltage, raw);
         }
         sum += voltage;
     }
     // misc_io_set(BATTERY_POWER_IO, BATTERY_POWER_OFF);
     voltage = sum / ADC_SUM_N;
-    if (voltage < BATTERY_MIN_VOLTAGE / 2) {
-        // maybe typec inserted
-        rate = 100;
-    } else {
-        voltage = MIN(MAX(voltage, BATTERY_MIN_VOLTAGE), BATTERY_MAX_VOLTAGE);
-        rate = (uint8_t)((voltage - BATTERY_MIN_VOLTAGE) * 100 / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE));
-    }
-    ESP_LOGI(TAG, "battery voltage rate %d", rate);
-
-    return rate;
+    return voltage;
 }
 
 static void adc_start()
@@ -415,9 +384,33 @@ uint8_t misc_get_light_value_rate()
     uint8_t rate;
     uint32_t sum = 0;
     uint8_t n = ADC_SUM_N;
+    bool restore_led = false;
+    bool prev_hold_on = false;
+    bool prev_light_state = false;
+    LED_MODE_E prev_mode = LED_MODE_LIGHT;
 
     // misc_io_set(LIGHT_POWER_IO, LIGHT_POWER_ON);
     // vTaskDelay(pdMS_TO_TICKS(20));
+
+    /* The indicator LED is physically close to the light sensor; turn it off
+     * during sampling to avoid influencing the ADC reading. */
+    if (g_misc.led.mutex) {
+        xSemaphoreTake(g_misc.led.mutex, portMAX_DELAY);
+        prev_hold_on = g_misc.led.hold_on;
+        prev_light_state = g_misc.led.light_state;
+        prev_mode = g_misc.led.mode;
+
+        if (prev_mode == LED_MODE_LIGHT && (prev_hold_on || prev_light_state)) {
+            restore_led = true;
+            g_misc.led.hold_on = 0;
+            g_misc.led.light_state = 0;
+            g_misc.led.light_update = 0;
+            misc_pwm_ctrl(0, 0);
+            ESP_LOGI(TAG, "restore_led");
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+
     while (n) {
         do {
             ret = adc_oneshot_read(g_misc.adc1_unit_handle, LIGHT_DET_ADC1_CHN, &raw);
@@ -430,6 +423,17 @@ uint8_t misc_get_light_value_rate()
             // ESP_LOGI(TAG, "voltage %d", voltage);
         }
     }
+
+    if (g_misc.led.mutex) {
+        if (restore_led) {
+            g_misc.led.mode = prev_mode;
+            g_misc.led.hold_on = prev_hold_on;
+            g_misc.led.light_state = prev_light_state;
+            g_misc.led.light_update = 1;
+        }
+        xSemaphoreGive(g_misc.led.mutex);
+    }
+
     // misc_io_set(LIGHT_POWER_IO, LIGHT_POWER_OFF);
     voltage = sum / ADC_SUM_N;
     voltage = MIN(MAX(voltage, LIGHT_MIN_SENS), LIGHT_MAX_SENS);
@@ -439,24 +443,32 @@ uint8_t misc_get_light_value_rate()
     return rate;
 }
 
-uint8_t misc_read_battery_voltage()
-{
-    g_misc.voltage = get_battery_voltage_rate();
-    return g_misc.voltage;
-}
 
 uint8_t  misc_get_battery_voltage_rate()
 {
-    // if (misc_io_get(TYPEC_DET_IO) == TYPEC_INSERT) {
-    //     return 100;
-    // }
+    int voltage_mv = 0;
+    uint8_t rate = 0;
+
+    voltage_mv = misc_get_battery_voltage() / 2;
+    if (voltage_mv <= BATTERY_MIN_VOLTAGE) {
+        // voltage_mv < 1000  maybe typec inserted
+        rate = voltage_mv < 1000 ? 0 : 1;
+    } else {
+        voltage_mv = MIN(MAX(voltage_mv, BATTERY_MIN_VOLTAGE), BATTERY_MAX_VOLTAGE);
+        rate = (uint8_t)((voltage_mv - BATTERY_MIN_VOLTAGE) * 100 / (BATTERY_MAX_VOLTAGE - BATTERY_MIN_VOLTAGE));
+    }
+    return rate;
+}
+
+int misc_get_battery_voltage()
+{
     if (g_misc.voltage == 0) {
-        g_misc.voltage = get_battery_voltage_rate();
+        g_misc.voltage = get_adc_voltage_mv() * 2;
     }
     return g_misc.voltage;
 }
 
-void misc_pwm_ctrl(uint8_t enable, uint8_t duty)
+static void misc_pwm_ctrl(uint8_t enable, uint8_t duty)
 {
     static int is_pause = 1;
     static int _duty;
@@ -509,6 +521,36 @@ void misc_led_able(uint8_t is_able)
 {
     xSemaphoreTake(g_misc.led.mutex, portMAX_DELAY);
     g_misc.led.hold_on = is_able;
+    if (is_able) {
+        g_misc.led.light_state = 1;
+        g_misc.led.light_update = 1;
+    }
+    xSemaphoreGive(g_misc.led.mutex);
+}
+
+void misc_led_off(void)
+{
+    if (!g_misc.led.mutex) {
+        return;
+    }
+
+    xSemaphoreTake(g_misc.led.mutex, portMAX_DELAY);
+    g_misc.led.hold_on = 0;
+    g_misc.led.blink_cnt = 0;
+    g_misc.led.light_state = 0;
+
+    if (g_misc.led.timer_state == 1) {
+        esp_timer_stop(g_misc.led.timer);
+        g_misc.led.timer_state = 0;
+    }
+
+    if (g_misc.led.mode == LED_MODE_FLASH) {
+        g_misc.led.mode = LED_MODE_LIGHT;
+    }
+
+    g_misc.led.light_duty = PWM_MIN_DUTY;
+    misc_pwm_ctrl(0, 0);
+    g_misc.led.light_update = 0;
     xSemaphoreGive(g_misc.led.mutex);
 }
 
@@ -610,7 +652,7 @@ static int misc_test(int argc, char **argv)
             misc_led_blink(cnt, blink_interval);
         }
     }else if (strcmp(argv[1], "bat") == 0) {
-        get_battery_voltage_rate();
+        misc_get_battery_voltage();
     }else if (strcmp(argv[1], "pir") == 0) {
         if(strcmp(argv[2], "init") == 0){
             pir_init(1);
@@ -627,7 +669,7 @@ static int misc_test(int argc, char **argv)
 }
 
 static esp_console_cmd_t g_cmd[] = {
-    {"misc", "misc [led/bat/light/pir] (cmd)", NULL, misc_test, NULL},
+    ESP_CONSOLE_CMD_INIT("misc", "misc [led/bat/light/pir] (cmd)", NULL, misc_test, NULL),
 };
 
 
@@ -675,11 +717,11 @@ void misc_open(uint8_t* mode)
     button_start();
     pwm_config();
     xTaskCreatePinnedToCore((TaskFunction_t)misc_task, "misc_task", 3 * 1024, NULL, 4, NULL, 1);
-    if(*mode != MODE_SCHEDULE){
-        button_mode_det(mode);
-    }
     g_misc.isInit = 1;
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
+    time_t now;
+    time(&now);
+    misc_show_time("now is:", now);
 }
 
 void misc_close(void)

@@ -122,9 +122,7 @@ void FdTerminal::task()
         } else {
             if (FD_ISSET(f.fd, &rfds)) {
                 if (on_read_priv) {
-                    if (on_read_priv(nullptr, 0)) {
-                        on_read_priv = nullptr;
-                    }
+                    on_read_priv(nullptr, 0);
                 }
             }
         }
@@ -157,7 +155,7 @@ int FdTerminal::write(uint8_t *data, size_t len)
 
 FdTerminal::~FdTerminal()
 {
-    stop();
+    FdTerminal::stop();
 }
 
 } // namespace esp_modem

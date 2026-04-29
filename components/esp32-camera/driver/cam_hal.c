@@ -372,8 +372,8 @@ esp_err_t cam_config(const camera_config_t *config, framesize_t frame_size, uint
     cam_obj->width = resolution[frame_size].width;
     cam_obj->height = resolution[frame_size].height;
 
-    if(cam_obj->jpeg_mode){
-        cam_obj->recv_size = cam_obj->width * cam_obj->height / 5;
+    if (cam_obj->jpeg_mode) {
+        cam_obj->recv_size = 1152 * 1024;   // 1152 * 1024 = 1.125MB
         cam_obj->fb_size = cam_obj->recv_size;
     } else {
         cam_obj->recv_size = cam_obj->width * cam_obj->height * cam_obj->in_bytes_per_pixel;
@@ -468,10 +468,12 @@ void cam_start(void)
     ll_cam_vsync_intr_enable(cam_obj, true);
 }
 
-camera_fb_t *cam_take(TickType_t timeout)
+camera_fb_t *cam_take(TickType_t timeout, int try_times)
 {
     camera_fb_t *dma_buffer = NULL;
     TickType_t start = xTaskGetTickCount();
+
+    if (try_times <= 0) return NULL;
     xQueueReceive(cam_obj->frame_buffer_queue, (void *)&dma_buffer, timeout);
     if (dma_buffer) {
         if(cam_obj->jpeg_mode){
@@ -480,11 +482,12 @@ camera_fb_t *cam_take(TickType_t timeout)
             if (offset_e >= 0) {
                 // adjust buffer length
                 dma_buffer->len = offset_e + sizeof(JPEG_EOI_MARKER);
+                // ESP_LOGI(TAG, "Picture taken! Its size was: %d", dma_buffer->len);
                 return dma_buffer;
             } else {
                 ESP_LOGW(TAG, "NO-EOI");
                 cam_give(dma_buffer);
-                return cam_take(timeout - (xTaskGetTickCount() - start));//recurse!!!!
+                return cam_take(timeout - (xTaskGetTickCount() - start), try_times - 1);//recurse!!!!
             }
         } else if(cam_obj->psram_mode && cam_obj->in_bytes_per_pixel != cam_obj->fb_bytes_per_pixel){
             //currently this is used only for YUV to GRAYSCALE

@@ -719,3 +719,190 @@ void parse_as_type_desc(const uint8_t *buff, uint8_t *channel_num, uint8_t *bit_
         *freq_type = desc->bSamFreqType;
     }
 }
+
+void print_vc_input_terminal_desc(const uint8_t *buff)
+{
+    if (buff == NULL) {
+        return;
+    }
+#ifdef CONFIG_UVC_PRINT_DESC
+    const uint8_t *desc = buff;
+    uint8_t bLength = desc[0];
+    uint8_t bTerminalID = desc[3];
+    uint16_t wTerminalType = desc[4] | (desc[5] << 8);
+    uint8_t bAssocTerminal = desc[6];
+    
+    printf("\t*** VC Input Terminal Descriptor ***\n");
+    printf("\tbLength %d\n", bLength);
+    printf("\tbDescriptorType 0x%x\n", desc[1]);
+    printf("\tbDescriptorSubtype 0x%x (INPUT_TERMINAL)\n", desc[2]);
+    printf("\tbTerminalID %d\n", bTerminalID);
+    printf("\twTerminalType 0x%04x\n", wTerminalType);
+    printf("\tbAssocTerminal %d\n", bAssocTerminal);
+#endif
+}
+
+void print_vc_output_terminal_desc(const uint8_t *buff)
+{
+    if (buff == NULL) {
+        return;
+    }
+#ifdef CONFIG_UVC_PRINT_DESC
+    const uint8_t *desc = buff;
+    uint8_t bLength = desc[0];
+    uint8_t bTerminalID = desc[3];
+    uint16_t wTerminalType = desc[4] | (desc[5] << 8);
+    uint8_t bAssocTerminal = desc[6];
+    uint8_t bSourceID = desc[7];
+    
+    printf("\t*** VC Output Terminal Descriptor ***\n");
+    printf("\tbLength %d\n", bLength);
+    printf("\tbDescriptorType 0x%x\n", desc[1]);
+    printf("\tbDescriptorSubtype 0x%x (OUTPUT_TERMINAL)\n", desc[2]);
+    printf("\tbTerminalID %d\n", bTerminalID);
+    printf("\twTerminalType 0x%04x\n", wTerminalType);
+    printf("\tbAssocTerminal %d\n", bAssocTerminal);
+    printf("\tbSourceID %d\n", bSourceID);
+#endif
+}
+
+void print_vc_camera_terminal_desc(const uint8_t *buff)
+{
+    if (buff == NULL) {
+        return;
+    }
+#ifdef CONFIG_UVC_PRINT_DESC
+    const uint8_t *desc = buff;
+    uint8_t bLength = desc[0];
+    uint8_t bTerminalID = desc[3];
+    uint16_t wTerminalType = desc[4] | (desc[5] << 8);
+    uint8_t bAssocTerminal = desc[6];
+    
+    printf("\t*** VC Camera Terminal Descriptor ***\n");
+    printf("\tbLength %d\n", bLength);
+    printf("\tbDescriptorType 0x%x\n", desc[1]);
+    printf("\tbDescriptorSubtype 0x%x (INPUT_TERMINAL/CAMERA)\n", desc[2]);
+    printf("\tbTerminalID %d\n", bTerminalID);
+    printf("\twTerminalType 0x%04x", wTerminalType);
+    if (wTerminalType == 0x0201) {
+        printf(" (ITT_CAMERA)\n");
+    } else {
+        printf("\n");
+    }
+    printf("\tbAssocTerminal %d\n", bAssocTerminal);
+    
+    if (bLength >= 15) {
+        uint16_t wObjectiveFocalLengthMin = desc[8] | (desc[9] << 8);
+        uint16_t wObjectiveFocalLengthMax = desc[10] | (desc[11] << 8);
+        uint16_t wOcularFocalLength = desc[12] | (desc[13] << 8);
+        uint8_t bControlSize = desc[14];
+        
+        printf("\twObjectiveFocalLengthMin %d\n", wObjectiveFocalLengthMin);
+        printf("\twObjectiveFocalLengthMax %d\n", wObjectiveFocalLengthMax);
+        printf("\twOcularFocalLength %d\n", wOcularFocalLength);
+        printf("\tbControlSize %d\n", bControlSize);
+        
+        if (bLength >= 15 + bControlSize) {
+            printf("\tbmControls 0x");
+            for (int i = bControlSize - 1; i >= 0; i--) {
+                printf("%02x", desc[15 + i]);
+            }
+            printf("\n");
+            
+            // Parse control bits
+            uint32_t bmControls = 0;
+            for (int i = 0; i < bControlSize && i < 4; i++) {
+                bmControls |= (desc[15 + i] << (i * 8));
+            }
+            
+            printf("\t  Camera Terminal Controls:\n");
+            if (bmControls & (1 << 0))  printf("\t    - Scanning Mode\n");
+            if (bmControls & (1 << 1))  printf("\t    - Auto Exposure Mode ✓\n");
+            if (bmControls & (1 << 2))  printf("\t    - Auto Exposure Priority ✓\n");
+            if (bmControls & (1 << 3))  printf("\t    - Exposure Time (Absolute) ✓\n");
+            if (bmControls & (1 << 4))  printf("\t    - Exposure Time (Relative)\n");
+            if (bmControls & (1 << 5))  printf("\t    - Focus (Absolute) ✓\n");
+            if (bmControls & (1 << 6))  printf("\t    - Focus (Relative)\n");
+            if (bmControls & (1 << 7))  printf("\t    - Iris (Absolute)\n");
+            if (bmControls & (1 << 8))  printf("\t    - Iris (Relative)\n");
+            if (bmControls & (1 << 9))  printf("\t    - Zoom (Absolute) ✓\n");
+            if (bmControls & (1 << 10)) printf("\t    - Zoom (Relative)\n");
+            if (bmControls & (1 << 11)) printf("\t    - PanTilt (Absolute)\n");
+            if (bmControls & (1 << 12)) printf("\t    - PanTilt (Relative)\n");
+            if (bmControls & (1 << 13)) printf("\t    - Roll (Absolute)\n");
+            if (bmControls & (1 << 14)) printf("\t    - Roll (Relative)\n");
+            if (bmControls & (1 << 17)) printf("\t    - Focus Auto ✓\n");
+            if (bmControls & (1 << 18)) printf("\t    - Privacy\n");
+        }
+    }
+#endif
+}
+
+void print_vc_processing_unit_desc(const uint8_t *buff)
+{
+    if (buff == NULL) {
+        return;
+    }
+#ifdef CONFIG_UVC_PRINT_DESC
+    const uint8_t *desc = buff;
+    uint8_t bLength = desc[0];
+    uint8_t bUnitID = desc[3];
+    uint8_t bSourceID = desc[4];
+    uint16_t wMaxMultiplier = desc[5] | (desc[6] << 8);
+    uint8_t bControlSize = desc[7];
+    
+    printf("\t*** VC Processing Unit Descriptor ***\n");
+    printf("\tbLength %d\n", bLength);
+    printf("\tbDescriptorType 0x%x\n", desc[1]);
+    printf("\tbDescriptorSubtype 0x%x (PROCESSING_UNIT)\n", desc[2]);
+    printf("\tbUnitID %d\n", bUnitID);
+    printf("\tbSourceID %d\n", bSourceID);
+    printf("\twMaxMultiplier %d\n", wMaxMultiplier);
+    printf("\tbControlSize %d\n", bControlSize);
+    
+    if (bLength >= 8 + bControlSize) {
+        printf("\tbmControls 0x");
+        for (int i = bControlSize - 1; i >= 0; i--) {
+            printf("%02x", desc[8 + i]);
+        }
+        printf("\n");
+        
+        // Parse control bits
+        uint32_t bmControls = 0;
+        for (int i = 0; i < bControlSize && i < 4; i++) {
+            bmControls |= (desc[8 + i] << (i * 8));
+        }
+        
+        printf("\t  Processing Unit Controls:\n");
+        if (bmControls & (1 << 0))  printf("\t    - Brightness ✓\n");
+        if (bmControls & (1 << 1))  printf("\t    - Contrast ✓\n");
+        if (bmControls & (1 << 2))  printf("\t    - Hue ✓\n");
+        if (bmControls & (1 << 3))  printf("\t    - Saturation ✓\n");
+        if (bmControls & (1 << 4))  printf("\t    - Sharpness ✓\n");
+        if (bmControls & (1 << 5))  printf("\t    - Gamma ✓\n");
+        if (bmControls & (1 << 6))  printf("\t    - White Balance Temperature ✓\n");
+        if (bmControls & (1 << 7))  printf("\t    - White Balance Component\n");
+        if (bmControls & (1 << 8))  printf("\t    - ★★★ Backlight Compensation (HDR) ✓ ★★★\n");
+        if (bmControls & (1 << 9))  printf("\t    - Gain ✓\n");
+        if (bmControls & (1 << 10)) printf("\t    - Power Line Frequency ✓\n");
+        if (bmControls & (1 << 11)) printf("\t    - Hue Auto\n");
+        if (bmControls & (1 << 12)) printf("\t    - White Balance Temperature Auto ✓\n");
+        if (bmControls & (1 << 13)) printf("\t    - White Balance Component Auto\n");
+        if (bmControls & (1 << 14)) printf("\t    - Digital Multiplier\n");
+        if (bmControls & (1 << 15)) printf("\t    - Digital Multiplier Limit\n");
+        if (bmControls & (1 << 16)) printf("\t    - Analog Video Standard\n");
+        if (bmControls & (1 << 17)) printf("\t    - Analog Video Lock Status\n");
+        if (bmControls & (1 << 18)) printf("\t    - Contrast Auto\n");
+    }
+    
+    if (bLength >= 9 + bControlSize) {
+        uint8_t iProcessing = desc[8 + bControlSize];
+        printf("\tiProcessing %d\n", iProcessing);
+    }
+    
+    if (bLength >= 10 + bControlSize) {
+        uint8_t bmVideoStandards = desc[9 + bControlSize];
+        printf("\tbmVideoStandards 0x%02x\n", bmVideoStandards);
+    }
+#endif
+}

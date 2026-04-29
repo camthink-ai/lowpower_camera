@@ -69,28 +69,28 @@ menu "Example Configuration"
         config EXAMPLE_MODEM_UART_TX_PIN
             int "TXD Pin Number"
             default 25
-            range 0 31
+            range 0 56
             help
                 Pin number of UART TX.
 
         config EXAMPLE_MODEM_UART_RX_PIN
             int "RXD Pin Number"
             default 26
-            range 0 31
+            range 0 56
             help
                 Pin number of UART RX.
 
         config EXAMPLE_MODEM_UART_RTS_PIN
             int "RTS Pin Number"
             default 27
-            range 0 31
+            range 0 56
             help
                 Pin number of UART RTS.
 
         config EXAMPLE_MODEM_UART_CTS_PIN
             int "CTS Pin Number"
             default 23
-            range 0 31
+            range 0 56
             help
                 Pin number of UART CTS.
     endmenu
@@ -128,5 +128,17 @@ menu "Example Configuration"
         default "mqtt://test.mosquitto.org"
         help
             URL of an mqtt broker which this example connects to.
+
+    config EXAMPLE_MQTT_TEST_TOPIC
+        string "MQTT topic to publish/subscribe"
+        default "/topic/esp-pppos"
+        help
+            MQTT topic, which we subscribe on and publish to.
+
+    config EXAMPLE_MQTT_TEST_DATA
+        string "MQTT data to publish/receive"
+        default "esp32-pppos"
+        help
+            MQTT data message, which we publish and expect to receive.
 
 endmenu

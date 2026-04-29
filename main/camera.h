@@ -18,8 +18,6 @@ typedef enum cameraEvent {
 } cameraEvent_e;
 
 
-#define CAMERA_USE_UVC  0
-
 /**
  * @brief Get frame buffer for streaming
  * @return Pointer to frame buffer structure
@@ -92,6 +90,20 @@ esp_err_t camera_flash_led_ctrl(lightAttr_t *light);
  * @return true if snapshot failed, false otherwise
  */
 bool camera_is_snapshot_fail();
+
+/**
+ * Get camera backend name
+ * @return Camera backend name
+ */
+const char *camera_get_backend_name();
+
+/**
+ * Apply JPEG quality limit based on resolution
+ * If resolution > 3MP, ensure jpeg_quality >= 6
+ * @param frameSize Frame size enum value
+ * @param quality Pointer to quality value (will be modified if needed)
+ */
+void camera_apply_jpeg_quality_limit(framesize_t frameSize, uint8_t *quality);
 
 #ifdef __cplusplus
 }

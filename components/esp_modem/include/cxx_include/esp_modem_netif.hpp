@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -54,8 +54,19 @@ public:
      */
     void stop();
 
-private:
+    /**
+     * @brief Pause the network interface
+     */
+    void pause();
+
+    /**
+     * @brief Resume the network interface
+     */
+    void resume();
+
     void receive(uint8_t *data, size_t len);
+
+private:
 
     static esp_err_t esp_modem_dte_transmit(void *h, void *buffer, size_t len);
 
@@ -64,7 +75,6 @@ private:
     static void on_ppp_changed(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
     std::shared_ptr<DTE> ppp_dte;
-    esp_netif_t *netif;
     struct ppp_netif_driver driver {};
     SignalGroup signal;
     static const size_t PPP_STARTED = SignalGroup::bit0;

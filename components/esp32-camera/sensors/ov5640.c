@@ -767,6 +767,7 @@ static int set_wb_mode(sensor_t *sensor, int mode)
     if (ret == 0) {
         ESP_LOGD(TAG, "Set wb_mode to: %d", mode);
         sensor->status.wb_mode = mode;
+        sensor->status.awb_gain = (mode != 0);
     }
     return ret;
 }

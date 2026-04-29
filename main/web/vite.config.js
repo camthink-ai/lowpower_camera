@@ -6,12 +6,12 @@ import removeConsole from "vite-plugin-remove-console";
 export default defineConfig({
   base: "./",
   server: {
-    // 是否开启 https
+    // whether to enable https
     https: false,
-    // 端口号
+    // port number
     port: 8080,
     host: "0.0.0.0",
-    // 本地跨域代理
+    // local cross-origin proxy
     proxy: {
       "/api/v1": {
         target: "http://192.168.1.1",
@@ -25,9 +25,9 @@ export default defineConfig({
     }
   },
   plugins: [
-    // 打包移除打印
+    // remove console logs in build
     removeConsole(),
-    // 压缩HTML
+    // compress HTML
     htmlMinifierTerser({
       removeAttributeQuotes: true, 
       collapseWhitespace: true,
@@ -37,13 +37,13 @@ export default defineConfig({
   build: {
     assetsInlineLimit: 51200,
     target: 'esnext',
-    // 防止 vite 将 rgba() 颜色转化为 #RGBA 十六进制，兼容移动端
+    // prevent vite from converting rgba() colors to #RGBA hex, compatible with mobile
     cssTarget: 'chrome61',
     minify: 'esbuild',
     sourcemap: false,
     rollupOptions: {
       output: {
-        // 固定打包output文件命名
+        // fixed build output file naming
         entryFileNames: `assets/[name].js`,
         chunkFileNames: `assets/[name].js`,
         assetFileNames: `assets/[name].[ext]`,

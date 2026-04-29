@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "utils.h"
 #include "mqtt.h"
+#include "push.h"
 #include "sleep.h"
 #include "http.h"
 #include "morse.h"
@@ -81,7 +82,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         if (iot_mip_autop_is_enable()) {
             iot_mip_autop_stop();
         }
-        mqtt_stop();
+        push_stop();
     }
     if (event_id == WIFI_EVENT_STA_CONNECTED) {
         ESP_LOGI(TAG, "WIFI_EVENT_STA_CONNECTED");
@@ -110,9 +111,9 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
             iot_mip_autop_async_start(NULL);
         }
         if(system_get_mode() != MODE_SCHEDULE){
-            system_ntp_time();
+            system_ntp_time(false);
         }
-        mqtt_start();
+        push_start();
     }
 }
 
@@ -204,7 +205,6 @@ static void timer_cb(void *arg)
         wifi->apTimeoutSeconds = 0;
     }
     if (wifi->apTimeoutSeconds >= AP_TIMEOUT_SECONDS) {
-        ESP_LOGI(TAG, "AP nobody to connect over %ds, will go to sleep", AP_TIMEOUT_SECONDS);
         sleep_set_event_bits(SLEEP_NO_OPERATION_TIMEOUT_BIT);
     }
 }
@@ -324,7 +324,7 @@ static int do_tcp_client(int argc, char **argv)
     // Close socket
     close(sock);
 
-    // 计算发送速率
+    // calculate send rate
     TickType_t  elapsed_time = end_time - start_time;
     float send_rate = (float)total_bytes_sent / ((float)elapsed_time / configTICK_RATE_HZ);
     ESP_LOGI(TAG, "Send rate: %.2f bytes/s", send_rate);
@@ -415,9 +415,9 @@ static int do_tcp_server(int argc, char **argv)
 }
 
 static esp_console_cmd_t g_cmd[] = {
-    {"wifiscan", "scan ssid list", NULL, do_scan_cmd, NULL},
-    {"tcpclient", "tcp client", NULL, do_tcp_client, NULL},
-    {"tcpserver", "tcp server", NULL, do_tcp_server, NULL},
+    ESP_CONSOLE_CMD_INIT("wifiscan", "scan ssid list", NULL, do_scan_cmd, NULL),
+    ESP_CONSOLE_CMD_INIT("tcpclient", "tcp client", NULL, do_tcp_client, NULL),
+    ESP_CONSOLE_CMD_INIT("tcpserver", "tcp server", NULL, do_tcp_server, NULL),
 };
 
 /**
@@ -447,10 +447,6 @@ void wifi_open(wifi_mode_t mode)
     }
 
     ESP_ERROR_CHECK(esp_base_mac_addr_set(mac_hex));
-    if(!netModule_is_cat1()){
-        ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
-    }
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, &g_wifi));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &ip_event_handler, &g_wifi));
@@ -684,3 +680,12 @@ esp_netif_t * wifi_get_Apnetif(void)
 {
     return g_wifi.netif;
 }
+
+/**
+ * Clear wifi timeout counter
+ */
+void wifi_clear_timeout(void)
+{
+    g_wifi.apTimeoutSeconds = 0;
+}
+

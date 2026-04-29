@@ -21,6 +21,7 @@
 #include "sleep.h"
 #include "misc.h"
 #include "debug.h"
+#include "session_log.h"
 
 #define STORAGE_UPLOAD_START_BIT BIT(0)
 #define STORAGE_UPLOAD_STOP_BIT BIT(1)
@@ -39,6 +40,33 @@ typedef struct mdStorage {
 } mdStorage_t;
 
 static mdStorage_t g_mdStorage;
+static bool s_littlefs_mounted;
+
+esp_err_t storage_ensure_mounted(void)
+{
+    if (s_littlefs_mounted) {
+        return ESP_OK;
+    }
+    esp_vfs_littlefs_conf_t conf = {
+        .base_path = STORAGE_ROOT,
+        .partition_label = STORAGE_PART,
+        .format_if_mount_failed = true,
+        .dont_mount = false,
+    };
+    esp_err_t ret = esp_vfs_littlefs_register(&conf);
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount or format filesystem");
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ESP_LOGE(TAG, "Failed to find LittleFS partition");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize LittleFS (%s)", esp_err_to_name(ret));
+        }
+        return ret;
+    }
+    s_littlefs_mounted = true;
+    return ESP_OK;
+}
 
 static void storage_queue_node_free(queueNode_t *node, nodeEvent_e event)
 {
@@ -86,24 +114,84 @@ static size_t storage_free_space()
 
 void storage_show_file()
 {
-    time_t pts;
+    /* session_log file may still be open for write:
+     * pause writer (flush+fsync+fclose) so stat(st_size) becomes reliable.
+     */
+    // bool paused = session_log_pause_for_stat();
+
+    uint64_t pts;
     char type;
     uint32_t num = 0;
     struct dirent *entry;
-    struct stat fstat;
-    char filename[32];
+    struct stat st;
+    char filename[512];
+    char time[32];
     DIR *dir = opendir(STORAGE_ROOT);
 
+    if (dir == NULL) {
+        ESP_LOGE(TAG, "opendir(%s) failed", STORAGE_ROOT);
+        return;
+    }
+
     while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '\0') {
+            continue;
+        }
+
         if (sscanf(entry->d_name, "%c%lld.jpg", &type, &pts) == 2) {
-            sprintf(filename, "%s/%c%lld.jpg", STORAGE_ROOT, type, pts);
-            stat(filename, &fstat);
-            ESP_LOGI(TAG, "------ %s(type %c, pts %lld size %ld)", entry->d_name, type, pts, fstat.st_size);
+            time_t t = (time_t)(pts / 1000ULL);
+            strftime(time, sizeof(time), "%Y-%m-%d %H:%M:%S", localtime(&t));
+
+            (void)snprintf(filename, sizeof(filename), "%s/%c%lld.jpg",
+                            STORAGE_ROOT, type, (long long)pts);
+            if (stat(filename, &st) == 0) {
+                ESP_LOGI(TAG, "------ %s(type %c, time %s size %lld)",
+                         entry->d_name, type, time, (long long)st.st_size);
+            } else {
+                ESP_LOGW(TAG, "stat failed for %s", filename);
+            }
             num++;
+        } else {
+            (void)snprintf(filename, sizeof(filename), "%s/%s", STORAGE_ROOT, entry->d_name);
+            if (stat(filename, &st) == 0) {
+                ESP_LOGI(TAG, "other file %s size %lld", entry->d_name, (long long)st.st_size);
+            } else {
+                ESP_LOGW(TAG, "stat failed for %s", filename);
+            }
         }
     }
-    ESP_LOGI(TAG, "Total files: %ld", num);
+
+    ESP_LOGI(TAG, "Total jgp files: %ld", (long)num);
     storage_free_space();
+    closedir(dir);
+
+    // session_log_resume_after_stat(paused);
+}
+
+void storage_clear_jpg_file()
+{
+    struct dirent *entry;
+    char path[PATH_MAX_lEN];
+    DIR *dir = opendir(STORAGE_ROOT);
+    while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, ".jpg")) {
+            sprintf(path, "%s/%s", STORAGE_ROOT, entry->d_name);
+            unlink(path);
+            ESP_LOGI(TAG, "unlink file %s", path);
+        }
+    }
+    closedir(dir);
+}
+
+void storage_clear_all_file()
+{
+    struct dirent *entry;
+    char path[PATH_MAX_lEN];
+    DIR *dir = opendir(STORAGE_ROOT);
+    while ((entry = readdir(dir)) != NULL) {
+        sprintf(path, "%s/%s", STORAGE_ROOT, entry->d_name);
+        unlink(path);
+    }
     closedir(dir);
 }
 
@@ -195,9 +283,9 @@ static esp_err_t storage_upload_file(char *filename, uint64_t pts, snapType_e ty
     return ESP_FAIL;
 }
 
-static void task(mdStorage_t *self)
+static void record(mdStorage_t *self)
 {
-    ESP_LOGI(TAG, "task Start");
+    ESP_LOGI(TAG, "record Start");
     while (true) {
         queueNode_t *node;
         if (xQueueReceive(self->in, &node, portMAX_DELAY)) {
@@ -227,7 +315,7 @@ static void upload(mdStorage_t *self)
 
     ESP_LOGI(TAG, "upload Start");
     while (true) {
-        sleep_set_event_bits(SLEEP_STORAGE_UPLOAD_STOP_BIT); // 如果flash里无剩余待上传图片，将进入休眠
+        sleep_set_event_bits(SLEEP_STORAGE_UPLOAD_STOP_BIT); // if no remaining images to upload in flash, will enter sleep
         xEventGroupWaitBits(self->eventGroup, STORAGE_UPLOAD_START_BIT, true, true, portMAX_DELAY);
         sleep_clear_event_bits(SLEEP_STORAGE_UPLOAD_STOP_BIT);
         struct dirent *entry;
@@ -259,7 +347,6 @@ static void upload(mdStorage_t *self)
         }
         ESP_LOGI(TAG, "upload nothing");
         closedir(dir);
-        xEventGroupSetBits(self->eventGroup, STORAGE_UPLOAD_STOP_BIT);
     }
     ESP_LOGI(TAG, "Stop");
     vTaskDelete(NULL);
@@ -271,8 +358,28 @@ static int do_tf_cmd(int argc, char **argv)
     return ESP_OK;
 }
 
+static int do_clear_cmd(int argc, char **argv)
+{
+    if (argc > 1) {
+        if (strcmp(argv[1], "all") == 0) {
+            storage_clear_all_file();
+        } 
+    }else {
+        storage_clear_jpg_file();
+    }
+    return ESP_OK;
+}
+
+static int do_ls_cmd(int argc, char **argv)
+{
+    storage_show_file();
+    return ESP_OK;
+}
+
 static esp_console_cmd_t g_cmd[] = {
     {"tf", "show TF card status", NULL, do_tf_cmd, NULL},
+    {"ls", "show file list", NULL, do_ls_cmd, NULL},
+    {"clear", "remove all jpg file", NULL, do_clear_cmd, NULL},
 };
 
 void storage_upload_start()
@@ -306,29 +413,15 @@ void storage_open(QueueHandle_t in, QueueHandle_t out)
     ESP_LOGI(TAG, "Initializing SPIFFS");
     memset(&g_mdStorage, 0, sizeof(g_mdStorage));
 
-    esp_vfs_littlefs_conf_t conf = {
-        .base_path = STORAGE_ROOT,
-        .partition_label = STORAGE_PART,
-        // .max_files = 5,
-        .format_if_mount_failed = true,
-        .dont_mount = false,
-    };
-    esp_err_t ret = esp_vfs_littlefs_register(&conf);
+    esp_err_t ret = storage_ensure_mounted();
     if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
-            ESP_LOGE(TAG, "Failed to mount or format filesystem");
-        } else if (ret == ESP_ERR_NOT_FOUND) {
-            ESP_LOGE(TAG, "Failed to find SPIFFS partition");
-        } else {
-            ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
-        }
         return;
     }
     g_mdStorage.in = in;
     g_mdStorage.out = out;
     g_mdStorage.eventGroup = xEventGroupCreate();
     g_mdStorage.mutex = xSemaphoreCreateMutex();
-    xTaskCreatePinnedToCore((TaskFunction_t)task, "record", 4 * 1024, &g_mdStorage, 4, NULL, 0);
+    xTaskCreatePinnedToCore((TaskFunction_t)record, "record", 4 * 1024, &g_mdStorage, 4, NULL, 0);
     xTaskCreatePinnedToCore((TaskFunction_t)upload, "upload", 4 * 1024, &g_mdStorage, 4, NULL, 1);
     debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
 }

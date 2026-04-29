@@ -7,6 +7,8 @@
 #include "utils.h"
 #include "cat1.h"
 #include "camera.h"
+#include "ota.h"
+#include <stdlib.h>
 
 #define NVS_CFG_UNDEFINED "undefined"
 #define NVS_CFG_PARTITION "cfg"
@@ -16,7 +18,7 @@
 
 // Handles for NVS namespaces
 static nvs_handle_t g_userHandle = 0;      ///< Handle for user configuration namespace
-static nvs_handle_t g_factoryHandle = 0;   ///< Handle for factory configuration namespace  
+static nvs_handle_t g_factoryHandle = 0;   ///< Handle for factory configuration namespace
 static SemaphoreHandle_t g_mutex = 0;      ///< Mutex for thread-safe access
 
 /**
@@ -49,7 +51,7 @@ static void mutex_lock(void)
 }
 
 /**
- * Unlock configuration mutex 
+ * Unlock configuration mutex
  * Releases the mutex after operations complete
  */
 static void mutex_unlock(void)
@@ -106,6 +108,13 @@ static esp_err_t namespace_open(const char *namespace, nvs_handle_t *handle)
 static void namespace_close(nvs_handle_t handle)
 {
     nvs_close(handle);
+}
+
+/** Close and reopen userspace handle to discard uncommitted NVS writes after failed import. */
+static esp_err_t cfg_reopen_userspace(void)
+{
+    namespace_close(g_userHandle);
+    return namespace_open(NVS_USER_NAMESPACE, &g_userHandle);
 }
 
 // static esp_err_t user_erase_key(nvs_handle_t handle, const char *key)
@@ -270,6 +279,7 @@ static esp_err_t get_u8(nvs_handle_t handle, const char *key, uint8_t *value, ui
     return err;
 }
 
+
 static esp_err_t set_u8(nvs_handle_t handle, const char *key, uint8_t value)
 {
     esp_err_t err = ESP_OK;
@@ -282,6 +292,7 @@ static esp_err_t set_u8(nvs_handle_t handle, const char *key, uint8_t value)
     }
     return err;
 }
+
 
 static esp_err_t get_i8(nvs_handle_t handle, const char *key, int8_t *value, int8_t def)
 {
@@ -621,7 +632,7 @@ static int do_date_cmd(int argc, char **argv)
 {
     timeAttr_t tAttr;
     system_get_time(&tAttr);
-    //显示时区和本地时间
+    // display timezone and local time
     misc_show_time(tAttr.tz, tAttr.ts);
     return ESP_OK;
 }
@@ -637,6 +648,59 @@ static int do_rpsurl_cmd(int argc, char **argv)
     return ESP_OK;
 }
 
+static int do_reset_cmd(int argc, char **argv)
+{
+    system_reset();
+    system_restart();
+    return ESP_OK;
+}
+
+static int do_debug_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("invalid argvment, eg: debug on\n");
+        return ESP_OK;
+    }
+    if (strcmp(argv[1], "off") == 0) {
+        sleep_set_event_bits(SLEEP_NO_DEBUG_BIT);
+    } else if (strcmp(argv[1], "on") == 0) {
+        sleep_clear_event_bits(SLEEP_NO_DEBUG_BIT);
+    }
+    printf("debug %s\n", argv[1]);
+    return ESP_OK;
+}
+
+static int do_snap_cmd(int argc, char **argv)
+{
+    camera_snapshot(SNAP_DEBUG, 1);
+    return ESP_OK;
+}
+
+static int do_mode_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("invalid argvment, eg: mode snapshot\n");
+        return ESP_OK;
+    }
+    modeSel_e tmp_mode = MODE_UNDEFINED;
+    printf("mode %s\n", argv[1]);
+    if (strcmp(argv[1], "snapshot") == 0) {
+        tmp_mode = MODE_SNAPSHOT;
+    } else if (strcmp(argv[1], "config") == 0) {
+        tmp_mode = MODE_CONFIG;
+    } else if (strcmp(argv[1], "schedule") == 0) {
+        tmp_mode = MODE_SCHEDULE;
+    } else if (strcmp(argv[1], "upload") == 0) {
+        tmp_mode = MODE_UPLOAD;
+    } else {
+        printf("invalid argvment, eg: mode snapshot\n");
+        return ESP_OK;
+    }
+    
+    system_set_temporary_mode(tmp_mode);
+    return ESP_OK;
+}
+
 static esp_console_cmd_t g_cmd[] = {
     {"fset", "factory setting: fset [key] [value]", NULL, do_fset_cmd, NULL},
     {"fget", "factory getting: fget [key]", NULL, do_fget_cmd, NULL},
@@ -648,6 +712,10 @@ static esp_console_cmd_t g_cmd[] = {
     {"tz", "set time zone", NULL, do_tz_cmd, NULL},
     {"date", "show system date", NULL, do_date_cmd, NULL},
     {"rpsurl", "set rps url", NULL, do_rpsurl_cmd, NULL},
+    {"sys_reset", "system reset", NULL, do_reset_cmd, NULL},
+    {"debug", "debug on/off", NULL, do_debug_cmd, NULL},
+    {"snap", "snapshot", NULL, do_snap_cmd, NULL},
+    {"mode", "set mode", NULL, do_mode_cmd, NULL},
 };
 
 /*------------------------------------------------------------------------*/
@@ -711,11 +779,7 @@ esp_err_t cfg_get_device_info(deviceInfo_t *device)
         strlen(device->countryCode) != 2) {
         get_str(g_factoryHandle, KEY_DEVICE_COUNTRY, device->countryCode, sizeof(device->countryCode), "US");
     }
-    if(CAMERA_USE_UVC){
-        strncpy(device->camera, "USB",sizeof(device->camera));
-    }else{
-        strncpy(device->camera, "CSI",sizeof(device->camera));
-    }
+    strncpy(device->camera, camera_get_backend_name(), sizeof(device->camera));
     get_str(g_userHandle, KEY_DEVICE_NETMOD, device->netmod, sizeof(device->netmod), "");
     mutex_unlock();
     return ESP_OK;
@@ -749,6 +813,9 @@ esp_err_t cfg_get_image_attr(imgAttr_t *image)
     get_u8(g_userHandle, KEY_IMG_GAINCEILING, &image->gainCeiling, 0);
     get_u8(g_userHandle, KEY_IMG_HOR, &image->bHorizonetal, 1);
     get_u8(g_userHandle, KEY_IMG_VER, &image->bVertical, 1);
+    get_u8(g_userHandle, KEY_IMG_FRAMESIZE, &image->frameSize, 14); // default FRAMESIZE_FHD
+    get_u8(g_userHandle, KEY_IMG_QUALITY, &image->quality, 12); // default quality 12 (0-63, higher value means lower quality)
+    get_u8(g_userHandle, KEY_IMG_HDR, &image->hdrEnable, 0); // default HDR disabled
     mutex_unlock();
     return ESP_OK;
 }
@@ -765,6 +832,9 @@ esp_err_t cfg_set_image_attr(imgAttr_t *image)
     set_u8(g_userHandle, KEY_IMG_GAINCEILING, image->gainCeiling);
     set_u8(g_userHandle, KEY_IMG_HOR, image->bHorizonetal);
     set_u8(g_userHandle, KEY_IMG_VER, image->bVertical);
+    set_u8(g_userHandle, KEY_IMG_FRAMESIZE, image->frameSize);
+    set_u8(g_userHandle, KEY_IMG_QUALITY, image->quality);
+    set_u8(g_userHandle, KEY_IMG_HDR, image->hdrEnable);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;
@@ -807,6 +877,8 @@ esp_err_t cfg_get_cap_attr(capAttr_t *capture)
     get_u8(g_userHandle, KEY_CAP_TIME_COUNT, &capture->timedCount, 0);
     get_u32(g_userHandle, KEY_CAP_INTERVAL_V, &capture->intervalValue, 8);
     get_u8(g_userHandle, KEY_CAP_INTERVAL_U, &capture->intervalUnit, 1);
+    get_str(g_userHandle, KEY_CAP_INTERVAL_ANCHOR, capture->intervalAnchorTime, sizeof(capture->intervalAnchorTime), "00:00");
+    get_u32(g_userHandle, KEY_CAP_CAM_WARMUP_MS, &capture->camWarmupMs, 5000);
     char key[32];
     for (size_t i = 0; i < capture->timedCount; i++) {
         if (i >= sizeof(capture->timedNodes) / sizeof(capture->timedNodes[0])) {
@@ -831,6 +903,8 @@ esp_err_t cfg_set_cap_attr(capAttr_t *capture)
     set_u8(g_userHandle, KEY_CAP_TIME_COUNT, capture->timedCount);
     set_u32(g_userHandle, KEY_CAP_INTERVAL_V, capture->intervalValue);
     set_u8(g_userHandle, KEY_CAP_INTERVAL_U, capture->intervalUnit);
+    set_str(g_userHandle, KEY_CAP_INTERVAL_ANCHOR, capture->intervalAnchorTime);
+    set_u32(g_userHandle, KEY_CAP_CAM_WARMUP_MS, capture->camWarmupMs);
     char key[32];
     for (size_t i = 0; i < capture->timedCount; i++) {
         if (i >= sizeof(capture->timedNodes) / sizeof(capture->timedNodes[0])) {
@@ -840,6 +914,48 @@ esp_err_t cfg_set_cap_attr(capAttr_t *capture)
         set_u8(g_userHandle, key, capture->timedNodes[i].day);
         sprintf(key, "cap:t%d.time", i);
         set_str(g_userHandle, key, capture->timedNodes[i].time);
+    }
+    commit_cfg(g_userHandle);
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_get_upload_attr(uploadAttr_t *upload)
+{
+    mutex_lock();
+    memset(upload, 0, sizeof(uploadAttr_t));
+    get_u8(g_userHandle, KEY_UPLOAD_MODE, &upload->uploadMode, 0);
+    get_u8(g_userHandle, KEY_UPLOAD_COUNT, &upload->timedCount, 0);
+    get_u8(g_userHandle, KEY_UPLOAD_RETRY, &upload->retryCount, 3);
+    char key[32];
+    for (size_t i = 0; i < upload->timedCount; i++) {
+        if (i >= sizeof(upload->timedNodes) / sizeof(upload->timedNodes[0])) {
+            break;
+        }
+        sprintf(key, "upload:t%d.day", i);
+        get_u8(g_userHandle, key, &upload->timedNodes[i].day, 0);
+        sprintf(key, "upload:t%d.time", i);
+        get_str(g_userHandle, key, upload->timedNodes[i].time, sizeof(upload->timedNodes[i].time), "00:00:00");
+    }
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_set_upload_attr(uploadAttr_t *upload)
+{
+    mutex_lock();
+    set_u8(g_userHandle, KEY_UPLOAD_MODE, upload->uploadMode);
+    set_u8(g_userHandle, KEY_UPLOAD_COUNT, upload->timedCount);
+    set_u8(g_userHandle, KEY_UPLOAD_RETRY, upload->retryCount);
+    char key[32];
+    for (size_t i = 0; i < upload->timedCount; i++) {
+        if (i >= sizeof(upload->timedNodes) / sizeof(upload->timedNodes[0])) {
+            break;
+        }
+        sprintf(key, "upload:t%d.day", i);
+        set_u8(g_userHandle, key, upload->timedNodes[i].day);
+        sprintf(key, "upload:t%d.time", i);
+        set_str(g_userHandle, key, upload->timedNodes[i].time);
     }
     commit_cfg(g_userHandle);
     mutex_unlock();
@@ -871,9 +987,13 @@ esp_err_t cfg_get_mqtt_attr(mqttAttr_t *mqtt)
             snprintf(mqtt->user, sizeof(mqtt->user), "%s", platformParam.mqttPlatform.username);
             snprintf(mqtt->password, sizeof(mqtt->password), "%s", platformParam.mqttPlatform.password);
             snprintf(mqtt->clientId, sizeof(mqtt->clientId), "%s", platformParam.mqttPlatform.clientId);
+            snprintf(mqtt->caName, sizeof(mqtt->caName), "%s", platformParam.mqttPlatform.caName);
+            snprintf(mqtt->certName, sizeof(mqtt->certName), "%s", platformParam.mqttPlatform.certName);
+            snprintf(mqtt->keyName, sizeof(mqtt->keyName), "%s", platformParam.mqttPlatform.keyName);
             mqtt->port = platformParam.mqttPlatform.mqttPort;
             mqtt->qos = platformParam.mqttPlatform.qos;
             mqtt->httpPort = 5220;
+            mqtt->tlsEnable = platformParam.mqttPlatform.tlsEnable;
             break;
         default:
             break;
@@ -890,6 +1010,10 @@ esp_err_t cfg_set_mqtt_attr(mqttAttr_t *mqtt)
     set_str(g_userHandle, KEY_MQTT_TOPIC, mqtt->topic);
     set_str(g_userHandle, KEY_MQTT_USER, mqtt->user);
     set_str(g_userHandle, KEY_MQTT_PASSWORD, mqtt->password);
+    set_u8(g_userHandle, KEY_MQTT_TLS_ENABLE, mqtt->tlsEnable);
+    set_str(g_userHandle, KEY_MQTT_CA_NAME, mqtt->caName);
+    set_str(g_userHandle, KEY_MQTT_CERT_NAME, mqtt->certName);
+    set_str(g_userHandle, KEY_MQTT_KEY_NAME, mqtt->keyName);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;
@@ -977,6 +1101,10 @@ esp_err_t cfg_get_platform_param_attr(platformParamAttr_t *platform)
     get_u8(g_userHandle, KEY_MQTT_QOS, &platform->mqttPlatform.qos, 1);
     get_str(g_userHandle, KEY_MQTT_USER, platform->mqttPlatform.username, sizeof(platform->mqttPlatform.username), "");
     get_str(g_userHandle, KEY_MQTT_PASSWORD, platform->mqttPlatform.password, sizeof(platform->mqttPlatform.password), "");
+    get_u8(g_userHandle, KEY_MQTT_TLS_ENABLE, &platform->mqttPlatform.tlsEnable, 0);
+    get_str(g_userHandle, KEY_MQTT_CA_NAME, platform->mqttPlatform.caName, sizeof(platform->mqttPlatform.caName), "");
+    get_str(g_userHandle, KEY_MQTT_CERT_NAME, platform->mqttPlatform.certName, sizeof(platform->mqttPlatform.certName), "");
+    get_str(g_userHandle, KEY_MQTT_KEY_NAME, platform->mqttPlatform.keyName, sizeof(platform->mqttPlatform.keyName), "");
 
     mutex_unlock();
 
@@ -998,7 +1126,7 @@ esp_err_t cfg_set_platform_param_attr(platformParamAttr_t *platform)
             set_str(g_userHandle, KEY_MQTT_HOST, platform->mqttPlatform.host);
             set_u32(g_userHandle, KEY_MQTT_PORT, platform->mqttPlatform.mqttPort);
             set_str(g_userHandle, KEY_MQTT_TOPIC, platform->mqttPlatform.topic);
-            // 如果client id为空，则随机生成一个23位的字符串
+            // if client id is empty, randomly generate a 23-character string
             if (strlen(platform->mqttPlatform.clientId) == 0) {
                 char id[24] = {0};
                 generate_random_string(id, sizeof(id) - 1);
@@ -1008,6 +1136,10 @@ esp_err_t cfg_set_platform_param_attr(platformParamAttr_t *platform)
             set_u8(g_userHandle, KEY_MQTT_QOS, platform->mqttPlatform.qos);
             set_str(g_userHandle, KEY_MQTT_USER, platform->mqttPlatform.username);
             set_str(g_userHandle, KEY_MQTT_PASSWORD, platform->mqttPlatform.password);
+            set_u8(g_userHandle, KEY_MQTT_TLS_ENABLE, platform->mqttPlatform.tlsEnable);
+            set_str(g_userHandle, KEY_MQTT_CA_NAME, platform->mqttPlatform.caName);
+            set_str(g_userHandle, KEY_MQTT_CERT_NAME, platform->mqttPlatform.certName);
+            set_str(g_userHandle, KEY_MQTT_KEY_NAME, platform->mqttPlatform.keyName);
             break;
         }
         default:
@@ -1023,6 +1155,7 @@ esp_err_t cfg_get_cellular_param_attr(cellularParamAttr_t *cellularParam)
     mutex_lock();
     memset(cellularParam, 0, sizeof(cellularParamAttr_t));
     get_str(g_userHandle, KEY_CAT1_IMEI, cellularParam->imei, sizeof(cellularParam->imei), "");
+    get_str(g_userHandle, KEY_CAT1_ISP_SELECT, cellularParam->isp_select, sizeof(cellularParam->isp_select), "auto");
     get_str(g_userHandle, KEY_CAT1_APN, cellularParam->apn, sizeof(cellularParam->apn), "");
     get_str(g_userHandle, KEY_CAT1_USER, cellularParam->user, sizeof(cellularParam->user), "");
     get_str(g_userHandle, KEY_CAT1_PASSWORD, cellularParam->password, sizeof(cellularParam->password), "");
@@ -1035,6 +1168,7 @@ esp_err_t cfg_get_cellular_param_attr(cellularParamAttr_t *cellularParam)
 esp_err_t cfg_set_cellular_param_attr(cellularParamAttr_t *cellularParam)
 {
     mutex_lock();
+    set_str(g_userHandle, KEY_CAT1_ISP_SELECT, cellularParam->isp_select);
     set_str(g_userHandle, KEY_CAT1_APN, cellularParam->apn);
     set_str(g_userHandle, KEY_CAT1_USER, cellularParam->user);
     set_str(g_userHandle, KEY_CAT1_PASSWORD, cellularParam->password);
@@ -1170,6 +1304,23 @@ esp_err_t cfg_get_time_err_rate(int32_t *err_rate)
     return ESP_OK;
 }
 
+esp_err_t cfg_set_ntp_sync(uint8_t enable)
+{
+    mutex_lock();
+    set_u8(g_userHandle, KEY_SYS_NTP_SYNC, enable);
+    commit_cfg(g_userHandle);
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_get_ntp_sync(uint8_t *enable)
+{
+    mutex_lock();
+    get_u8(g_userHandle, KEY_SYS_NTP_SYNC, enable, 1);
+    mutex_unlock();
+    return ESP_OK;
+}
+
 esp_err_t cfg_import(char *data, size_t len)
 {
     ESP_LOGI(TAG, "Importing config data");
@@ -1178,38 +1329,252 @@ esp_err_t cfg_import(char *data, size_t len)
         ESP_LOGE(TAG, "Failed to load config data");
         return ESP_FAIL;
     }
-    //debug
-    iniparser_dump(d, stderr);
-    // 1. check model
     const char *model = iniparser_getstring(d, "Hardware:model", NULL);
     if (model == NULL || strcmp(model, "NE101") != 0) {
         ESP_LOGE(TAG, "Invalid config data");
         iniparser_freedict(d);
         return ESP_FAIL;
     }
-    // 2. check key and value
-    size_t n;
-    // size_t size = 0;
-    // char out[32] = {0};
-    for (n = 0 ; n < d->size ; n++) {
+
+    mutex_lock();
+    bool import_ok = true;
+    for (size_t n = 0; n < d->size; n++) {
         if (d->key[n] == NULL || d->val[n] == NULL) {
             continue;
         }
-        // size = sizeof(out);
-        // // not found
-        // if (nvs_get_str(g_userHandle, d->key[n], out, &size) != ESP_OK) {
-        //     ESP_LOGE(TAG, "Invalid key: %s", d->key[n]);
-        //     continue;
-        // }
-        // // same value
-        // if (strcmp(d->val[n], out) == 0) {
-        //     ESP_LOGI(TAG, "Key: %s, value: %s same", d->key[n], d->val[n]);
-        //     continue;
-        // set value
-        // }
+        if (strcmp(d->key[n], "Hardware:model") == 0) {
+            continue;
+        }
+        esp_err_t se = set_str(g_userHandle, d->key[n], d->val[n]);
+        if (se != ESP_OK) {
+            ESP_LOGE(TAG, "Import set_str failed key=%s err=%s", d->key[n], esp_err_to_name(se));
+            import_ok = false;
+            break;
+        }
         ESP_LOGI(TAG, "Importing key: %s, value: %s", d->key[n], d->val[n]);
-        set_str(g_userHandle, d->key[n], d->val[n]);
     }
+    esp_err_t out = ESP_OK;
+    if (import_ok) {
+        out = commit_cfg(g_userHandle);
+        if (out != ESP_OK) {
+            ESP_LOGE(TAG, "Import commit failed: %s", esp_err_to_name(out));
+            import_ok = false;
+        }
+    }
+    if (!import_ok) {
+        if (cfg_reopen_userspace() != ESP_OK) {
+            ESP_LOGE(TAG, "cfg_reopen_userspace failed after import error");
+        }
+        out = ESP_FAIL;
+    }
+    mutex_unlock();
     iniparser_freedict(d);
+    return out;
+}
+
+#define CFG_EXPORT_MAX_KEYS 200
+
+static int cmp_nvs_keys(const void *a, const void *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+esp_err_t cfg_export_userspace_ini(char *buf, size_t buf_sz, size_t *written)
+{
+    if (buf == NULL || written == NULL || buf_sz < 128) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *written = 0;
+
+    char keys[CFG_EXPORT_MAX_KEYS][NVS_KEY_NAME_MAX_SIZE];
+    int nkeys = 0;
+
+    mutex_lock();
+    nvs_iterator_t it = NULL;
+    esp_err_t ret = nvs_entry_find(NVS_CFG_PARTITION, NVS_USER_NAMESPACE, NVS_TYPE_STR, &it);
+    if (ret == ESP_OK) {
+        while (ret == ESP_OK) {
+            nvs_entry_info_t info;
+            nvs_entry_info(it, &info);
+            if (info.type == NVS_TYPE_STR) {
+                if (nkeys >= CFG_EXPORT_MAX_KEYS) {
+                    nvs_release_iterator(it);
+                    mutex_unlock();
+                    return ESP_ERR_NO_MEM;
+                }
+                strncpy(keys[nkeys], info.key, sizeof(keys[0]) - 1);
+                keys[nkeys][sizeof(keys[0]) - 1] = '\0';
+                nkeys++;
+            }
+            ret = nvs_entry_next(&it);
+        }
+        nvs_release_iterator(it);
+        if (ret != ESP_ERR_NVS_NOT_FOUND) {
+            mutex_unlock();
+            return ret;
+        }
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        mutex_unlock();
+        return ret;
+    }
+
+    if (nkeys > 0) {
+        qsort(keys, (size_t)nkeys, sizeof(keys[0]), cmp_nvs_keys);
+    }
+
+    size_t pos = 0;
+    int sn = snprintf(buf + pos, buf_sz - pos,
+                      "# NE101 configuration (userspace NVS). MQTT TLS cert files on device are NOT included.\r\n"
+                      "[Hardware]\r\n"
+                      "model = NE101\r\n");
+    if (sn < 0 || (size_t)sn >= buf_sz - pos) {
+        mutex_unlock();
+        return ESP_ERR_NO_MEM;
+    }
+    pos += (size_t)sn;
+
+    char prev_sec[64] = "";
+    for (int i = 0; i < nkeys; i++) {
+        const char *k = keys[i];
+        size_t vlen = 0;
+        if (nvs_get_str(g_userHandle, k, NULL, &vlen) != ESP_OK) {
+            continue;
+        }
+        char *vbuf = (char *)malloc(vlen);
+        if (vbuf == NULL) {
+            mutex_unlock();
+            return ESP_ERR_NO_MEM;
+        }
+        if (nvs_get_str(g_userHandle, k, vbuf, &vlen) != ESP_OK) {
+            free(vbuf);
+            continue;
+        }
+        const char *colon = strchr(k, ':');
+        char sec[48];
+        char subkey[48];
+        if (colon != NULL && colon != k) {
+            size_t sl = (size_t)(colon - k);
+            if (sl >= sizeof(sec)) {
+                sl = sizeof(sec) - 1;
+            }
+            memcpy(sec, k, sl);
+            sec[sl] = '\0';
+            strncpy(subkey, colon + 1, sizeof(subkey) - 1);
+            subkey[sizeof(subkey) - 1] = '\0';
+        } else {
+            strncpy(sec, "kv", sizeof(sec) - 1);
+            sec[sizeof(sec) - 1] = '\0';
+            strncpy(subkey, k, sizeof(subkey) - 1);
+            subkey[sizeof(subkey) - 1] = '\0';
+        }
+        int add;
+        if (strcmp(prev_sec, sec) != 0) {
+            add = snprintf(buf + pos, buf_sz - pos, "\r\n[%s]\r\n%s = %s\r\n", sec, subkey, vbuf);
+            strncpy(prev_sec, sec, sizeof(prev_sec) - 1);
+            prev_sec[sizeof(prev_sec) - 1] = '\0';
+        } else {
+            add = snprintf(buf + pos, buf_sz - pos, "%s = %s\r\n", subkey, vbuf);
+        }
+        free(vbuf);
+        if (add < 0 || (size_t)add >= buf_sz - pos) {
+            mutex_unlock();
+            return ESP_ERR_NO_MEM;
+        }
+        pos += (size_t)add;
+    }
+    mutex_unlock();
+    *written = pos;
+    return ESP_OK;
+}
+
+esp_err_t cfg_get_trigger_mode(uint8_t *mode)
+{
+    mutex_lock();
+    get_u8(g_userHandle, KEY_TRIGGER_MODE, mode, TRIGGER_MODE_ALARM);
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_set_trigger_mode(uint8_t mode)
+{
+    mutex_lock();
+    set_u8(g_userHandle, KEY_TRIGGER_MODE, mode);
+    commit_cfg(g_userHandle);
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_get_pir_attr(pirAttr_t *pir)
+{
+    mutex_lock();
+    memset(pir, 0, sizeof(pirAttr_t));
+    get_u8(g_userHandle, KEY_PIR_SENS, &pir->sens, 0x0f);
+    get_u8(g_userHandle, KEY_PIR_BLIND, &pir->blind, 0x03);
+    get_u8(g_userHandle, KEY_PIR_PULSE, &pir->pulse, 0x01);
+    get_u8(g_userHandle, KEY_PIR_WINDOW, &pir->window, 0x00);
+    
+    // Validate and clamp values to valid ranges
+    // Sensitivity: 0-255, recommended > 20, minimum 10 (no interference)
+    // Note: pir->sens is uint8_t, so it's already in range 0-255, no need to check
+    
+    // Blind time: 0-15 (4 bits), range 0.5s ~ 8s
+    // Formula: interrupt time = register value * 0.5s + 0.5s
+    if (pir->blind > 15) pir->blind = 15;
+    
+    // Pulse count: 0-3 (2 bits), range 1 ~ 4
+    // Formula: pulse count = register value + 1
+    if (pir->pulse > 3) pir->pulse = 3;
+    
+    // Window time: 0-3 (2 bits), range 2s ~ 8s
+    // Formula: window time = register value * 2s + 2s
+    if (pir->window > 3) pir->window = 3;
+    
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_set_pir_attr(pirAttr_t *pir)
+{
+    mutex_lock();
+    // Validate and clamp values before saving
+    // Sensitivity: 0-255, recommended > 20, minimum 10 (no interference)
+    // Note: pir->sens is uint8_t, so it's already in range 0-255, no need to check
+    uint8_t sens = pir->sens;
+    // Blind time: 0-15 (4 bits), range 0.5s ~ 8s
+    // Formula: interrupt time = register value * 0.5s + 0.5s
+    uint8_t blind = (pir->blind > 15) ? 15 : (pir->blind & 0x0F);
+    // Pulse count: 0-3 (2 bits), range 1 ~ 4
+    // Formula: pulse count = register value + 1
+    uint8_t pulse = (pir->pulse > 3) ? 3 : (pir->pulse & 0x03);
+    // Window time: 0-3 (2 bits), range 2s ~ 8s
+    // Formula: window time = register value * 2s + 2s
+    uint8_t window = (pir->window > 3) ? 3 : (pir->window & 0x03);
+    
+    set_u8(g_userHandle, KEY_PIR_SENS, sens);
+    set_u8(g_userHandle, KEY_PIR_BLIND, blind);
+    set_u8(g_userHandle, KEY_PIR_PULSE, pulse);
+    set_u8(g_userHandle, KEY_PIR_WINDOW, window);
+    commit_cfg(g_userHandle);
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_get_webhook_attr(webhookAttr_t *webhook)
+{
+    mutex_lock();
+    memset(webhook, 0, sizeof(webhookAttr_t));
+    get_str(g_userHandle, KEY_WEBHOOK_URL, webhook->url, sizeof(webhook->url), "");
+    get_str(g_userHandle, KEY_WEBHOOK_HEADER, webhook->header, sizeof(webhook->header), "");
+    mutex_unlock();
+    return ESP_OK;
+}
+
+esp_err_t cfg_set_webhook_attr(webhookAttr_t *webhook)
+{
+    mutex_lock();
+    set_str(g_userHandle, KEY_WEBHOOK_URL, webhook->url);
+    set_str(g_userHandle, KEY_WEBHOOK_HEADER, webhook->header);
+    commit_cfg(g_userHandle);
+    mutex_unlock();
     return ESP_OK;
 }

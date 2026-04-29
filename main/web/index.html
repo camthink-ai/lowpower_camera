@@ -6,9 +6,15 @@
         <meta name="google" content="notranslate" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>CamThink</title>
-        <!-- 默认组件样式 -->
+        <!-- Inline so UI stays hidden if external CSS fails (avoids raw {{ }} flash / FOUC on slow links) -->
+        <style>
+            [v-cloak] {
+                display: none !important;
+            }
+        </style>
+        <!-- default component styles -->
         <link rel="stylesheet" href="./src/style/ui.css" />
-        <!-- 业务功能模块样式 -->
+        <!-- business function module styles -->
         <link rel="stylesheet" href="./src/style/index.css" />
     </head>
 
@@ -63,6 +69,19 @@
                                 </button></span
                             >
                         </div>
+                        <div class="card-item" v-if="camera !== 'USB'">
+                            <span class="card-item-label"
+                                >{{ $t("img.resolution") }}</span
+                            >
+                            <span class="card-item-content">
+                                <div
+                                    class="resolution-select"
+                                    v-scope="MsSelect({value: frameSize, options: frameSizeOption})"
+                                    v-if="frameSizeMount"
+                                    @change-select="changeFrameSize"
+                                ></div>
+                            </span>
+                        </div>
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("img.suppleLight") }}</span
@@ -102,7 +121,8 @@
                                         v-model="threshold"
                                         min="0"
                                         max="100"
-                                        @change="setLightInfo()"
+                                        @input="onThresholdSliderInput($el)"
+                                        @change="onThresholdSliderChange($el)"
                                         v-effect="threshold;changeSlider($el)"
                                     />
                                 </span>
@@ -169,7 +189,52 @@
                             </span>
                         </div>
 
+                        <div class="card-item" v-if="camera === 'USB'">
+                            <span class="card-item-label"
+                                >{{ $t("img.hdr") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span class="switch">
+                                    <input
+                                        id="hdrSwitch"
+                                        type="checkbox"
+                                        v-model="hdrEnable"
+                                        @change="setCamInfo()"
+                                    />
+                                    <label
+                                        for="hdrSwitch"
+                                        class="switch-content"
+                                    ></label>
+                                </span>
+                            </span>
+                        </div>
+
                         <div v-if="camera !== 'USB'">
+                            <div class="card-item">
+                                <span class="card-item-label"
+                                    >{{ $t("img.quality") }}
+                                    <span class="icon" @click="showTipsDialog($t('img.qualityTip'))">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#888">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm2 13h-4v-2h1v-4h-1v-2h3v6h1v2z"/>
+                                        </svg>
+                                    </span>
+                                </span>
+                                <span class="card-item-content">
+                                    <span class="slider-box">
+                                        <span>{{ quality }}</span>
+                                        <input
+                                            class="slider-input"
+                                            type="range"
+                                            v-model.number="quality"
+                                            min="0"
+                                            max="63"
+                                            @input="changeSlider($el)"
+                                            @change="changeQuality"
+                                            v-effect="quality;changeSlider($el)"
+                                        />
+                                    </span>
+                                </span>
+                            </div>
                             <div class="card-item">
                                 <span class="card-item-label"
                                     >{{ $t("img.brightness") }}</span
@@ -301,7 +366,7 @@
                                 </span>
                             </span>
                         </div>
-                        <!-- 开启 Scheduled Capture后显示 -->
+                        <!-- show when Scheduled Capture is enabled -->
                         <div class="card-item" v-show="scheduledCaptureEnable">
                             <span class="card-item-label"
                                 >{{ $t("cap.captureMode") }}</span
@@ -314,7 +379,7 @@
                                 ></div>
                             </span>
                         </div>
-                        <!-- 当Capture Mode选择Timed Capture时显示 -->
+                        <!-- show when Capture Mode is set to Timed Capture -->
                         <div
                             class="card-item capture-time-content"
                             v-show="scheduledCaptureEnable && captureMode == 0"
@@ -357,7 +422,7 @@
                         </div>
                         
                         <div
-                            class="card-list"
+                            class="card-list capture-interval-content"
                             v-show="scheduledCaptureEnable && captureMode == 0"
                         >
                             <div
@@ -379,7 +444,7 @@
                                 </button>
                             </div>
                         </div>
-                        <!-- 当Capture Mode选择Interval Capture时显示 -->
+                        <!-- show when Capture Mode is set to Interval Capture -->
                         <div
                             class="card-item"
                             v-show="scheduledCaptureEnable && captureMode == 1"
@@ -388,7 +453,7 @@
                                 >{{ $t("cap.captureInterval") }}</span
                             >
                             <span
-                                class="card-item-content capture-interval-content"
+                                class="card-item-content"
                             >
                                 <input
                                     class="capture-interval-input"
@@ -414,6 +479,34 @@
                             </span>
                         </div>
 
+                        <div
+                            class="card-item interval-anchor-content"
+                            v-show="scheduledCaptureEnable && captureMode == 1"
+                        >
+                            <span class="card-item-label"
+                                >{{ $t("cap.intervalAnchorTime") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span class="number">
+                                    <input
+                                        type="text"
+                                        maxlength="2"
+                                        v-model="intervalAnchorHour"
+                                        v-effect="inputNumLimit('intervalAnchorHour')"
+                                        @blur="inputIntervalAnchorTime('intervalAnchorHour')"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="text"
+                                        maxlength="2"
+                                        v-model="intervalAnchorMinute"
+                                        v-effect="inputNumLimit('intervalAnchorMinute')"
+                                        @blur="inputIntervalAnchorTime('intervalAnchorMinute')"
+                                    />
+                                </span>
+                            </span>
+                        </div>
+
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cap.enableAlarmInCap") }}</span
@@ -431,6 +524,90 @@
                                         class="switch-content"
                                     ></label>
                                 </span>
+                            </span>
+                        </div>
+                        <!-- Trigger Mode (only show when trigger capture is enabled) -->
+                        <div v-show="capAlarmInEnable" class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.triggerMode") }}</span
+                            >
+                            <span class="card-item-content">
+                                <div
+                                    class="trigger-mode-select"
+                                    v-scope="MsSelect({value: triggerMode, options: triggerModeOptions})"
+                                    v-if="triggerMount"
+                                    @change-select="changeTriggerMode"
+                                ></div>
+                            </span>
+                        </div>
+                        <!-- PIR Settings (only show when PIR mode is selected) -->
+                        <div v-show="capAlarmInEnable && triggerMode == 2" class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.pirSettings") }}</span
+                            >
+                        </div>
+                        <div v-show="capAlarmInEnable && triggerMode == 2" class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.pirSensitivity") }}</span
+                            >
+                            <span class="card-item-content">
+                                <input
+                                    class="pir-param-input"
+                                    type="text"
+                                    v-model="pirSens"
+                                    maxlength="3"
+                                    v-effect="inputNumLimit('pirSens')"
+                                    @blur="validatePirSens()"
+                                />
+                                <span class="pir-param-unit">&nbsp;</span>
+                            </span>
+                        </div>
+                        <div v-show="capAlarmInEnable && triggerMode == 2" class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.pirBlindTime") }}</span
+                            >
+                            <span class="card-item-content">
+                                <input
+                                    class="pir-param-input"
+                                    type="text"
+                                    v-model="pirBlind"
+                                    maxlength="4"
+                                    v-effect="inputDecimalLimit('pirBlind')"
+                                    @blur="validatePirBlind()"
+                                />
+                                <span class="pir-param-unit">s</span>
+                            </span>
+                        </div>
+                        <div v-show="capAlarmInEnable && triggerMode == 2" class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.pirPulseCount") }}</span
+                            >
+                            <span class="card-item-content">
+                                <input
+                                    class="pir-param-input"
+                                    type="text"
+                                    v-model="pirPulse"
+                                    maxlength="1"
+                                    v-effect="inputNumLimit('pirPulse')"
+                                    @blur="validatePirPulse()"
+                                />
+                                <span class="pir-param-unit">{{ $t("cap.pirPulseUnit") }}</span>
+                            </span>
+                        </div>
+                        <div v-show="capAlarmInEnable && triggerMode == 2" class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.pirWindowTime") }}</span
+                            >
+                            <span class="card-item-content">
+                                <input
+                                    class="pir-param-input"
+                                    type="text"
+                                    v-model="pirWindow"
+                                    maxlength="4"
+                                    v-effect="inputDecimalLimit('pirWindow')"
+                                    @blur="validatePirWindow()"
+                                />
+                                <span class="pir-param-unit">s</span>
                             </span>
                         </div>
                         <div class="card-item">
@@ -452,6 +629,105 @@
                                 </span>
                             </span>
                         </div>
+                        
+                        <!-- Camera warm-up delay (moved before Image Upload Mode) -->
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("cap.openStableMs") }}
+                                <span class="icon" @click="showTipsDialog($t('cap.openStableTip'))">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#888">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm2 13h-4v-2h1v-4h-1v-2h3v6h1v2z"/>
+                                    </svg>
+                                </span>
+                            </span>
+                            <span class="card-item-content">
+                                <input
+                                    class="capture-interval-input"
+                                    type="text"
+                                    v-model="camWarmupMs"
+                                    maxlength="6"
+                                    v-effect="inputNumLimit('camWarmupMs')"
+                                    @blur="setCaptureInfo()"
+                                />
+                                <span style="margin-left:8px;">ms</span>
+                            </span>
+                        </div>
+                        
+                        <!-- Image Upload Mode (moved to end, used by all capture modes) -->
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cap.uploadMode") }}</span>
+                            <span class="card-item-content">
+                                <div class="normal-select"
+                                    v-if="uploadModeMount"
+                                    v-scope="MsSelect({value: uploadMode, options: uploadModeOptions})" 
+                                    @change-select="changeUploadMode"></div>
+                            </span>
+                        </div>
+                        <div
+                            class="card-item capture-time-content"
+                            v-show="uploadMode == 1"
+                        >
+                            <span class="card-item-label"
+                                >{{ $t("cap.timeSet") }}</span
+                            >
+                            <span class="card-item-content">
+                                <div
+                                    class="capture-time-select"
+                                    v-scope="MsSelect({value: uploadTimeSetDay, options: timeDayOptions})"
+                                    @change-select="changeUploadTimeSetDay"
+                                ></div>
+                                <span class="number">
+                                    <input
+                                        type="text"
+                                        maxlength="2"
+                                        v-model="uploadTimeSetHour"
+                                        v-effect="inputNumLimit('uploadTimeSetHour')"
+                                        @blur="inputUploadTime('uploadTimeSetHour')"
+                                    />
+                                    <span>:</span>
+                                    <input
+                                        type="text"
+                                        maxlength="2"
+                                        v-model="uploadTimeSetMinute"
+                                        v-effect="inputNumLimit('uploadTimeSetMinute')"
+                                        @blur="inputUploadTime('uploadTimeSetMinute')"
+                                    />
+                                </span>
+
+                                <button
+                                    class="mini"
+                                    @click="addUploadTimeSetting"
+                                    :disabled="timeUploadList.length>=10"
+                                >
+                                    +
+                                </button>
+                            </span>
+                        </div>
+                        
+                        <div
+                            class="card-list upload-time-list"
+                            v-show="uploadMode == 1"
+                        >
+                            <div
+                                class="card-time-list-item"
+                                v-for="(item, index) in timeUploadList"
+                            >
+                                <span
+                                    class="time-list-item-day"
+                                    v-text="getTimeUploadDayLabel(item.day)"
+                                ></span>
+                                <span class="time-list-item-time"
+                                    >{{ item.time.substr(0, item.time.length-3) }}</span
+                                >
+                                <button
+                                    class="icon time-list-item-btn"
+                                    @click="deleteUploadTimeSetting(index)"
+                                >
+                                    X
+                                </button>
+                            </div>
+                        </div>
+                        <!-- end Image Upload Mode -->
                     </div>
                     <!-- E Capture Setting -->
 
@@ -460,40 +736,51 @@
                         <div class="card-title">
                             {{ $t("mqtt.dataReport") }}
                         </div>
+                        <!-- Push Mode Toggle -->
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("mqtt.pushMode") }}</span>
+                            <span class="card-item-content">
+                                <div v-scope="MsSelect({value: pushMode, options: pushModeOptions})" v-if="pushModeMount" @change-select="changePushMode"></div>
+                            </span>
+                        </div>
+                        <!-- MQTT Form -->
+                        <div v-show="pushMode == 0">
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.status") }}</span
                             >
                             <span class="card-item-content">
-                                <span> 
-                                    {{ mqttPlatform.isConnected === 0 ? $t("cell.disconnected") : $t("cell.connected") }} 
+                                <span>
+                                    {{ mqttPlatform.isConnected === 0 ? $t("cell.disconnected") : $t("cell.connected") }}
                                 </span>
                             </span>
                         </div>
-                        
+
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.host") }}</span
                             >
-                            <span class="card-item-content">
-                                <textarea
-                                    type="textarea"
-                                    v-model="mqttPlatform.host"
-                                    placeholder="192.168.1.1"
-                                    @input="justifyAreaHeight($el)"
-                                    @blur="inputMqttHost"
-                                    maxlength="127"
-                                    rows="1"
-                                ></textarea>
-                                <div
-                                    class="error-input"
-                                    name="error-tip"
-                                    v-show="mqttHostError"
-                                >
-                                    {{ $t("requiredField") }}
-                                </div>
+                            <span class="card-item-content host-input-group">
+                                <span class="prefix-box">{{ mqttPlatform.tlsEnable == 1 ? 'mqtts://' : 'mqtt://' }}</span>
+                               <div style="width: 100%; display: flex; align-items: center;">
+                                <input
+                                type="text"
+                                v-model="mqttPlatform.host"
+                                placeholder="broker.emqx.io"
+                                @blur="inputMqttHost"
+                                maxlength="127"
+                            />
+                            <div
+                                class="error-input"
+                                name="error-tip"
+                                v-show="mqttHostError"
+                            >
+                                {{ $t("requiredField") }}
+                            </div>
+                               </div>
                             </span>
                         </div>
+                        <!-- end select MQTTS or MQTT-->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("mqtt.port") }}</span
@@ -502,7 +789,7 @@
                                 <input
                                     type="text"
                                     v-model:number="mqttPlatform.mqttPort"
-                                    placeholder="1883"
+                                    :placeholder="mqttPlatform.tlsEnable == 1 ? '8883' : '1883'"
                                     @blur="inputMqttPort"
                                     maxlength="5"
                                 />
@@ -592,20 +879,191 @@
                                     ></textarea>
                                 </span>
                             </div>
+                            <!-- ssl switch -->
+                             <div class="card-item">
+                                <span class="card-item-label">SSL</span>
+                                <span class="card-item-content">
+                                    <span class="switch">
+                                        <input type="checkbox" id="sslSwitch" v-model="mqttPlatform.tlsEnable" :true-value="1" :false-value="0" @change="changeSSLSwitch" />
+                                        <label for="sslSwitch" class="switch-content"></label>
+                                    </span>
+                                </span>
+                            </div>
+                            <!-- end ssl switch -->
+                             <!-- upload Certificate -->
+                              <div v-if="mqttPlatform.tlsEnable == 1">
+                           <div class="upload-box">
+                            <div class="card-item">
+                                <span class="card-item-label">{{ $t("mqtt.CaCert") }}</span>
+                                <span class="card-item-content">
+                                    <input
+                                        type="file"
+                                        id="cafile"
+                                        hidden
+                                        @change="caFileChange"
+                                    />
+                                    <input
+                                        type="text"
+                                        v-model="mqttPlatform.caName"
+                                        readonly
+                                    />
+                                </span>
+                             </div>
+                             <div class="card-item">
+                                <span class="card-item-label"></span>
+                                <span class="card-item-content">
+                                    <button
+                                        class="plain"
+                                        @click="handleBrowseCa"
+                                    >
+                                        {{ $t("sys.browse") }}
+                                    </button>
+                                    <button
+                                        class="plain"
+                                        style="color: #333333; border-color: #B1B1B1;"
+                                        @click="clearCa"
+                                    >
+                                        {{ $t("sys.clear") }}
+                                    </button>
+                                </span>
+                            </div>
+                           </div>
+                           <div class="upload-box">
+                            <div class="card-item">
+                                <span class="card-item-label">{{ $t("mqtt.cert") }}</span>
+                                <span class="card-item-content">
+                                    <input
+                                        type="file"
+                                        id="certfile"
+                                        hidden
+                                        @change="certFileChange"
+                                    />
+                                    <input
+                                        type="text"
+                                        v-model="mqttPlatform.certName"
+                                        readonly
+                                    />
+                                </span>
+                             </div>
+                             <div class="card-item">
+                                <span class="card-item-label"></span>
+                                <span class="card-item-content">
+                                    <button
+                                        class="plain"
+                                        @click="handleBrowseCert"
+                                    >
+                                        {{ $t("sys.browse") }}
+                                    </button>
+                                    <button
+                                        class="plain"
+                                        style="color: #333333; border-color: #B1B1B1;"
+                                        @click="clearCert"
+                                    >
+                                        {{ $t("sys.clear") }}
+                                    </button>
+                                </span>
+                            </div>
+                           </div>
+                           <div class="upload-box">
+                            <div class="card-item">
+                                <span class="card-item-label">{{ $t("mqtt.key") }}</span>
+                                <span class="card-item-content">
+                                    <input
+                                        type="file"
+                                        id="keyfile"
+                                        hidden
+                                        @change="keyFileChange"
+                                    />
+                                    <input
+                                        type="text"
+                                        v-model="mqttPlatform.keyName"
+                                        readonly
+                                    />
+                                </span>
+                             </div>
+                             <div class="card-item">
+                                <span class="card-item-label"></span>
+                                <span class="card-item-content">
+                                    <button
+                                        class="plain"
+                                        @click="handleBrowseKey"
+                                    >
+                                        {{ $t("sys.browse") }}
+                                    </button>
+                                    <button
+                                        class="plain"
+                                        style="color: #333333; border-color: #B1B1B1;"
+                                        @click="clearKey"
+                                    >
+                                        {{ $t("sys.clear") }}
+                                    </button>
+                                </span>
+                            </div>
+                           </div>
+                           </div>
+                             <!-- <div class="card-item">
+                                <span class="card-item-label">Upload Key</span>
+                                <span class="card-item-content">
+                                    <input type="file" v-model="mqttPlatform.keyPath" maxlength="255" />
+                                </span>
+                             </div> -->
+                           <!-- end upload Certificate -->
                         </div>
                         <div class="card-item">
                             <span class="card-item-label"></span>
                             <span class="card-item-content item-button">
                                 <button
-                                    class="mini-primary"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     @click="setDataReport"
                                 >
                                     {{ $t("mqtt.save") }}
                                 </button>
                             </span>
                         </div>
+                        </div>
+                        <!-- Webhook Form -->
+                        <div v-show="pushMode == 1">
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("mqtt.webhookUrl") }}</span>
+                            <span class="card-item-content">
+                                <input type="text"
+                                    v-model="webhook.url"
+                                    placeholder="https://example.com/webhook"
+                                    @blur="inputWebhookUrl"
+                                    maxlength="255"
+                                />
+                                <div class="error-input" v-show="webhookUrlError">
+                                    {{ $t("requiredField") }}
+                                </div>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label">{{ $t("mqtt.webhookHeader") }}</span>
+                            <span class="card-item-content">
+                                <textarea
+                                    v-model="webhook.header"
+                                    :placeholder="$t('mqtt.webhookHeaderPlaceholder')"
+                                    @input="justifyAreaHeight($el)"
+                                    maxlength="255"
+                                ></textarea>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label"></span>
+                            <span class="card-item-content item-button">
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    @click="setWebhookInfo"
+                                >
+                                    {{ $t("mqtt.webhookSave") }}
+                                </button>
+                            </span>
+                        </div>
+                        </div>
                     </div>
-                    <!-- E MQTT Post -->
+                    <!-- E Data Report -->
 
                     <!-- S Device Maintenance -->
                     <div class="card device-card">
@@ -632,6 +1090,25 @@
                                 >
                                     {{ $t("requiredField") }}
                                 </div>
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("sys.ntpSync") }}</span
+                            >
+                            <span class="card-item-content">
+                                <span class="switch">
+                                    <input
+                                        id="ntpSyncSwitch"
+                                        type="checkbox"
+                                        v-model="ntpSync"
+                                        @change="setNtpSync()"
+                                    />
+                                    <label
+                                        for="ntpSyncSwitch"
+                                        class="switch-content"
+                                    ></label>
+                                </span>
                             </span>
                         </div>
                         <div class="card-item">
@@ -680,34 +1157,66 @@
                                 >{{ $t("sys.upgradeFirmware") }}</span
                             >
                             <span class="card-item-content">
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    @click="handleFirmwareUpgradeClick"
+                                >
+                                    {{ $t("sys.upgrade") }}
+                                </button>
                                 <input
                                     type="file"
                                     id="file"
                                     hidden
                                     @change="fileChange"
                                 />
+                            </span>
+                        </div>
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("sys.configuration") }}</span
+                            >
+                            <span class="card-item-content">
+                                <!-- buttons first so .device-card button:nth-child(1) matches export (same as Browse row) -->
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    :title="$t('sys.exportConfigTip')"
+                                    @click="exportConfig"
+                                >
+                                    {{ $t("sys.export") }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    :title="$t('sys.importConfigTip')"
+                                    @click="handleConfigImportClick"
+                                >
+                                    {{ $t("sys.import") }}
+                                </button>
                                 <input
-                                    type="text"
-                                    v-model="upgradeFilename"
-                                    readonly
+                                    type="file"
+                                    id="configImportFile"
+                                    hidden
+                                    accept=".ini,.txt,text/plain"
+                                    @change="configFileChange"
                                 />
                             </span>
                         </div>
                         <div class="card-item">
-                            <span class="card-item-label"></span>
-                            <span class="card-item-content">
+                            <span class="card-item-label"
+                                >{{ $t("sys.exportSessionLog") }}</span
+                            >
+                            <span
+                                class="card-item-content device-card-log-download"
+                            >
                                 <button
-                                    class="plain"
-                                    @click="handleBrowse"
+                                    type="button"
+                                    class="plain device-card-action-btn"
+                                    :title="$t('sys.exportSessionLogTip')"
+                                    @click="exportSessionLog"
                                 >
-                                    {{ $t("sys.browse") }}
-                                </button>
-                                <button
-                                    class="plain"
-                                    style="color: #333333; border-color: #B1B1B1;"
-                                    @click="handleUpgrade"
-                                >
-                                    {{ $t("sys.upgrade") }}
+                                    {{ $t("sys.exportSessionLogBtn") }}
                                 </button>
                             </span>
                         </div>
@@ -750,7 +1259,7 @@
                                 @click="handleConnectWlan(item)"
                                 v-show="!wlanLoading"
                             >
-                                <!-- 仅当前正在连接的WiFi才显示图标 -->
+                                <!-- only show icon for currently connecting WiFi -->
                                 <span class="left" v-show="curConnectItem.ssid == item.ssid">
                                     <span
                                         class="icon icon-tick"
@@ -799,7 +1308,7 @@
                                 </button>
                             </span>
                         </div>
-                        <!-- CAT1模组的IMEI号 -->
+                        <!-- CAT1 module IMEI number -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.imei") }}</span
@@ -808,7 +1317,21 @@
                                 <span> {{ cellState.imei }} </span>
                             </span>
                         </div>
-                        <!-- APN 蜂窝的接入点 -->
+                        <!-- ISP selection: auto or Verizon -->
+                        <div class="card-item">
+                            <span class="card-item-label"
+                                >{{ $t("cell.ispSelect") }}</span
+                            >
+                            <span class="card-item-content">
+                                <div
+                                    class="normal-select"
+                                    v-scope="MsSelect({value: cellParam.isp_select, options: ispSelectOptions.map(o=>({...o, label: $t(o.label)}))})"
+                                    v-if="cellMounted"
+                                    @change-select="changeIspSelect"
+                                ></div>
+                            </span>
+                        </div>
+                        <!-- APN cellular access point -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.apn") }}</span
@@ -845,7 +1368,7 @@
                                 />
                             </span>
                         </div>
-                        <!-- 蜂窝连接的PIN码 -->
+                        <!-- cellular connection PIN code -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.pinCode") }}</span
@@ -871,7 +1394,7 @@
                                 ></div>
                             </span>
                         </div>
-                        <!-- 开放AT指令 -->
+                        <!-- open AT commands -->
                         <div class="card-item flex-start">
                             <span class="card-item-label"
                                 >{{ $t("cell.atCommands") }}</span
@@ -901,7 +1424,8 @@
                             <span class="card-item-label"></span>
                             <span class="card-item-content item-button">
                                 <button
-                                    class="mini-primary"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     @click="setCellularInfo"
                                     :class="{'disabled-btn': saveLoading}"
                                 >
@@ -912,23 +1436,57 @@
                     </div>
                     <!-- E Cellular -->
 
+                    <!-- S Debug (independent, applies to wifi/cellular) -->
+                    <div class="card debug-card">
+                        <div class="card-title">
+                            <span class="card-title-text">{{ $t("debug.title") }}</span>
+                        </div>
+                        <div class="card-item flex-start">
+                            <span class="card-item-label">{{ $t("debug.pingTest") }}</span>
+                            <span class="card-item-content">
+                                <input
+                                    type="text"
+                                    v-model="pingHost"
+                                    :placeholder="$t('debug.pingHostPlaceholder')"
+                                    class="input-text"
+                                    style="width: 120px; margin-right: 8px;"
+                                />
+                                <button
+                                    class="plain"
+                                    @click="doPing"
+                                    :class="{'disabled-btn': pingLoading}"
+                                >
+                                    {{ pingLoading ? $t("debug.pinging") : $t("debug.ping") }}
+                                </button>
+                            </span>
+                        </div>
+                        <div class="card-item flex-start card-item-ping-result" v-if="pingResult">
+                            <span class="card-item-label"></span>
+                            <span class="card-item-content">
+                                <pre class="ping-result">{{ pingResult }}</pre>
+                            </span>
+                        </div>
+                    </div>
+                    <!-- E Debug -->
+
                     <footer class="footer">
                         <button
-                            class="primary"
+                            type="button"
+                            class="plain"
                             id="btn-sleep"
                             @click="handleSleepMode"
                         >
                             {{ $t("sleepMode") }}
                         </button>
                     </footer>
-                    <!-- 基本弹窗组件调用 -->
+                    <!-- basic dialog component call -->
                     <div
                         v-if="dialogVisible"
                         v-scope="MsDialog(dialogParam)"
                         @vue:mounted="dialogMounted"
                     ></div>
                 </div>
-                <!-- Cellular详情页面 -->
+                <!-- Cellular detail page -->
                 <div class="content content-cell-detail" v-if="netmod==='cat1'" v-show="goDetail">
                     <div class="card cellular-card">
                         <div class="card-title">
@@ -944,7 +1502,7 @@
                                 </button></span
                             >
                         </div>
-                        <!-- 蜂窝网络拨号状态 -->
+                        <!-- cellular network dial status -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.networkStatus") }}</span
@@ -953,7 +1511,7 @@
                                 <span> {{ $t(`cell.${cellState.networkStatus.toLocaleLowerCase()}`) }} </span>
                             </span>
                         </div>
-                        <!-- 模块和SIM卡的相关检测状态 -->
+                        <!-- module and SIM card related detection status -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.modemStatus") }}</span
@@ -962,7 +1520,7 @@
                                 <span> {{ $t(`cell.${cellState.modemStatus}`) }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝模块型号 -->
+                        <!-- cellular module model -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.model") }}</span
@@ -971,7 +1529,7 @@
                                 <span> {{ cellState.model }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝模块当前的版本 -->
+                        <!-- current version of cellular module -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.version") }}</span
@@ -980,7 +1538,7 @@
                                 <span> {{ cellState.version }} </span>
                             </span>
                         </div>
-                        <!-- 当前的信号强度 -->
+                        <!-- current signal strength -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.signalLevel") }}</span
@@ -989,7 +1547,7 @@
                                 <span> {{ cellState.signalLevel }} </span>
                             </span>
                         </div>
-                        <!-- 当前SIM卡的注册状态 -->
+                        <!-- current SIM card registration status -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.registerStatus") }}</span
@@ -998,7 +1556,7 @@
                                 <span>  {{ $t(`cell.${cellState.registerStatus}`) }} </span>
                             </span>
                         </div>
-                        <!-- 模块IMEI -->
+                        <!-- module IMEI -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.imei") }}</span
@@ -1007,7 +1565,7 @@
                                 <span> {{ cellState.imei }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡的IMSI -->
+                        <!-- SIM card IMSI -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.imsi") }}</span
@@ -1016,7 +1574,7 @@
                                 <span> {{ cellState.imsi }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡的ICCID -->
+                        <!-- SIM card ICCID -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.iccid") }}</span
@@ -1025,7 +1583,7 @@
                                 <span> {{ cellState.iccid }} </span>
                             </span>
                         </div>
-                        <!-- 注册上的运营商 -->
+                        <!-- registered carrier -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.isp") }}</span
@@ -1034,7 +1592,7 @@
                                 <span> {{ cellState.isp }} </span>
                             </span>
                         </div>
-                        <!-- 拨号上的网络类型，如LTE，3G -->
+                        <!-- network type on dial, such as LTE, 3G -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.networkType") }}</span
@@ -1043,7 +1601,7 @@
                                 <span> {{ cellState.networkType }} </span>
                             </span>
                         </div>
-                        <!-- 显示移动国家代码（MCC)+移动网络代码（MNC)，也显示位置区域码（LAC)和小区识别码 -->
+                        <!-- display mobile country code (MCC) + mobile network code (MNC), also display location area code (LAC) and cell ID -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.plmnId") }}</span
@@ -1052,7 +1610,7 @@
                                 <span> {{ cellState.plmnId }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡位置区域码 -->
+                        <!-- SIM card location area code -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.lac") }}</span
@@ -1061,7 +1619,7 @@
                                 <span> {{ cellState.lac }} </span>
                             </span>
                         </div>
-                        <!-- SIM卡所在的蜂窝小区识别号 -->
+                        <!-- cellular cell ID where SIM card is located -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.cellId") }}</span
@@ -1070,7 +1628,7 @@
                                 <span> {{ cellState.cellId }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取到的IPv4地址 -->
+                        <!-- IPv4 address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv4Address") }}</span
@@ -1079,7 +1637,7 @@
                                 <span> {{ cellState.ipv4Address }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv4网关地址 -->
+                        <!-- IPv4 gateway address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv4Gateway") }}</span
@@ -1088,7 +1646,7 @@
                                 <span> {{ cellState.ipv4Gateway }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv4 DNS -->
+                        <!-- IPv4 DNS obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv4Dns") }}</span
@@ -1097,7 +1655,7 @@
                                 <span> {{ cellState.ipv4Dns }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取到的IPv6地址 -->
+                        <!-- IPv6 address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv6Address") }}</span
@@ -1106,7 +1664,7 @@
                                 <span> {{ cellState.ipv6Address }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv6网关地址 -->
+                        <!-- IPv6 gateway address obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv6Gateway") }}</span
@@ -1115,7 +1673,7 @@
                                 <span> {{ cellState.ipv6Gateway }} </span>
                             </span>
                         </div>
-                        <!-- 蜂窝网络拨号获取的IPv6 DNS -->
+                        <!-- IPv6 DNS obtained from cellular network dial -->
                         <div class="card-item">
                             <span class="card-item-label"
                                 >{{ $t("cell.ipv6Dns") }}</span
@@ -1130,7 +1688,8 @@
                             <span class="card-item-label"></span>
                             <span class="card-item-content">
                                 <button
-                                    class="mini-primary"
+                                    type="button"
+                                    class="plain device-card-action-btn"
                                     @click="goBackCell"
                                 >
                                     {{ $t("cell.back") }}
@@ -1155,10 +1714,10 @@
     </body>
     <script type="module">
         import "./src/main";
-        import "./src/utils.js"; // 工具函数
+        import "./src/utils.js"; // utility functions
     </script>
 </html>
-<!-- 弹窗组件模板 -->
+<!-- dialog component template -->
 <template id="ms-dialog">
     <div class="dialog-shade" ref="dialog">
         <div class="dialog-box">
@@ -1222,10 +1781,11 @@
             </div>
             <!-- 按钮操作区域 -->
             <div class="dialog-footer">
-                <button class="primary" v-show="showBtnOK" @click="handleOK">
+                <button type="button" class="plain" v-show="showBtnOK" @click="handleOK">
                     {{ btnOkText }}
                 </button>
                 <button
+                    type="button"
                     class="plain"
                     v-show="showBtnCancel"
                     @click="handleCancel"
@@ -1249,7 +1809,7 @@
     </div>
 </template>
 
-<!-- 下拉选择框组件模板 -->
+<!-- dropdown selection component template -->
 <template id="ms-select">
     <div
         class="ms-select"

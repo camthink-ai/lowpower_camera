@@ -14,6 +14,7 @@
 #include "esp_attr.h"
 #include "esp_intr_alloc.h"
 #include "esp_bit_defs.h"
+#include "esp_idf_version.h"
 #include "hcd.h"
 #include "usb/usb_types_stack.h"
 #include "usb_private.h"
@@ -100,7 +101,11 @@ typedef struct {
     usb_speed_t dev_speed;                      /*!< device speed detected by driver */
     uint8_t dev_addr;                           /*!< device address assigned by driver */
     hcd_port_handle_t port_handle;              /*!< port handler */
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
     hcd_port_fifo_bias_t fifo_bias;             /*!< fifo bias strategy */
+#else
+    int fifo_bias;                              /*!< fifo bias strategy (no longer a separate type in v5.5.0+) */
+#endif
     usbh_pipe_handle_t dflt_pipe_handle;        /*!< default pipe handler */
     usb_phy_handle_t phy_handle;                /*!< USB phy handle */
     QueueHandle_t queue_handle;                 /*!< queue handle, using for event transmit */
@@ -323,7 +328,11 @@ usbh_port_handle_t iot_usbh_port_init(usbh_port_config_t *config)
     ERR_CHECK(port_instance->evt_group_handle != NULL, "event group create failed", NULL);
     port_instance->port_num = config->port_num;
     port_instance->dev_addr = config->port_num;
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
     port_instance->fifo_bias = (hcd_port_fifo_bias_t)config->fifo_bias;
+#else
+    port_instance->fifo_bias = (int)config->fifo_bias;
+#endif
     port_instance->conn_callback = config->conn_callback;
     port_instance->disconn_callback = config->disconn_callback;
     port_instance->event_callback = config->event_callback;
@@ -353,7 +362,9 @@ usbh_port_handle_t iot_usbh_port_init(usbh_port_config_t *config)
 
     /* Initialize USB Port */
     hcd_port_config_t port_cfg = {
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
         .fifo_bias = port_instance->fifo_bias,
+#endif
         .callback = _usbh_port_callback,
         .callback_arg = (void *)port_instance,
         .context = (void *)config->context,
@@ -989,8 +1000,12 @@ static void _usbh_processing_task(void *arg)
                     ret = _usbh_port_reset(port_instance->port_handle);
                     ERR_CHECK_GOTO(ESP_OK == ret, "Port Reset failed", usb_driver_reset_);
                     // fifo need re-config after port reset
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
                     ret = hcd_port_set_fifo_bias(port_instance->port_handle, port_instance->fifo_bias);
                     ERR_CHECK_GOTO(ESP_OK == ret, "Port Set fifo failed", usb_driver_reset_);
+#else
+                    // FIFO bias is set during port initialization in v5.5.0+, no need to set it here
+#endif
                     _usbh_update_state(USBH_STATE_DEVICE_DEFAULT);
                     ESP_LOGI(TAG, "Getting Port Speed");
                     ret = _usbh_port_get_speed(port_instance->port_handle, &port_speed);

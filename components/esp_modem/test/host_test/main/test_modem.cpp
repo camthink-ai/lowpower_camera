@@ -1,14 +1,16 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
 #define CATCH_CONFIG_MAIN // This tells the catch header to generate a main
 #include <memory>
 #include <future>
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_session.hpp>
 #include "cxx_include/esp_modem_api.hpp"
 #include "LoopbackTerm.h"
+#include <iostream>
 
 using namespace esp_modem;
 
@@ -29,6 +31,20 @@ TEST_CASE("DTE command races", "[esp_modem]")
         loopback->inject(&resp[0], sizeof(resp), sizeof(resp), /* 1ms before injecting reply */1, 0);
         auto ret = dce->command("AT\n", [&](uint8_t *data, size_t len) {
             return command_result::OK;
+        }, 1);
+        // this command should either timeout or finish successfully
+        CHECK((ret == command_result::TIMEOUT || ret == command_result::OK));
+    }
+
+    // Now we test the same, but with some garbage after the expected data and inject the reply in chunks by 3 bytes
+    uint8_t resp2[] = {'O', 'K', '\n', '1', '2', '\n'};
+    for (int i = 0; i < 1000; ++i) {
+        loopback->inject(&resp2[0], sizeof(resp2), 3, /* 1ms before injecting reply */0, 0);
+        auto ret = dce->command("check\n", [&](uint8_t *data, size_t len) {
+            if (len > 0 && data[0] == 'O') { // expected reply only when it starts with '0'
+                return command_result::OK;
+            }
+            return esp_modem::command_result::TIMEOUT;
         }, 1);
         // this command should either timeout or finish successfully
         CHECK((ret == command_result::TIMEOUT || ret == command_result::OK));
@@ -246,4 +262,111 @@ TEST_CASE("Test CMUX protocol by injecting payloads", "[esp_modem]")
         }, 1000);
         CHECK(ret == command_result::OK);
     }
+}
+
+TEST_CASE("Command and Data mode transitions", "[esp_modem][transitions]")
+{
+    auto term = std::make_unique<LoopbackTerm>();
+    auto loopback = term.get();
+    auto dte =  std::make_shared<DTE>(std::move(term));
+    CHECK(term == nullptr);
+
+    esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("APN");
+    esp_netif_t netif{};
+    auto dce = create_SIM7600_dce(&dce_config, dte, &netif);
+    CHECK(dce != nullptr);
+
+    // UNDEF -> CMD (OK)
+    uint8_t resp[] = "DISCONNECTED\n";
+    loopback->inject(&resp[0], sizeof(resp), sizeof(resp), /* 10ms before injecting reply */100, 0);
+    loopback->write(nullptr, 0); /* this triggers sending the injected response */
+    CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
+    loopback->inject(nullptr, 0, 0, 0, 0); /* reset injection, use synchronous replies now */
+    // CMD -> CMD (Fail)
+    CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == false);
+
+    // Forcing transition to CMD (via UNDEF)
+    // CMD -> UNDEF (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::UNDEF) == true);
+    // UNDEF -> CMD (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
+
+    // CMD -> DATA (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::DATA_MODE) == true);
+    // DATA -> CMD (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
+}
+
+TEST_CASE("CMUX mode transitions", "[esp_modem][transitions]")
+{
+    auto term = std::make_unique<LoopbackTerm>();
+    auto dte = std::make_shared<DTE>(std::move(term));
+    CHECK(term == nullptr);
+
+    esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("APN");
+    esp_netif_t netif{};
+    auto dce = create_SIM7600_dce(&dce_config, dte, &netif);
+    CHECK(dce != nullptr);
+    // UNDEF -> CMUX (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MODE) == true);
+    // CMUX -> DATA (Fail)
+    CHECK(dce->set_mode(esp_modem::modem_mode::DATA_MODE) == false);
+    // CMUX back -> CMD (OK)
+    CHECK(dce->set_mode(esp_modem::modem_mode::COMMAND_MODE) == true);
+}
+
+TEST_CASE("CMUX manual mode transitions", "[esp_modem][transitions]")
+{
+    auto term = std::make_unique<LoopbackTerm>();
+    auto dte = std::make_shared<DTE>(std::move(term));
+    CHECK(term == nullptr);
+
+    esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG("APN");
+    esp_netif_t netif{};
+    auto dce = create_SIM7600_dce(&dce_config, dte, &netif);
+    CHECK(dce != nullptr);
+
+    // Happy flow transitions of Manual CMUX transitions
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_MODE) == true);
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_EXIT) == true);
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_MODE) == true);
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_SWAP) == true);
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA) == true);
+    // Cannot test CMUX_MANUAL_DATA -> CMUX_MANUAL_COMMAND with our mocked terminal for now
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_EXIT) == true);
+
+    // Check some out of order manual transitions, most of them are allowed,
+    // but some fail as modem layers report issues with specific steps
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_SWAP) == false); // cannot go directly to SWAP
+    CHECK(dce->set_mode(esp_modem::modem_mode::UNDEF) == true);
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_SWAP) == true);  // can go via UNDEF
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_EXIT) == false); // EXIT is allowed, but CMUX terms don't exist
+    CHECK(dce->set_mode(esp_modem::modem_mode::UNDEF) == true);
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_MODE) == true);  // Enter CMUX (via UNDEF)
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_DATA) == true);  // Go directly to DATA mode
+    CHECK(dce->set_mode(esp_modem::modem_mode::CMUX_MANUAL_EXIT) == true);  // Exit CMUX
+    CHECK(dce->set_mode(esp_modem::modem_mode::UNDEF) == true);             // Succeeds from any state
+
+}
+
+#define CATCH_CONFIG_RUNNER
+extern "C" int app_main(void)
+{
+    // Define the argument count and arguments for Catch2, including JUnit reporting
+    int argc = 5;
+    const char *argv[] = {"esp_modem", "-r", "junit", "-o", "junit.xml", nullptr};
+
+    // Run the Catch2 session and store the result
+    int result = Catch::Session().run(argc, argv);
+
+    // Use more descriptive error handling
+    if (result != 0) {
+        printf("Test failed with result %d.\n", result);
+    } else {
+        printf("All tests passed successfully.\n");
+    }
+
+    // Check for the junit.xml file in the current working directory
+    // Exit the application with the test result as the status code
+    std::exit(result);
 }

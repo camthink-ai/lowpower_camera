@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -16,8 +16,10 @@
 #include "freertos/event_groups.h"
 #include "esp_netif.h"
 #include "esp_netif_ppp.h"
-#include "mqtt_client.h"
 #include "esp_modem_api.h"
+#include "esp_console.h"
+#include "console_ping.h"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
 
@@ -34,8 +36,12 @@
 static const char *TAG = "pppos_example";
 static EventGroupHandle_t event_group = NULL;
 static const int CONNECT_BIT = BIT0;
-static const int GOT_DATA_BIT = BIT2;
+static const int DISCONNECT_BIT = BIT1;
 static const int USB_DISCONNECTED_BIT = BIT3; // Used only with USB DTE but we define it unconditionally, to avoid too many #ifdefs in the code
+
+#ifdef CONFIG_EXAMPLE_MODEM_DEVICE_CUSTOM
+esp_err_t esp_modem_get_time(esp_modem_dce_t *dce_wrap, char *p_time);
+#endif
 
 #if defined(CONFIG_EXAMPLE_SERIAL_CONFIG_USB)
 #include "esp_modem_usb_c_api.h"
@@ -51,6 +57,7 @@ static void usb_terminal_error_handler(esp_modem_terminal_error_t err)
 }
 #define CHECK_USB_DISCONNECTION(event_group) \
 if ((xEventGroupGetBits(event_group) & USB_DISCONNECTED_BIT) == USB_DISCONNECTED_BIT) { \
+    ESP_LOGE(TAG, "USB_DISCONNECTED_BIT destroying modem dce");                                            \
     esp_modem_destroy(dce); \
     continue; \
 }
@@ -58,55 +65,14 @@ if ((xEventGroupGetBits(event_group) & USB_DISCONNECTED_BIT) == USB_DISCONNECTED
 #define CHECK_USB_DISCONNECTION(event_group)
 #endif
 
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
-    esp_mqtt_event_handle_t event = event_data;
-    esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
-    switch ((esp_mqtt_event_id_t)event_id) {
-    case MQTT_EVENT_CONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        msg_id = esp_mqtt_client_subscribe(client, CONFIG_EXAMPLE_MQTT_TEST_TOPIC, 0);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-        break;
-    case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        break;
-    case MQTT_EVENT_SUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-        msg_id = esp_mqtt_client_publish(client, CONFIG_EXAMPLE_MQTT_TEST_TOPIC, CONFIG_EXAMPLE_MQTT_TEST_DATA, 0, 0, 0);
-        ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-        break;
-    case MQTT_EVENT_UNSUBSCRIBED:
-        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_PUBLISHED:
-        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-        break;
-    case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
-        xEventGroupSetBits(event_group, GOT_DATA_BIT);
-        break;
-    case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-        break;
-    default:
-        ESP_LOGI(TAG, "MQTT other event id: %d", event->event_id);
-        break;
-    }
-}
-
 static void on_ppp_changed(void *arg, esp_event_base_t event_base,
                            int32_t event_id, void *event_data)
 {
-    ESP_LOGI(TAG, "PPP state changed event %d", event_id);
+    ESP_LOGI(TAG, "PPP state changed event %" PRIu32, event_id);
     if (event_id == NETIF_PPP_ERRORUSER) {
         /* User interrupted event from esp-netif */
-        esp_netif_t *netif = event_data;
-        ESP_LOGI(TAG, "User interrupted event from netif:%p", netif);
+        esp_netif_t **p_netif = event_data;
+        ESP_LOGI(TAG, "User interrupted event from netif:%p", *p_netif);
     }
 }
 
@@ -114,7 +80,7 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base,
 static void on_ip_event(void *arg, esp_event_base_t event_base,
                         int32_t event_id, void *event_data)
 {
-    ESP_LOGD(TAG, "IP event! %d", event_id);
+    ESP_LOGD(TAG, "IP event! %" PRIu32, event_id);
     if (event_id == IP_EVENT_PPP_GOT_IP) {
         esp_netif_dns_info_t dns_info;
 
@@ -136,6 +102,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "GOT ip event!!!");
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
+        xEventGroupSetBits(event_group, DISCONNECT_BIT);
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
@@ -153,7 +120,13 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &on_ip_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(NETIF_PPP_STATUS, ESP_EVENT_ANY_ID, &on_ppp_changed, NULL));
 
+    // Initialize console REPL, register ping and start it
+    ESP_ERROR_CHECK(console_cmd_init());
+    ESP_ERROR_CHECK(console_cmd_ping_register());
+    ESP_ERROR_CHECK(console_cmd_start());
+
     /* Configure the PPP netif */
+    esp_err_t err;
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(CONFIG_EXAMPLE_MODEM_PPP_APN);
     esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
     esp_netif_t *esp_netif = esp_netif_new(&netif_ppp_config);
@@ -192,13 +165,16 @@ void app_main(void)
 #elif CONFIG_EXAMPLE_MODEM_DEVICE_SIM7600 == 1
     ESP_LOGI(TAG, "Initializing esp_modem for the SIM7600 module...");
     esp_modem_dce_t *dce = esp_modem_new_dev(ESP_MODEM_DCE_SIM7600, &dte_config, &dce_config, esp_netif);
+#elif CONFIG_EXAMPLE_MODEM_DEVICE_CUSTOM == 1
+    ESP_LOGI(TAG, "Initializing esp_modem with custom module...");
+    esp_modem_dce_t *dce = esp_modem_new_dev(ESP_MODEM_DCE_CUSTOM, &dte_config, &dce_config, esp_netif);
 #else
     ESP_LOGI(TAG, "Initializing esp_modem for a generic module...");
     esp_modem_dce_t *dce = esp_modem_new(&dte_config, &dce_config, esp_netif);
 #endif
     assert(dce);
     if (dte_config.uart_config.flow_control == ESP_MODEM_FLOW_CONTROL_HW) {
-        esp_err_t err = esp_modem_set_flow_control(dce, 2, 2);  //2/2 means HW Flow Control.
+        err = esp_modem_set_flow_control(dce, 2, 2);  //2/2 means HW Flow Control.
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to set the set_flow_control mode");
             return;
@@ -212,6 +188,10 @@ void app_main(void)
         ESP_LOGI(TAG, "Initializing esp_modem for the BG96 module...");
         struct esp_modem_usb_term_config usb_config = ESP_MODEM_BG96_USB_CONFIG();
         esp_modem_dce_device_t usb_dev_type = ESP_MODEM_DCE_BG96;
+#elif CONFIG_EXAMPLE_MODEM_DEVICE_EC20 == 1
+        ESP_LOGI(TAG, "Initializing esp_modem for the EC20 module...");
+        struct esp_modem_usb_term_config usb_config = ESP_MODEM_EC20_USB_CONFIG();
+        esp_modem_dce_device_t usb_dev_type = ESP_MODEM_DCE_EC20;
 #elif CONFIG_EXAMPLE_MODEM_DEVICE_SIM7600 == 1
         ESP_LOGI(TAG, "Initializing esp_modem for the SIM7600 module...");
         struct esp_modem_usb_term_config usb_config = ESP_MODEM_SIM7600_USB_CONFIG();
@@ -235,7 +215,27 @@ void app_main(void)
 #error Invalid serial connection to modem.
 #endif
 
-    xEventGroupClearBits(event_group, CONNECT_BIT | GOT_DATA_BIT | USB_DISCONNECTED_BIT);
+#if CONFIG_EXAMPLE_DETECT_MODE_BEFORE_CONNECT
+    xEventGroupClearBits(event_group, CONNECT_BIT | USB_DISCONNECTED_BIT | DISCONNECT_BIT);
+
+    err = esp_modem_set_mode(dce, ESP_MODEM_MODE_DETECT);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_DETECT) failed with %d", err);
+        return;
+    }
+    esp_modem_dce_mode_t mode = esp_modem_get_mode(dce);
+    ESP_LOGI(TAG, "Mode detection completed: current mode is: %d", mode);
+    if (mode == ESP_MODEM_MODE_DATA) {  // set back to command mode
+        err = esp_modem_set_mode(dce, ESP_MODEM_MODE_COMMAND);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_COMMAND) failed with %d", err);
+            return;
+        }
+        ESP_LOGI(TAG, "Command mode restored");
+    }
+#endif // CONFIG_EXAMPLE_DETECT_MODE_BEFORE_CONNECT
+
+    xEventGroupClearBits(event_group, CONNECT_BIT | USB_DISCONNECTED_BIT | DISCONNECT_BIT);
 
     /* Run the modem demo app */
 #if CONFIG_EXAMPLE_NEED_SIM_PIN == 1
@@ -251,12 +251,24 @@ void app_main(void)
 #endif
 
     int rssi, ber;
-    esp_err_t err = esp_modem_get_signal_quality(dce, &rssi, &ber);
+    err = esp_modem_get_signal_quality(dce, &rssi, &ber);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_get_signal_quality failed with %d %s", err, esp_err_to_name(err));
         return;
     }
     ESP_LOGI(TAG, "Signal quality: rssi=%d, ber=%d", rssi, ber);
+
+#ifdef CONFIG_EXAMPLE_MODEM_DEVICE_CUSTOM
+    {
+        char time[64];
+        err = esp_modem_get_time(dce, time);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_modem_get_time failed with %d %s", err, esp_err_to_name(err));
+            return;
+        }
+        ESP_LOGI(TAG, "esp_modem_get_time: %s", time);
+    }
+#endif
 
 #if CONFIG_EXAMPLE_SEND_MSG
     if (esp_modem_sms_txt_mode(dce, true) != ESP_OK || esp_modem_sms_character_set(dce) != ESP_OK) {
@@ -278,27 +290,43 @@ void app_main(void)
     }
     /* Wait for IP address */
     ESP_LOGI(TAG, "Waiting for IP address");
-    xEventGroupWaitBits(event_group, CONNECT_BIT | USB_DISCONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    xEventGroupWaitBits(event_group, CONNECT_BIT | USB_DISCONNECTED_BIT | DISCONNECT_BIT, pdFALSE, pdFALSE,
+                        pdMS_TO_TICKS(60000));
     CHECK_USB_DISCONNECTION(event_group);
+    if ((xEventGroupGetBits(event_group) & CONNECT_BIT) != CONNECT_BIT) {
+        ESP_LOGW(TAG, "Modem not connected, switching back to the command mode");
+        err = esp_modem_set_mode(dce, ESP_MODEM_MODE_COMMAND);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_COMMAND) failed with %d", err);
+            return;
+        }
+        ESP_LOGI(TAG, "Command mode restored");
+        return;
+    }
 
     /* Config MQTT */
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-    esp_mqtt_client_config_t mqtt_config = {
-        .broker.address.uri = CONFIG_EXAMPLE_MQTT_BROKER_URI,
-    };
-#else
-    esp_mqtt_client_config_t mqtt_config = {
-        .uri = CONFIG_EXAMPLE_MQTT_BROKER_URI,
-    };
-#endif
-    esp_mqtt_client_handle_t mqtt_client = esp_mqtt_client_init(&mqtt_config);
-    esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(mqtt_client);
-    ESP_LOGI(TAG, "Waiting for MQTT data");
-    xEventGroupWaitBits(event_group, GOT_DATA_BIT | USB_DISCONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    int ping_ret_val;
+    ESP_ERROR_CHECK(esp_console_run("ping www.espressif.com", &ping_ret_val));
+    ESP_LOGI(TAG, "Ping command finished with return value: %d", ping_ret_val);
+
+#if CONFIG_EXAMPLE_PAUSE_NETIF_TO_CHECK_SIGNAL
+    esp_modem_pause_net(dce, true);
+    err = esp_modem_get_signal_quality(dce, &rssi, &ber);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_modem_get_signal_quality failed with %d", err);
+        return;
+    }
+    ESP_LOGI(TAG, "Signal quality: rssi=%d, ber=%d", rssi, ber);
+    esp_modem_pause_net(dce, false);
+    ESP_ERROR_CHECK(esp_console_run("ping www.espressif.com", &ping_ret_val));
+    ESP_LOGI(TAG, "Ping command finished with return value: %d", ping_ret_val);
+#endif // CONFIG_EXAMPLE_PAUSE_NETIF_TO_CHECK_SIGNAL
+
+    if (ping_ret_val != 0) {
+        ESP_LOGE(TAG, "Ping command failed with return value: %d", ping_ret_val);
+    }
     CHECK_USB_DISCONNECTION(event_group);
 
-    esp_mqtt_client_destroy(mqtt_client);
     err = esp_modem_set_mode(dce, ESP_MODEM_MODE_COMMAND);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_COMMAND) failed with %d", err);

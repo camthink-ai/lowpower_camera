@@ -11,6 +11,12 @@ extern "C" {
 #define STORAGE_PART "littlefs"
 
 /**
+ * Ensure LittleFS is mounted at STORAGE_ROOT (safe to call multiple times).
+ * Used early in boot for session logging before storage_open().
+ */
+esp_err_t storage_ensure_mounted(void);
+
+/**
  * Open storage with specified input and output queues
  * @param in Input queue handle
  * @param out Output queue handle

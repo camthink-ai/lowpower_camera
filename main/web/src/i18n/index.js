@@ -1,7 +1,7 @@
 import zh_CN from "./lang/zh_CN.json";
 import en_US from "./lang/en_US.json";
 
-/** 获取当前浏览器的语言 */
+/** get current browser language */
 export function getCurLang() {
     let curLang = localStorage.getItem("lang") || navigator.language || navigator.browserLanguage || 'en_US';
     if (/en/.test(curLang)) {
@@ -22,8 +22,8 @@ const languageMap = {
 };
 
 /**
- * 解析层级对象
- * @param langObject {*} 语言JSON文件 {innerObj: {a: 'xxx', b: 'yyy'}}
+ * parse hierarchical object
+ * @param langObject {*} language JSON file {innerObj: {a: 'xxx', b: 'yyy'}}
  * @param field "innerObj.a" | "a"
  */
 const getValue = (langObject = {}, field = "") => {
@@ -37,7 +37,7 @@ const getValue = (langObject = {}, field = "") => {
     }, langObject);
 };
 
-// 语言翻译文件json对象
+// language translation file json object
 const currentTranslationConf = languageMap[curLang] || en_US;
 
 export const translate = (path) => {

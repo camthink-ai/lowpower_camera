@@ -339,6 +339,7 @@ remap_t g_remap[] = {
     {"cat1_apn", KEY_CAT1_APN, apply_str_value, fetch_str_value, ""},
     {"cat1_pin", KEY_CAT1_PIN, apply_str_value, fetch_str_value, ""},
     {"cat1_auth_type", KEY_CAT1_AUTH_TYPE, apply_u8_value, fetch_u8_value, "0"},
+    {"cat1_isp_select", KEY_CAT1_ISP_SELECT, apply_str_value, fetch_str_value, "auto"},
 };
 
 // --------------------iot mip--------------------
@@ -392,6 +393,8 @@ static void mip_timer_start()
     esp_timer_start_periodic(g_iot_mip_attr.timer, 1000 * 1000); //1s
     timer_started = true;
 }
+
+static void __attribute__((unused)) mip_task(void *param);
 
 static void mip_task(void *param)
 {
@@ -484,7 +487,7 @@ int8_t iot_mip_init()
     iot_mip_autop_init();
     iot_mip_dm_init();
     sleep_set_event_bits(SLEEP_MIP_DONE_BIT);
-    xTaskCreatePinnedToCore(mip_task, "mip_task", 1024 * 10, NULL, 5, NULL, 1);
+    // xTaskCreatePinnedToCore(mip_task, "mip_task", 1024 * 10, NULL, 5, NULL, 1);
     return 0;
 }
 
@@ -665,7 +668,7 @@ static void dm_timestamp(dm_downlink_header_t dh, cJSON *ddata, dm_downlink_resu
         system_set_time(&tAttr);
     } else {
         ESP_LOGI(TAG, "dm_timestamp failed to use ntp");
-        system_ntp_time();
+        system_ntp_time(false);
     }
     snprintf(dres->status, sizeof(dres->status), DM_DOWNLINK_RES_SUCCESS);
 }

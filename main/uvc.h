@@ -15,9 +15,8 @@ esp_err_t uvc_init(void);
 
 /**
  * @brief Deinitialize UVC subsystem
- * @return Always returns ESP_OK
  */
-esp_err_t uvc_deinit(void);
+void uvc_deinit(void);
 
 /**
  * @brief Get frame buffer for streaming
@@ -29,6 +28,6 @@ camera_fb_t *uvc_stream_fb_get();
  * @brief Return frame buffer after processing
  * @param fb Pointer to frame buffer structure
  */
-void uvc_camera_fb_return(camera_fb_t *fb);
+void uvc_stream_fb_return(camera_fb_t *fb);
 
 #endif

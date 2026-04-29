@@ -17,6 +17,7 @@
 
 static int time_delta = 0;    //When synchronizing time, the error time between the system and the actual time, in seconds.
 static char ntp_sync_flag = 0;  //The flag indicating whether ntp is synchronized.
+static RTC_DATA_ATTR modeSel_e g_tmpMode = MODE_UNDEFINED;
 /**
  * Get the current system mode
  * @return modeSel_e
@@ -28,21 +29,28 @@ modeSel_e system_get_mode(void)
 
 /**
  * Synchronize system time with NTP server
+ * @param force_sync If true, force synchronization even if NTP synchronization is disabled  
  * @return ESP_OK on success, ESP_FAIL on timeout
  */
-esp_err_t system_ntp_time(void)
+esp_err_t system_ntp_time(bool force_sync)
 {
+    if(!force_sync && !system_is_ntp_sync_enable()){
+        ESP_LOGI(TAG, "NTP synchronization is disabled, skip synchronization");
+        return ESP_OK;
+    }
+
     int retry = 0;
-    const int retry_count = 7;  // Maximum retry attempts
+    const int retry_count = 5;  // Maximum retry attempts
     time_t sys_now;
 
     ESP_LOGI(TAG, "Initializing SNTP");
-    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(3,
+                               ESP_SNTP_SERVER_LIST("pool.ntp.org", "ntp.aliyun.com", "time.windows.com"));
     esp_netif_sntp_init(&config);
     
     time(&sys_now);
     // Wait for time synchronization with retries
-    while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(1000)) != ESP_OK && ++retry < retry_count) {
+    while (esp_netif_sntp_sync_wait(pdMS_TO_TICKS(2000)) != ESP_OK && ++retry < retry_count) {
         ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
     }
 
@@ -221,24 +229,103 @@ void system_schedule_todo()
             
             // Fallback to NTP if cloud platform not connected
             if (!mqtt_mip_is_connected()) {
-                system_ntp_time();
+                system_ntp_time(true);
             }
             ESP_LOGI(TAG, "Pending DM Done");
         } else if (platformParam.currentPlatformType == PLATFORM_TYPE_SENSING) {
             // Operations for Sensing platform
             // 1. Time synchronization
             if (http_client_sync_server_time() == ESP_FAIL) {
-                system_ntp_time();  // Fallback to NTP
+                system_ntp_time(true);  // Fallback to NTP
             }
             // 2. Firmware/config updates
             http_client_check_update();
         } else if (platformParam.currentPlatformType == PLATFORM_TYPE_MQTT) {
             // Operations for MQTT platform
             ESP_LOGI(TAG, "NTP Synchronizing");
-            if (system_ntp_time() == ESP_FAIL) {
+            if (system_ntp_time(true) == ESP_FAIL) {
                 ESP_LOGI(TAG, "NTP Failed");
             }
         }
     }
+    sleep_set_last_schedule_time(time(NULL));
     sleep_set_event_bits(SLEEP_SCHEDULE_DONE_BIT);  // Signal completion
+}
+
+/**
+ * Execute upload tasks
+ * Triggers storage upload process for scheduled upload mode
+ */
+void system_upload_todo()
+{
+    uploadAttr_t upload;
+    esp_err_t ret = cfg_get_upload_attr(&upload);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get upload configuration: %s", esp_err_to_name(ret));
+        return;
+    }
+    
+    ESP_LOGI(TAG, "Upload task - Mode: %d, TimedCount: %d", 
+             upload.uploadMode, upload.timedCount);
+    
+    switch (upload.uploadMode) {
+        case 0:
+            // Instant upload mode - uploads happen immediately after capture
+            ESP_LOGI(TAG, "Instant upload mode - no scheduled action needed");
+            break;
+            
+        case 1:
+            // Scheduled upload mode - trigger storage upload
+            ESP_LOGI(TAG, "Triggering scheduled storage upload");
+            storage_upload_start();
+            // Update last upload time
+            sleep_set_last_upload_time(time(NULL));
+            break;
+            
+        default:
+            ESP_LOGW(TAG, "Unknown upload mode: %d", upload.uploadMode);
+            break;
+    }
+}
+
+esp_err_t system_set_ntp_sync(ntpSync_t *ntp_sync)
+{
+    cfg_set_ntp_sync(ntp_sync->enable);
+    return ESP_OK;
+}
+
+esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync)
+{
+    cfg_get_ntp_sync(&ntp_sync->enable);
+    return ESP_OK;
+}
+
+bool system_is_ntp_sync_enable()
+{
+    ntpSync_t ntp_sync;
+    system_get_ntp_sync(&ntp_sync);
+    return ntp_sync.enable == 1;
+}
+
+
+/* *
+ * Set temporary mode
+ * @param mode Mode to set
+ */
+void system_set_temporary_mode(modeSel_e mode)
+{
+    g_tmpMode = mode;
+    system_restart();
+}
+
+/**
+ * Get temporary mode
+ * @return Temporary mode
+ */
+modeSel_e system_get_temporary_mode(void)
+{
+    modeSel_e mode = g_tmpMode;
+    g_tmpMode = MODE_UNDEFINED;
+    return mode;
 }

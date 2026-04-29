@@ -25,8 +25,10 @@
 #include "cat1.h"
 #include "camera.h"
 #include "mqtt.h"
+#include "push.h"
 #include "pir.h"
 #include "net_module.h"
+#include "session_log.h"
 
 #define TAG "-->SLEEP"  // Logging tag
 
@@ -55,8 +57,11 @@ typedef struct mdSleep {
 } mdSleep_t;
 
 // RTC memory preserved variables
-static RTC_DATA_ATTR enum wakeupTodo g_wakeupTodo = 0;  // Action to perform after wakeup
+static RTC_DATA_ATTR uint32_t g_wakeupTodo = 0;  // each 4 bits represent one action, 8 actions total, 32 bits total, lower bits have higher priority
 static RTC_DATA_ATTR time_t g_lastCapTime = 0;          // Timestamp of last capture
+static RTC_DATA_ATTR time_t g_lastUploadTime = 0;       // Timestamp of last upload
+static RTC_DATA_ATTR time_t g_lastScheduleTime = 0;      // Timestamp of last schedule
+static RTC_DATA_ATTR time_t g_willWakeupTime = 0;       // Timestamp of will wakeup
 static RTC_DATA_ATTR TimeCompensator g_TimeCompensator = {0};
 
 static mdSleep_t g_sleep = {0};  // Global sleep state
@@ -227,13 +232,14 @@ int time_compensation(time_t time_sec)
     ESP_LOGI(TAG, "compensation drift=%ds", predicted_drift);
     return predicted_drift;
 }
+
 /**
  * Find the most recent time interval for scheduled wakeups
  * @param timedCount Number of scheduled time nodes
  * @param timedNodes Array of scheduled time configurations
  * @return Seconds until next scheduled wakeup
  */
-static uint32_t find_most_recent_time_interval(uint8_t timedCount, timedCapNode_t *timedNodes)
+static uint32_t find_most_recent_time_interval(uint8_t timedCount, const timedNode_t *timedNodes)
 {
     int Hour, Minute, Second;
     struct tm timeinfo;
@@ -276,70 +282,352 @@ static uint32_t find_most_recent_time_interval(uint8_t timedCount, timedCapNode_
 }
 
 /**
+ * Convert interval value to seconds based on unit
+ * @param intervalValue The interval value
+ * @param intervalUnit The unit (0: minutes, 1: hours, 2: days)
+ * @return Interval in seconds, 0 if invalid unit
+ */
+static uint32_t convert_interval_to_seconds(uint32_t intervalValue, uint8_t intervalUnit)
+{
+    if (intervalValue == 0) {
+        return 0;
+    }
+    
+    switch (intervalUnit) {
+        case 0: // Minutes
+            return intervalValue * 60;
+        case 1: // Hours
+            return intervalValue * 60 * 60;
+        case 2: // Days
+            return intervalValue * 60 * 60 * 24;
+        default:
+            ESP_LOGW(TAG, "Invalid interval unit: %d", intervalUnit);
+            return 0;
+    }
+}
+
+/**
+ * Parse "HH:MM" anchor time.
+ * @return true on success.
+ */
+static bool parse_anchor_hhmm(const char *hhmm, int *out_hour, int *out_min)
+{
+    if (!hhmm || !out_hour || !out_min) {
+        return false;
+    }
+    int h = 0, m = 0;
+    if (sscanf(hhmm, "%2d:%2d", &h, &m) != 2) {
+        return false;
+    }
+    if (h < 0 || h > 23 || m < 0 || m > 59) {
+        return false;
+    }
+    *out_hour = h;
+    *out_min = m;
+    return true;
+}
+
+static time_t make_local_anchor_today(time_t now, int anchor_hour, int anchor_min)
+{
+    struct tm tm_now;
+    localtime_r(&now, &tm_now);
+    tm_now.tm_hour = anchor_hour;
+    tm_now.tm_min = anchor_min;
+    tm_now.tm_sec = 0;
+    return mktime(&tm_now);
+}
+
+/**
+ * Calculate capture wakeup time
+ * @param capture Capture configuration
+ * @param lastCapTime Last capture timestamp
+ * @param now Current time
+ * @return Seconds until next capture, 0 if disabled
+ */
+static uint32_t calculate_capture_wakeup(const capAttr_t *capture, time_t lastCapTime, time_t now)
+{
+    if (!capture) {
+        ESP_LOGE(TAG, "Invalid capture configuration pointer");
+        return 0;
+    }
+
+    if (capture->bScheCap == 0) {
+        ESP_LOGD(TAG, "Capture scheduling disabled");
+        return 0; // Schedule mode disabled
+    }
+
+    if (capture->scheCapMode == 1) {
+        // Interval-based capture mode
+        uint32_t interval_sec = convert_interval_to_seconds(capture->intervalValue, capture->intervalUnit);
+        if (interval_sec == 0) {
+            ESP_LOGW(TAG, "Invalid capture interval configuration");
+            return 0;
+        }
+
+        // Force immediate capture if last snapshot failed
+        if (camera_is_snapshot_fail()) {
+            ESP_LOGI(TAG, "Last snapshot failed, triggering immediate retry");
+            return 1; 
+        }
+
+        int anchor_hour = 0;
+        int anchor_min = 0;
+        bool anchor_ok = parse_anchor_hhmm(capture->intervalAnchorTime, &anchor_hour, &anchor_min);
+
+        ESP_LOGD(TAG, "Capture interval mode: %lu seconds, unit=%d, anchor=%s (ok=%d)",
+                 interval_sec, capture->intervalUnit, capture->intervalAnchorTime, anchor_ok);
+
+        // If no valid anchor is provided, keep legacy behavior (based on last capture time).
+        if (!anchor_ok) {
+            // Handle missed captures
+            if (lastCapTime && lastCapTime > 0) {
+                if (now >= lastCapTime + interval_sec) {
+                    ESP_LOGI(TAG, "Missed capture window (legacy), triggering immediate capture");
+                    return 1; // Capture immediately if missed window
+                } else {
+                    uint32_t next_capture = lastCapTime + interval_sec - now;
+                    ESP_LOGD(TAG, "Next capture (legacy) in %lu seconds", next_capture);
+                    return next_capture; // Time until next capture
+                }
+            }
+            return interval_sec;
+        }
+
+        // Anchor-aligned scheduling.
+        // - For minutes/hours: daily reset at anchor time (B semantics).
+        // - For days: schedule at anchor time every N days based on lastCapTime.
+        time_t anchor_today = make_local_anchor_today(now, anchor_hour, anchor_min);
+
+        if (capture->intervalUnit == 2) {
+            // Days: every N days at anchor HH:MM.
+            const time_t day_sec = 24 * 60 * 60;
+            uint32_t n_days = capture->intervalValue;
+            if (n_days == 0) return 0;
+
+            time_t next_anchor = 0;
+            if (lastCapTime <= 0) {
+                // First run: next is today's anchor if not passed, otherwise tomorrow's anchor.
+                next_anchor = (now < anchor_today) ? anchor_today : (anchor_today + day_sec);
+            } else {
+                // Use lastCapTime as baseline, but align baseline to the nearest anchor at/before lastCapTime.
+                time_t base = make_local_anchor_today(lastCapTime, anchor_hour, anchor_min);
+                if (lastCapTime < base) {
+                    base -= day_sec;
+                }
+                next_anchor = base + (time_t)n_days * day_sec;
+
+                // If we are already past the computed next anchor, advance by N days until it's in the future.
+                while (next_anchor <= now) {
+                    next_anchor += (time_t)n_days * day_sec;
+                }
+
+                // Missed window detection: if we should have triggered at/after base but lastCapTime is behind the last scheduled anchor.
+                // Compute the most recent scheduled anchor <= now, and if lastCapTime is before it, trigger immediately.
+                time_t last_sched = next_anchor;
+                while (last_sched > now) {
+                    last_sched -= (time_t)n_days * day_sec;
+                }
+                if (last_sched > 0 && lastCapTime > 0 && lastCapTime < last_sched) {
+                    ESP_LOGI(TAG, "Missed capture window (day/anchor), triggering immediate capture");
+                    return 1;
+                }
+            }
+
+            uint32_t wait_sec = (next_anchor > now) ? (uint32_t)(next_anchor - now) : 1;
+            return MAX(wait_sec, 1);
+        }
+
+        // Minutes/hours: build grid from today's anchor and reset daily.
+        time_t next = 0;
+        if (now < anchor_today) {
+            next = anchor_today;
+        } else {
+            time_t elapsed = now - anchor_today;
+            uint32_t k = (uint32_t)(elapsed / (time_t)interval_sec) + 1;
+            next = anchor_today + (time_t)k * (time_t)interval_sec;
+            // Daily reset: if next crosses to the next day, jump to next day's anchor.
+            if (next >= anchor_today + (24 * 60 * 60)) {
+                next = anchor_today + (24 * 60 * 60);
+            }
+        }
+
+        // Missed window detection (only if today's grid started).
+        if (now >= anchor_today && lastCapTime > 0) {
+            time_t elapsed = now - anchor_today;
+            time_t last_grid = anchor_today + (elapsed / (time_t)interval_sec) * (time_t)interval_sec;
+            if (last_grid > 0 && lastCapTime < last_grid) {
+                ESP_LOGI(TAG, "Missed capture window (min/hour anchor), triggering immediate capture");
+                return 1;
+            }
+        }
+
+        return MAX((uint32_t)(next - now), 1);
+    } else if (capture->scheCapMode == 0) {
+        // Time-based capture mode
+        if (capture->timedCount == 0) {
+            ESP_LOGW(TAG, "Time-based capture mode enabled but no times configured");
+            return 0;
+        }
+        ESP_LOGD(TAG, "Time-based capture mode with %d scheduled times", capture->timedCount);
+        return find_most_recent_time_interval(capture->timedCount, capture->timedNodes);
+    } else {
+        ESP_LOGW(TAG, "Unknown capture schedule mode: %d", capture->scheCapMode);
+    }
+
+    return 0;
+}
+
+/**
+ * Calculate upload wakeup time
+ * @param upload Upload configuration
+ * @param lastUploadTime Last upload timestamp
+ * @param now Current time
+ * @return Seconds until next upload, 0 if disabled or instant mode
+ */
+static uint32_t calculate_upload_wakeup(const uploadAttr_t *upload, time_t lastUploadTime, time_t now)
+{
+    if (!upload) {
+        ESP_LOGE(TAG, "Invalid upload configuration pointer");
+        return 0;
+    }
+
+    if (upload->uploadMode != 1) {
+        ESP_LOGD(TAG, "Upload mode %d - no scheduled wakeup needed", upload->uploadMode);
+        return 0; // Instant upload mode or disabled
+    }
+
+    ESP_LOGD(TAG, "Scheduled upload mode - TimedCount: %d", upload->timedCount);
+
+    if (upload->timedCount > 0) {
+        // Time-based upload mode
+        if (upload->timedCount > 10) {  // Validate maximum allowed
+            ESP_LOGW(TAG, "Upload timed count exceeds maximum: %d", upload->timedCount);
+            return 0;
+        }
+        ESP_LOGD(TAG, "Time-based upload with %d scheduled times", upload->timedCount);
+        return find_most_recent_time_interval(upload->timedCount, upload->timedNodes);
+    } else {
+        ESP_LOGW(TAG, "Scheduled upload mode enabled but no timed configuration found");
+    }
+
+    return 0;
+}
+
+/**
+ * Calculate schedule wakeup time
+ * @param scheTimeNode Schedule time node
+ * @param lastScheduleTime Last schedule timestamp
+ * @param now Current time
+ * @return Seconds until next schedule, 0 if disabled
+ */
+static uint32_t calculate_schedule_wakeup(const timedNode_t *scheTimeNode, time_t lastScheduleTime, time_t now)
+{
+    time_t tmp;
+    tmp = find_most_recent_time_interval(1, scheTimeNode);
+    // if the next schedule time is less than 3 hours from the last schedule time, next day schedule
+    if (now + tmp < lastScheduleTime + 3 * 60 * 60) {
+        return tmp + 24 * 60 * 60;
+    } else {
+        return tmp;
+    }
+}
+/**
+ * Update the wakeup todo list with the earliest wakeup time and corresponding action with automatic conflict resolution
+ * @param capture_time Capture wakeup time in seconds
+ * @param upload_time Upload wakeup time in seconds  
+ * @param schedule_time Schedule wakeup time in seconds
+ */
+static void update_wakeup_todo_list(uint32_t earliest_time, uint32_t capture_time, uint32_t upload_time, uint32_t schedule_time)
+{
+
+    // add all tasks scheduled at earliest time to queue, sorted by priority
+    if (capture_time == earliest_time) {
+        sleep_set_wakeup_todo(WAKEUP_TODO_SNAPSHOT, 0);  // highest priority
+        ESP_LOGI(TAG, "Scheduled SNAPSHOT at time %lu with priority 0", earliest_time);
+    }
+    
+    if (upload_time == earliest_time) {
+        sleep_set_wakeup_todo(WAKEUP_TODO_UPLOAD, 1);    // medium priority
+        ESP_LOGI(TAG, "Scheduled UPLOAD at time %lu with priority 1", earliest_time);
+    }
+    
+    if (schedule_time == earliest_time) {
+        sleep_set_wakeup_todo(WAKEUP_TODO_SCHEDULE, 2);  // lowest priority
+        ESP_LOGI(TAG, "Scheduled SCHEDULE at time %lu with priority 2", earliest_time);
+    }
+
+    ESP_LOGI(TAG, "Wakeup times - Capture: %lu, Upload: %lu, Schedule: %lu, Selected: %lu, Queued tasks: 0x%08lx",
+             capture_time, upload_time, schedule_time, earliest_time, g_wakeupTodo);
+
+}
+
+/**
  * Calculate next wakeup time in seconds
+ * @param bUpdateWakeupTodo Whether to update the wakeup todo list
  * @return Seconds until next wakeup
  */
-uint32_t calc_wakeup_time_seconds()
+uint32_t  calc_wakeup_time_seconds(bool bUpdateWakeupTodo)
 {
     capAttr_t capture;
-    timedCapNode_t scheTimeNode;
-    uint32_t sche_wakeup_sec = 0;
-    uint32_t cfg_wakeup_sec = 0;
+    uploadAttr_t upload;
+    timedNode_t scheTimeNode;
+    uint32_t earliest_wakeup = 0;
     time_t lastCapTime = sleep_get_last_capture_time();
     time_t now = time(NULL);
 
+    // Load configurations
+    memset(&scheTimeNode, 0, sizeof(scheTimeNode));
     scheTimeNode.day = 7;
     cfg_get_schedule_time(scheTimeNode.time);
     cfg_get_cap_attr(&capture);
+    cfg_get_upload_attr(&upload);
     
-    if (capture.bScheCap == 0) {
-        // Schedule mode disabled - only check for scheduled tasks
-        cfg_wakeup_sec = 0;
-        sleep_set_wakeup_todo(WAKEUP_TODO_SCHEDULE);
-        return find_most_recent_time_interval(1, &scheTimeNode);
-    } else if (capture.scheCapMode == 1) {
-        // Interval-based capture mode
-        if (capture.intervalValue == 0) {
-            cfg_wakeup_sec = 0; // No interval set
-        } else {
-            // Convert interval to seconds based on unit
-            if (capture.intervalUnit == 0) { // Minutes
-                cfg_wakeup_sec = capture.intervalValue * 60;
-            } else if (capture.intervalUnit == 1) { // Hours
-                cfg_wakeup_sec = capture.intervalValue * 60 * 60;
-            } else if (capture.intervalUnit == 2) { // Days
-                cfg_wakeup_sec = capture.intervalValue * 60 * 60 * 24;
-            }
+    ESP_LOGI(TAG, "Calculating wakeup times - Capture enabled: %d, Upload mode: %d", 
+             capture.bScheCap, upload.uploadMode);
 
-            // Handle missed captures
-            if (lastCapTime) {
-                if (now >= lastCapTime + cfg_wakeup_sec) {
-                    cfg_wakeup_sec = 1; // Capture immediately if missed window
-                } else {
-                    cfg_wakeup_sec = lastCapTime + cfg_wakeup_sec - now; // Time until next capture
-                }
-            }
-            
-            // Force immediate capture if last snapshot failed
-            if (camera_is_snapshot_fail()) {
-                cfg_wakeup_sec = 1; 
-            }
-        }
-    } else if (capture.scheCapMode == 0) {
-        // Time-based capture mode
-        cfg_wakeup_sec = find_most_recent_time_interval(capture.timedCount, capture.timedNodes);
+    // Calculate wakeup times for each module
+    time_t lastUploadTime = sleep_get_last_upload_time();
+    time_t lastScheduleTime = sleep_get_last_schedule_time();
+    uint32_t capture_wakeup = calculate_capture_wakeup(&capture, lastCapTime, now);
+    uint32_t upload_wakeup = calculate_upload_wakeup(&upload, lastUploadTime, now);
+    uint32_t schedule_wakeup = calculate_schedule_wakeup(&scheTimeNode, lastScheduleTime, now);
+    // uint32_t schedule_wakeup = find_most_recent_time_interval(1, &scheTimeNode);
+        
+    // find earliest execution time
+    if (capture_wakeup > 0 && (earliest_wakeup == 0 || capture_wakeup < earliest_wakeup)) {
+        earliest_wakeup = capture_wakeup;
+    }
+    if (upload_wakeup > 0 && (earliest_wakeup == 0 || upload_wakeup < earliest_wakeup)) {
+        earliest_wakeup = upload_wakeup;
+    }
+    if (schedule_wakeup > 0 && (earliest_wakeup == 0 || schedule_wakeup < earliest_wakeup)) {
+        earliest_wakeup = schedule_wakeup;
     }
 
-    // Determine whether to wake for snapshot or schedule
-    sche_wakeup_sec = find_most_recent_time_interval(1, &scheTimeNode);
-    if (cfg_wakeup_sec == 0 || sche_wakeup_sec < cfg_wakeup_sec) {
-        sleep_set_wakeup_todo(WAKEUP_TODO_SCHEDULE);
-        // Add random delay to prevent all devices waking simultaneously
-        return sche_wakeup_sec + (rand() % 60); 
-    } else {
-        sleep_set_wakeup_todo(WAKEUP_TODO_SNAPSHOT);
-        return cfg_wakeup_sec;
+    if (earliest_wakeup == 0) {
+        ESP_LOGW(TAG, "No valid wakeup times found");
+        return 0;
     }
+
+    // Determine the earliest wakeup time
+    if (bUpdateWakeupTodo) {
+        update_wakeup_todo_list(earliest_wakeup, capture_wakeup, upload_wakeup, schedule_wakeup);
+    }
+
+    return earliest_wakeup;
+}
+
+/**
+ * Calculate next snapshot time
+ * @return Seconds until next snapshot
+ */
+uint32_t calc_next_snapshot_time()
+{
+    capAttr_t capture;
+    cfg_get_cap_attr(&capture);
+    time_t now = time(NULL);
+    time_t lastCapTime = sleep_get_last_capture_time();
+    return calculate_capture_wakeup(&capture, lastCapTime, now);
 }
 
 /**
@@ -353,15 +641,27 @@ void sleep_start(void)
     cfg_get_cap_attr(&capture);
     time(&now);
     misc_show_time("now sleep at", now);
+
+    /* Ensure all LEDs are off before entering deep sleep. */
+    misc_led_off();
+    misc_flash_led_close();
     
     // Calculate and set timer wakeup
-    int wakeup_time_sec = calc_wakeup_time_seconds();
+    
+    int wakeup_time_sec = 0;
     int calculate_sec;
+
+    if (sleep_has_wakeup_todo()) {
+        wakeup_time_sec = 1;
+    } else {
+        wakeup_time_sec = calc_wakeup_time_seconds(true);
+    }
     calculate_sec = calculate_compensation(wakeup_time_sec);
     wakeup_time_sec -= calculate_sec;
     if (wakeup_time_sec > 0) {
         esp_sleep_enable_timer_wakeup(wakeup_time_sec * uS_TO_S_FACTOR);
-        misc_show_time("wake will at", now + wakeup_time_sec + calculate_sec);
+        g_willWakeupTime = now + wakeup_time_sec + calculate_sec;
+        misc_show_time("wake will at", g_willWakeupTime);
         ESP_LOGI(TAG, "Enabling TIMER wakeup on %ds", wakeup_time_sec);
     }
 
@@ -371,27 +671,42 @@ void sleep_start(void)
     rtc_gpio_pulldown_dis(BTN_WAKEUP_PIN);
     esp_sleep_enable_ext0_wakeup(BTN_WAKEUP_PIN, BTN_WAKEUP_LEVEL);
 
-#if PIR_ENABLE
-    esp_sleep_enable_ext1_wakeup(BIT64(PIR_WAKEUP_PIN), PIR_IN_ACTIVE);
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-    rtc_gpio_pullup_dis(PIR_WAKEUP_PIN);
-    rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
-#else
-    // if(capture.bAlarmInCap == true){
-    //     rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
-    //     rtc_gpio_pulldown_dis(ALARMIN_WAKEUP_PIN);
-    //     esp_sleep_enable_ext1_wakeup(BIT64(ALARMIN_WAKEUP_PIN), ALARMIN_WAKEUP_LEVEL);
-    // }
-#endif
+    // Get trigger mode from configuration (only if trigger capture is enabled)
+    uint8_t trigger_mode = TRIGGER_MODE_DISABLED;
+    if(capture.bAlarmInCap == true){
+        cfg_get_trigger_mode(&trigger_mode);
+        
+        if(trigger_mode == TRIGGER_MODE_PIR){
+            // PIR trigger mode
+            esp_sleep_enable_ext1_wakeup(BIT64(PIR_WAKEUP_PIN), PIR_IN_ACTIVE);
+            esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+            rtc_gpio_pullup_dis(PIR_WAKEUP_PIN);
+            rtc_gpio_pulldown_en(PIR_WAKEUP_PIN);
+            ESP_LOGI(TAG, "Enabling PIR wakeup on pin GPIO%d", PIR_WAKEUP_PIN);
+        } else if(trigger_mode == TRIGGER_MODE_ALARM){
+            // Alarm input trigger mode
+            rtc_gpio_pullup_en(ALARMIN_WAKEUP_PIN);
+            rtc_gpio_pulldown_dis(ALARMIN_WAKEUP_PIN);
+            esp_sleep_enable_ext1_wakeup(BIT64(ALARMIN_WAKEUP_PIN), ALARMIN_WAKEUP_LEVEL);
+            ESP_LOGI(TAG, "Enabling ALARM wakeup on pin GPIO%d", ALARMIN_WAKEUP_PIN);
+        } else {
+            // TRIGGER_MODE_DISABLED or invalid - no wakeup configured
+            ESP_LOGI(TAG, "Trigger mode disabled or invalid, no external wakeup configured");
+        }
+    } else {
+        ESP_LOGI(TAG, "Trigger capture disabled, no external wakeup configured");
+    }
 
-    mqtt_stop();
+    push_stop();
     wifi_close();
     cat1_close();
-#if PIR_ENABLE
-    esp_log_level_set("gpio", ESP_LOG_WARN);
-    pir_init(1);
-#endif
+    
+    if(capture.bAlarmInCap == true && trigger_mode == TRIGGER_MODE_PIR){
+        esp_log_level_set("gpio", ESP_LOG_WARN);
+        pir_init(1);
+    }
     ESP_LOGI(TAG, "Entering deep sleep");
+    session_log_close_for_sleep();
     esp_deep_sleep_start();
 }
 
@@ -477,18 +792,120 @@ void sleep_clear_event_bits(sleepBits_e bits)
  */
 wakeupTodo_e sleep_get_wakeup_todo()
 {
-    ESP_LOGI(TAG, "sleep_get_wakeup_todo %d", g_wakeupTodo);
-    return g_wakeupTodo;
+    ESP_LOGI(TAG, "todo queue: 0x%lx", g_wakeupTodo);
+    
+    if (g_wakeupTodo == 0) {
+        ESP_LOGI(TAG, "No wakeup todo remaining");
+        return WAKEUP_TODO_NOTHING;
+    }
+    
+    // start searching from highest priority (priority 0, bits 0-3)
+    for (uint8_t priority = 0; priority < 8; priority++) {
+        uint32_t shift_amount = priority * 4;
+        uint32_t mask = 0x0000000F << shift_amount;
+        uint32_t todo_bits = (g_wakeupTodo & mask) >> shift_amount;
+        
+        if (todo_bits != 0) {
+            wakeupTodo_e todo = (wakeupTodo_e)todo_bits;
+            
+            // clear this task
+            g_wakeupTodo &= ~mask;
+            
+            ESP_LOGI(TAG, "Retrieved todo %d from priority %d, remaining: 0x%lx", 
+                     todo, priority, g_wakeupTodo);
+            return todo;
+        }
+    }
+    
+    ESP_LOGW(TAG, "No valid todo found in queue");
+    return WAKEUP_TODO_NOTHING;
 }
 
 /**
  * Set action to perform after wakeup
  * @param todo Action to perform
+ * @param priority Priority of the action (0 = highest priority, 7 = lowest priority)
  */
-void sleep_set_wakeup_todo(wakeupTodo_e todo)
+void sleep_set_wakeup_todo(wakeupTodo_e todo, uint8_t priority)
 {
-    ESP_LOGI(TAG, "sleep_set_wakeup_todo %d", todo);
-    g_wakeupTodo = todo;
+    const char *todo_str;
+    switch (todo) {
+        case WAKEUP_TODO_NOTHING:
+            todo_str = "NONE";
+            break;
+        case WAKEUP_TODO_SNAPSHOT:
+            todo_str = "SNAPSHOT";
+            break;
+        case WAKEUP_TODO_CONFIG:
+            todo_str = "CONFIG";
+            break;
+        case WAKEUP_TODO_UPLOAD:
+            todo_str = "UPLOAD";
+            break;
+        case WAKEUP_TODO_SCHEDULE:
+            todo_str = "SCHEDULE";
+            break;
+        default:
+            todo_str = "UNKNOWN";
+            break;
+    }
+    
+    ESP_LOGI(TAG, "sleep_set_wakeup_todo %d (%s), priority %d", todo, todo_str, priority);
+    
+    // ensure priority is within valid range
+    if (priority > 7) {
+        priority = 7;
+    }
+    
+    // insert task to appropriate position based on priority
+    // high priority (small value) placed in lower bits, low priority (large value) placed in higher bits
+    uint32_t shift_amount = priority * 4;
+    uint32_t mask = 0x0000000F << shift_amount;
+    
+    // clear existing task at this priority position
+    g_wakeupTodo &= ~mask;
+    
+    // insert new task
+    g_wakeupTodo |= ((uint32_t)todo & 0x0F) << shift_amount;
+    
+    ESP_LOGI(TAG, "Updated wakeup todo queue: 0x%lx", g_wakeupTodo);
+}
+
+/**
+ * Clear action to perform after wakeup at specific priority
+ * @param priority Priority of the action to clear (0 = highest priority, 7 = lowest priority)
+ */
+void sleep_clear_wakeup_todo(uint8_t priority)
+{
+    if (priority > 7) {
+        priority = 7;
+    }
+    
+    uint32_t shift_amount = priority * 4;
+    uint32_t mask = 0x0000000F << shift_amount;
+    
+    // clear task at this priority position
+    g_wakeupTodo &= ~mask;
+    
+    ESP_LOGI(TAG, "Cleared wakeup todo at priority %d, remaining: 0x%lx", priority, g_wakeupTodo);
+}
+
+/**
+ * Check if there is any action to perform after wakeup
+ * @return true if there is any action to perform, false otherwise
+ */
+bool sleep_has_wakeup_todo()
+{
+    return g_wakeupTodo != 0;
+}
+
+
+/**
+ * 
+ */
+void sleep_reset_wakeup_todo()
+{
+    g_wakeupTodo = 0;
 }
 
 /**
@@ -510,10 +927,54 @@ time_t sleep_get_last_capture_time(void)
 }
 
 /**
+ * Set timestamp of last upload
+ * @param time Timestamp to set
+ */
+void sleep_set_last_upload_time(time_t time)
+{
+    g_lastUploadTime = time;
+}
+
+/**
+ * Get timestamp of last upload
+ * @return Last upload timestamp
+ */
+time_t sleep_get_last_upload_time(void)
+{
+    return g_lastUploadTime;
+}
+
+/**
+ * Set timestamp of last schedule
+ * @param time Timestamp to set
+ */
+void sleep_set_last_schedule_time(time_t time)
+{
+    g_lastScheduleTime = time;
+}
+
+/**
+ * Get timestamp of last schedule
+ * @return Last schedule timestamp
+ */
+time_t sleep_get_last_schedule_time(void)
+{
+    return g_lastScheduleTime;
+}
+/**
  * Check if alarm input should trigger restart
  * @return 1 if should restart, 0 otherwise
  */
 uint32_t sleep_is_alramin_goto_restart()
 {
     return rtc_gpio_get_level(ALARMIN_WAKEUP_PIN) == ALARMIN_WAKEUP_LEVEL;
+}
+
+/**
+ * Get will wakeup time
+ * @return true if the time is reached, false otherwise
+ */
+bool sleep_is_will_wakeup_time_reached(void)
+{
+    return g_willWakeupTime <= time(NULL);
 }

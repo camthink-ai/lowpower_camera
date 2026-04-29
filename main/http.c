@@ -13,6 +13,7 @@
 #include "http.h"
 #include "wifi.h"
 #include "mqtt.h"
+#include "push.h"
 #include "sleep.h"
 #include "ota.h"
 #include "misc.h"
@@ -20,7 +21,12 @@
 #include "s2j.h"
 #include "iot_mip.h"
 #include "cat1.h"
+#include "ping.h"
 #include "net_module.h"
+#include "storage.h"
+#include "session_log.h"
+#include "utils.h"
+#include "pir.h"
 
 #define TAG "-->HTTP"  // Logging tag for HTTP module
 
@@ -136,6 +142,8 @@ static esp_err_t get_root_handler(httpd_req_t *req)
     const uint32_t len = root_end - root_start;
     clear_timeout();
     httpd_resp_set_type(req, "text/html");
+    /* Avoid stale shell: dist HTML carries ?v= on JS/CSS; must not cache HTML long. */
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, root_start, len);
     ESP_LOGI(TAG, "Serve root");
     return ESP_OK;
@@ -165,7 +173,8 @@ static esp_err_t get_js_handler(httpd_req_t *req)
     const uint32_t len = js_end - js_start;
     clear_timeout();
     httpd_resp_set_type(req, "text/javascript");
-    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=604800");
+    /* Do not long-cache: URL may repeat across builds; OTA users must pick up new bundle. */
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, (const char *)js_start, len);
     return ESP_OK;
 }
@@ -179,6 +188,7 @@ static esp_err_t get_css_handler(httpd_req_t *req)
     const uint32_t len = css_end - css_start;
     clear_timeout();
     httpd_resp_set_type(req, "text/css");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, (const char *)css_start, len);
     return ESP_OK;
 }
@@ -215,6 +225,26 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &image, int, gainCeiling);
     s2j_json_set_basic_element(json_obj, &image, int, bHorizonetal);
     s2j_json_set_basic_element(json_obj, &image, int, bVertical);
+    s2j_json_set_basic_element(json_obj, &image, int, frameSize);
+    // Apply camera settings
+    s2j_json_set_basic_element(json_obj, &image, int, quality);
+    s2j_json_set_basic_element(json_obj, &image, int, sharpness);
+    s2j_json_set_basic_element(json_obj, &image, int, denoise);
+    s2j_json_set_basic_element(json_obj, &image, int, specialEffect);
+    s2j_json_set_basic_element(json_obj, &image, int, bAwb);
+    s2j_json_set_basic_element(json_obj, &image, int, bAwbGain);
+    s2j_json_set_basic_element(json_obj, &image, int, wbMode);
+    s2j_json_set_basic_element(json_obj, &image, int, bAec);
+    s2j_json_set_basic_element(json_obj, &image, int, bAec2);
+    s2j_json_set_basic_element(json_obj, &image, int, aecValue);
+    s2j_json_set_basic_element(json_obj, &image, int, bBpc);
+    s2j_json_set_basic_element(json_obj, &image, int, bWpc);
+    s2j_json_set_basic_element(json_obj, &image, int, bRawGma);
+    s2j_json_set_basic_element(json_obj, &image, int, bLenc);
+    s2j_json_set_basic_element(json_obj, &image, int, bDcw);
+    s2j_json_set_basic_element(json_obj, &image, int, bColorbar);
+    s2j_json_set_basic_element(json_obj, &image, int, hdrEnable);
+
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
     cJSON_free(str);
@@ -229,6 +259,7 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
     char *content = http_get_content_from_req(req);
     if (content) {
         s2j_create_struct_obj(image, imgAttr_t);
+        cfg_get_image_attr(image);
         /* deserialize data to Student structure object. */
         cJSON *json = cJSON_Parse(content);
         s2j_struct_get_basic_element(image, json, int, brightness);
@@ -240,6 +271,14 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, gainCeiling);
         s2j_struct_get_basic_element(image, json, int, bHorizonetal);
         s2j_struct_get_basic_element(image, json, int, bVertical);
+        s2j_struct_get_basic_element(image, json, int, frameSize);
+        s2j_struct_get_basic_element(image, json, int, quality);
+        s2j_struct_get_basic_element(image, json, int, hdrEnable);
+
+        // Apply JPEG quality limit for resolutions > 3MP
+        if (image->frameSize < FRAMESIZE_INVALID && image->quality <= 63) {
+            camera_apply_jpeg_quality_limit((framesize_t)image->frameSize, &image->quality);
+        }
 
         if (camera_set_image(image) == ESP_OK) {
             http_send_json_response(req, RES_OK);
@@ -303,7 +342,7 @@ esp_err_t set_light_param_handle(httpd_req_t *req)
         } else {
             http_send_json_response(req, RES_FAIL);
         }
-        misc_set_flash_duty(light->duty); /*实时更新当前占空比*/
+        misc_set_flash_duty(light->duty); /* update current duty cycle in real-time */
         s2j_delete_struct_obj(light);
         s2j_delete_json_obj(json);
         http_free_content(content);
@@ -312,10 +351,10 @@ esp_err_t set_light_param_handle(httpd_req_t *req)
     return ESP_FAIL;
 }
 
-static cJSON *struct_to_json_timedCapNode_t(void *struct_obj)
+static cJSON *struct_to_json_timedNode_t(void *struct_obj)
 {
     s2j_create_json_obj(json_obj_);
-    timedCapNode_t *struct_obj_ = (timedCapNode_t *)struct_obj;
+    timedNode_t *struct_obj_ = (timedNode_t *)struct_obj;
     s2j_json_set_basic_element(json_obj_, struct_obj_, int, day);
     s2j_json_set_basic_element(json_obj_, struct_obj_, string, time);
     return json_obj_;
@@ -340,8 +379,10 @@ esp_err_t get_cap_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &capture, int, scheCapMode);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalValue);
     s2j_json_set_basic_element(json_obj, &capture, int, intervalUnit);
+    s2j_json_set_basic_element(json_obj, &capture, string, intervalAnchorTime);
+    s2j_json_set_basic_element(json_obj, &capture, int, camWarmupMs);
     s2j_json_set_basic_element(json_obj, &capture, int, timedCount);
-    s2j_json_set_struct_array_element_by_func(json_obj, &capture, timedCapNode_t, timedNodes, capture.timedCount);
+    s2j_json_set_struct_array_element_by_func(json_obj, &capture, timedNode_t, timedNodes, capture.timedCount);
 
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -351,9 +392,9 @@ esp_err_t get_cap_param_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
-void *json_to_struct_timedCapNode_t(cJSON *json_obj)
+void *json_to_struct_timedNode_t(cJSON *json_obj)
 {
-    s2j_create_struct_obj(struct_obj_, timedCapNode_t);
+    s2j_create_struct_obj(struct_obj_, timedNode_t);
     s2j_struct_get_basic_element(struct_obj_, json_obj, int, day);
     s2j_struct_get_basic_element(struct_obj_, json_obj, string, time);
     return struct_obj_;
@@ -376,12 +417,180 @@ esp_err_t set_cap_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(capture, json, int, scheCapMode);
         s2j_struct_get_basic_element(capture, json, int, intervalValue);
         s2j_struct_get_basic_element(capture, json, int, intervalUnit);
+        if (cJSON_HasObjectItem(json, "intervalAnchorTime")) {
+            s2j_struct_get_basic_element(capture, json, string, intervalAnchorTime);
+        }
+        if (cJSON_HasObjectItem(json, "camWarmupMs")) {
+            s2j_struct_get_basic_element(capture, json, int, camWarmupMs);
+        }
         s2j_struct_get_basic_element(capture, json, int, timedCount);
-        s2j_struct_get_struct_array_element_by_func(capture, json, timedCapNode_t, timedNodes);
+        s2j_struct_get_struct_array_element_by_func(capture, json, timedNode_t, timedNodes);
         http_send_json_response(req, RES_OK);
         cfg_set_cap_attr(capture);
         sleep_set_last_capture_time(time(NULL));
         s2j_delete_struct_obj(capture);
+        s2j_delete_json_obj(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t get_trigger_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    char *str = NULL;
+    uint8_t trigger_mode;
+    pirAttr_t pir_attr;
+
+    clear_timeout();
+    httpd_resp_set_type(req, "application/json");
+
+    cfg_get_trigger_mode(&trigger_mode);
+    cfg_get_pir_attr(&pir_attr);
+
+    /* create JSON object */
+    s2j_create_json_obj(json_obj);
+    cJSON_AddNumberToObject(json_obj, "trigger_mode", trigger_mode);
+    s2j_json_set_basic_element(json_obj, &pir_attr, int, sens);
+    s2j_json_set_basic_element(json_obj, &pir_attr, int, blind);
+    s2j_json_set_basic_element(json_obj, &pir_attr, int, pulse);
+    s2j_json_set_basic_element(json_obj, &pir_attr, int, window);
+
+    str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+
+    return ESP_OK;
+}
+
+esp_err_t set_trigger_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        uint8_t trigger_mode;
+        pirAttr_t pir_attr;
+
+        cJSON *json = cJSON_Parse(content);
+        if (json == NULL) {
+            http_free_content(content);
+            return ESP_FAIL;
+        }
+
+        // Get current values
+        cfg_get_trigger_mode(&trigger_mode);
+        cfg_get_pir_attr(&pir_attr);
+
+        // Update trigger mode if provided
+        if (cJSON_HasObjectItem(json, "trigger_mode")) {
+            trigger_mode = cJSON_GetObjectItem(json, "trigger_mode")->valueint;
+            if (trigger_mode > TRIGGER_MODE_PIR) {
+                trigger_mode = TRIGGER_MODE_DISABLED;
+            }
+            cfg_set_trigger_mode(trigger_mode);
+        }
+
+        // Update PIR parameters if provided with validation
+        // Sensitivity: 0-255, recommended > 20, minimum 10 (no interference)
+        // Smaller values = more sensitive but easier false alarms
+        if (cJSON_HasObjectItem(json, "sens")) {
+            int sens_val = cJSON_GetObjectItem(json, "sens")->valueint;
+            if (sens_val < 0) sens_val = 0;
+            if (sens_val > 255) sens_val = 255;
+            pir_attr.sens = (uint8_t)sens_val;
+        }
+        // Blind time: 0-15 (4 bits), range 0.5s ~ 8s
+        // Formula: interrupt time = register value * 0.5s + 0.5s
+        if (cJSON_HasObjectItem(json, "blind")) {
+            int blind_val = cJSON_GetObjectItem(json, "blind")->valueint;
+            if (blind_val < 0) blind_val = 0;
+            if (blind_val > 15) blind_val = 15;
+            pir_attr.blind = (uint8_t)(blind_val & 0x0F);
+        }
+        // Pulse count: 0-3 (2 bits), range 1 ~ 4
+        // Formula: pulse count = register value + 1
+        // Larger value = stronger anti-interference but slightly reduced sensitivity
+        if (cJSON_HasObjectItem(json, "pulse")) {
+            int pulse_val = cJSON_GetObjectItem(json, "pulse")->valueint;
+            if (pulse_val < 0) pulse_val = 0;
+            if (pulse_val > 3) pulse_val = 3;
+            pir_attr.pulse = (uint8_t)(pulse_val & 0x03);
+        }
+        // Window time: 0-3 (2 bits), range 2s ~ 8s
+        // Formula: window time = register value * 2s + 2s
+        if (cJSON_HasObjectItem(json, "window")) {
+            int window_val = cJSON_GetObjectItem(json, "window")->valueint;
+            if (window_val < 0) window_val = 0;
+            if (window_val > 3) window_val = 3;
+            pir_attr.window = (uint8_t)(window_val & 0x03);
+        }
+
+        cfg_set_pir_attr(&pir_attr);
+        
+        // Update PIR configuration if in PIR mode
+        if (trigger_mode == TRIGGER_MODE_PIR) {
+            pir_update_config();
+        }
+
+        http_send_json_response(req, RES_OK);
+        cJSON_Delete(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t get_upload_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    uploadAttr_t upload;
+    char *str = NULL;
+    clear_timeout();
+
+    httpd_resp_set_type(req, "application/json");
+
+    cfg_get_upload_attr(&upload);
+    /* create Student JSON object */
+    s2j_create_json_obj(json_obj);
+    /* serialize data to JSON object. */
+    s2j_json_set_basic_element(json_obj, &upload, int, uploadMode);
+    s2j_json_set_basic_element(json_obj, &upload, int, retryCount);
+    s2j_json_set_basic_element(json_obj, &upload, int, timedCount);
+    s2j_json_set_struct_array_element_by_func(json_obj, &upload, timedNode_t, timedNodes, upload.timedCount);
+    str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+    return ESP_OK;
+}
+
+esp_err_t set_upload_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        s2j_create_struct_obj(upload, uploadAttr_t);
+        /* deserialize data to Student structure object. */
+        cJSON *json = cJSON_Parse(content);
+        cfg_get_upload_attr(upload);
+        s2j_struct_get_basic_element(upload, json, int, uploadMode);
+        s2j_struct_get_basic_element(upload, json, int, retryCount);
+        s2j_struct_get_basic_element(upload, json, int, timedCount);
+        s2j_struct_get_struct_array_element_by_func(upload, json, timedNode_t, timedNodes);
+        http_send_json_response(req, RES_OK);
+        cfg_set_upload_attr(upload);
+        if (upload->uploadMode == 0) {
+            storage_upload_start();
+        } else {
+            storage_upload_stop();
+        }
+        s2j_delete_struct_obj(upload);
         s2j_delete_json_obj(json);
         http_free_content(content);
         return ESP_OK;
@@ -525,8 +734,10 @@ esp_err_t set_dev_info_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(device, json, string, model);
         s2j_struct_get_basic_element(device, json, string, countryCode);
 
-        if(netModule_is_mmwifi())
+        if (netModule_is_mmwifi()) {
             mm_wifi_set_country_code(device->countryCode);
+
+        }
 
         http_send_json_response(req, RES_OK);
         cfg_set_device_info(device);
@@ -561,6 +772,10 @@ esp_err_t get_mqtt_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &mqtt, string, password);
     s2j_json_set_basic_element(json_obj, &mqtt, string, topic);
     s2j_json_set_basic_element(json_obj, &mqtt, int, port);
+    s2j_json_set_basic_element(json_obj, &mqtt, int, tlsEnable);
+    s2j_json_set_basic_element(json_obj, &mqtt, string, caName);
+    s2j_json_set_basic_element(json_obj, &mqtt, string, certName);
+    s2j_json_set_basic_element(json_obj, &mqtt, string, keyName);
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
     cJSON_free(str);
@@ -584,13 +799,17 @@ esp_err_t set_mqtt_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(mqtt, json, string, password);
         s2j_struct_get_basic_element(mqtt, json, string, topic);
         s2j_struct_get_basic_element(mqtt, json, int, port);
+        s2j_struct_get_basic_element(mqtt, json, int, tlsEnable);
+        s2j_struct_get_basic_element(mqtt, json, string, caName);
+        s2j_struct_get_basic_element(mqtt, json, string, certName);
+        s2j_struct_get_basic_element(mqtt, json, string, keyName);
         http_send_json_response(req, RES_OK);
         cfg_set_mqtt_attr(mqtt);
         s2j_delete_struct_obj(mqtt);
         s2j_delete_json_obj(json);
         http_free_content(content);
         if (wifi_sta_is_connected() || netModule_is_cat1()) {
-            mqtt_restart();
+            push_restart();
         }
         return ESP_OK;
     }
@@ -599,9 +818,9 @@ esp_err_t set_mqtt_param_handle(httpd_req_t *req)
 
 esp_err_t get_platform_param_handle(httpd_req_t *req)
 {
-    ESP_LOGI(TAG, "%s", req->uri);
+    // ESP_LOGI(TAG, "%s", req->uri);
 
-    clear_timeout();
+    // clear_timeout(); //deleted!  web can connect to the server every 2 seconds
 
     httpd_resp_set_type(req, "application/json");
 
@@ -631,6 +850,10 @@ esp_err_t get_platform_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_mqtt, mqttParam, string, username);
     s2j_json_set_basic_element(json_mqtt, mqttParam, string, password);
     s2j_json_set_basic_element(json_mqtt, mqttParam, int, isConnected);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, int, tlsEnable);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, string, caName);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, string, certName);
+    s2j_json_set_basic_element(json_mqtt, mqttParam, string, keyName);
 
     char *str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -669,6 +892,10 @@ esp_err_t set_platform_param_handle(httpd_req_t *req)
                 s2j_struct_get_basic_element(mqttParam, json_mqtt, int, qos);
                 s2j_struct_get_basic_element(mqttParam, json_mqtt, string, username);
                 s2j_struct_get_basic_element(mqttParam, json_mqtt, string, password);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, int, tlsEnable);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, string, caName);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, string, certName);
+                s2j_struct_get_basic_element(mqttParam, json_mqtt, string, keyName);
                 break;
             }
             default:
@@ -681,7 +908,7 @@ esp_err_t set_platform_param_handle(httpd_req_t *req)
         s2j_delete_json_obj(json);
         http_free_content(content);
         if (wifi_sta_is_connected() || netModule_is_cat1()) {
-            mqtt_restart();
+            push_restart();
         }
         return ESP_OK;
     }
@@ -733,9 +960,9 @@ esp_err_t set_iot_param_handle(httpd_req_t *req)
             iot_mip_autop_enable(iot->autop_enable);
         }
         if (last_dm_enable != iot->dm_enable) {
-            mqtt_stop();
+            push_stop();
             iot_mip_dm_enable(iot->dm_enable);
-            mqtt_start();
+            push_start();
         }
         s2j_delete_struct_obj(iot);
         s2j_delete_json_obj(json);
@@ -758,6 +985,7 @@ esp_err_t get_cellular_param_handle(httpd_req_t *req)
 
     s2j_create_json_obj(json_obj);
     s2j_json_set_basic_element(json_obj, &param, string, imei);
+    s2j_json_set_basic_element(json_obj, &param, string, isp_select);
     s2j_json_set_basic_element(json_obj, &param, string, apn);
     s2j_json_set_basic_element(json_obj, &param, string, user);
     s2j_json_set_basic_element(json_obj, &param, string, password);
@@ -784,6 +1012,7 @@ esp_err_t set_cellular_param_handle(httpd_req_t *req)
         s2j_create_struct_obj(param, cellularParamAttr_t);
         cfg_get_cellular_param_attr(param);
         s2j_struct_get_basic_element(param, json, string, imei);
+        s2j_struct_get_basic_element(param, json, string, isp_select);
         s2j_struct_get_basic_element(param, json, string, apn);
         s2j_struct_get_basic_element(param, json, string, user);
         s2j_struct_get_basic_element(param, json, string, password);
@@ -835,6 +1064,58 @@ esp_err_t send_cellular_command_handle(httpd_req_t *req)
         return ESP_OK;
     } else {
         return ESP_FAIL;
+    }
+}
+
+#define PING_OUT_BUF_SIZE 1024
+
+esp_err_t ping_test_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    /* Accept empty body - use defaults */
+    if (!content && req->content_len > 0) {
+        return ESP_FAIL;
+    }
+    {
+        cJSON *json = content ? cJSON_Parse(content) : NULL;
+        const char *host = "8.8.8.8";
+        int count = 4;
+        if (json) {
+            cJSON *j_host = cJSON_GetObjectItem(json, "host");
+            if (cJSON_IsString(j_host) && j_host->valuestring && j_host->valuestring[0]) {
+                host = j_host->valuestring;
+            }
+            cJSON *j_count = cJSON_GetObjectItem(json, "count");
+            if (cJSON_IsNumber(j_count) && j_count->valueint >= 1 && j_count->valueint <= 100) {
+                count = j_count->valueint;
+            }
+        }
+
+        char out_buf[PING_OUT_BUF_SIZE];
+        memset(out_buf, 0, sizeof(out_buf));
+        esp_err_t err = ping_execute(host, count, out_buf, sizeof(out_buf));
+
+        cellularCommandResp_t resp;
+        memset(&resp, 0, sizeof(resp));
+        resp.result = (err == ESP_OK) ? 0 : -1;
+        strncpy(resp.message, out_buf, sizeof(resp.message) - 1);
+        resp.message[sizeof(resp.message) - 1] = '\0';
+
+        s2j_create_json_obj(json_obj);
+        s2j_json_set_basic_element(json_obj, &resp, int, result);
+        s2j_json_set_basic_element(json_obj, &resp, string, message);
+        char *str = cJSON_PrintUnformatted(json_obj);
+
+        if (json) cJSON_Delete(json);
+        if (content) http_free_content(content);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, str);
+        cJSON_free(str);
+        s2j_delete_json_obj(json_obj);
+        return ESP_OK;
     }
 }
 
@@ -1044,6 +1325,314 @@ esp_err_t set_dev_upgrade_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t set_dev_ntp_sync_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        cJSON *json = cJSON_Parse(content);
+        s2j_create_struct_obj(ntp_sync, ntpSync_t);
+        s2j_struct_get_basic_element(ntp_sync, json, int, enable);
+        system_set_ntp_sync(ntp_sync);
+        http_send_json_response(req, RES_OK);
+        s2j_delete_struct_obj(ntp_sync);
+        s2j_delete_json_obj(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+static esp_err_t get_dev_ntp_sync_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    ntpSync_t ntp_sync;
+    system_get_ntp_sync(&ntp_sync);
+    s2j_create_json_obj(json_obj);
+    s2j_json_set_basic_element(json_obj, &ntp_sync, int, enable);
+    char *str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+    return ESP_OK;
+}
+
+static esp_err_t export_session_log_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    return session_log_http_export(req);
+}
+
+static esp_err_t export_config_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    char *out = (char *)malloc(OTA_CFG_MAX_SIZE);
+    if (out == NULL) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "malloc failed");
+        return ESP_FAIL;
+    }
+    size_t written = 0;
+    esp_err_t err = cfg_export_userspace_ini(out, OTA_CFG_MAX_SIZE, &written);
+    if (err != ESP_OK) {
+        free(out);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "export failed");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"ne101_config.ini\"");
+    esp_err_t send = httpd_resp_send(req, out, written);
+    free(out);
+    return send;
+}
+
+static esp_err_t import_config_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+    if (req->content_len <= 0 || req->content_len > (int)OTA_CFG_MAX_SIZE) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_OK;
+    }
+    char *body = (char *)malloc((size_t)req->content_len);
+    if (body == NULL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    int remaining = req->content_len;
+    int received = 0;
+    int timeout = 0;
+    char *buf = malloc(HTTP_BUFF_MAX_SIZE);
+    if (buf == NULL) {
+        free(body);
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    char *ptr = body;
+    while (remaining > 0) {
+        if ((received = httpd_req_recv(req, buf, MIN(remaining, HTTP_BUFF_MAX_SIZE))) <= 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout++ < 3) {
+                continue;
+            }
+            free(buf);
+            free(body);
+            http_send_json_response(req, RES_FAIL);
+            return ESP_FAIL;
+        }
+        memcpy(ptr, buf, received);
+        ptr += received;
+        remaining -= received;
+    }
+    free(buf);
+    if (cfg_import(body, (size_t)req->content_len) == ESP_OK) {
+        http_send_json_response(req, RES_OK);
+    } else {
+        http_send_json_response(req, RES_FAIL);
+    }
+    free(body);
+    return ESP_OK;
+}
+
+static esp_err_t upload_to_path(httpd_req_t *req, const char *path)
+{
+    ESP_LOGI(TAG, "upload_to_path %s", path);
+    int remaining = req->content_len;
+    int received = 0;
+    int timeout = 0;
+    char *buf = malloc(HTTP_BUFF_MAX_SIZE);
+    if (!buf) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    
+    // need to collect complete data before using filesystem_write
+    char *file_data = malloc(req->content_len);
+    if (!file_data) {
+        free(buf);
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    
+    char *ptr = file_data;
+    while (remaining > 0) {
+        if ((received = httpd_req_recv(req, buf, MIN(remaining, HTTP_BUFF_MAX_SIZE))) <= 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout++ < 3) {
+                continue;
+            }
+            free(buf);
+            free(file_data);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
+            return ESP_FAIL;
+        }
+        memcpy(ptr, buf, received);
+        ptr += received;
+        remaining -= received;
+    }
+    
+    int result = filesystem_write(path, file_data, req->content_len);
+    free(buf);
+    free(file_data);
+    
+    if (result != 0) {
+        ESP_LOGE(TAG, "Failed to write file: %s", path);
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "File uploaded successfully: %s (%d bytes)", path, req->content_len);
+    return ESP_OK;
+}
+
+static esp_err_t parse_req_filename(httpd_req_t *req, char *filename)
+{
+    size_t header_len = httpd_req_get_hdr_value_len(req, "X-File-Name");
+    if (header_len > 0) {
+        if (httpd_req_get_hdr_value_str(req, "X-File-Name", filename, header_len + 1) == ESP_OK) {          
+            return ESP_OK;
+        }
+    }
+    return ESP_FAIL;
+}
+
+static esp_err_t set_upload_mqtt_ca_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    char filename[128] = {0};
+    if (parse_req_filename(req, filename) == ESP_FAIL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    if (upload_to_path(req, MQTT_CA_PATH) == ESP_OK) {
+        cfg_get_mqtt_attr(&mqtt);
+        strncpy(mqtt.caName, filename, sizeof(mqtt.caName) - 1);
+        mqtt.caName[sizeof(mqtt.caName) - 1] = '\0';
+        cfg_set_mqtt_attr(&mqtt);
+        ESP_LOGI(TAG, "CA filename saved: %s", mqtt.caName);
+        http_send_json_response(req, RES_OK);
+    } else {
+        ESP_LOGE(TAG, "Failed to upload CA file or parse filename");
+        http_send_json_response(req, RES_FAIL);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t set_upload_mqtt_cert_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    char filename[128] = {0};
+    if (parse_req_filename(req, filename) == ESP_FAIL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    if (upload_to_path(req, MQTT_CERT_PATH) == ESP_OK) {
+        cfg_get_mqtt_attr(&mqtt);
+        strncpy(mqtt.certName, filename, sizeof(mqtt.certName) - 1);
+        mqtt.certName[sizeof(mqtt.certName) - 1] = '\0';
+        ESP_LOGI(TAG, "Cert filename saved: %s", mqtt.certName);
+        cfg_set_mqtt_attr(&mqtt);
+        http_send_json_response(req, RES_OK);
+    } else {
+        ESP_LOGE(TAG, "Failed to upload cert file or parse filename");
+        http_send_json_response(req, RES_FAIL);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t set_upload_mqtt_key_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    char filename[128] = {0};
+    if (parse_req_filename(req, filename) == ESP_FAIL) {
+        http_send_json_response(req, RES_FAIL);
+        return ESP_FAIL;
+    }
+    if (upload_to_path(req, MQTT_KEY_PATH) == ESP_OK) {
+        cfg_get_mqtt_attr(&mqtt);
+        strncpy(mqtt.keyName, filename, sizeof(mqtt.keyName) - 1);
+        mqtt.keyName[sizeof(mqtt.keyName) - 1] = '\0';
+        ESP_LOGI(TAG, "Key filename saved: %s", mqtt.keyName);
+        cfg_set_mqtt_attr(&mqtt);
+        http_send_json_response(req, RES_OK);
+    } else {
+        ESP_LOGE(TAG, "Failed to upload key file or parse filename");
+        http_send_json_response(req, RES_FAIL);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t delete_cert_file(const char *cert_path)
+{
+    // delete certificate file
+    if (filesystem_is_exist(cert_path)) {
+        unlink(cert_path);
+    }
+    
+    return ESP_OK;
+}
+
+static esp_err_t delete_mqtt_ca_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    delete_cert_file(MQTT_CA_PATH);
+
+    cfg_get_mqtt_attr(&mqtt);
+    strcpy(mqtt.caName, "");
+    cfg_set_mqtt_attr(&mqtt);
+
+    http_send_json_response(req, RES_OK);
+
+    return ESP_OK;
+}
+
+static esp_err_t delete_mqtt_cert_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    delete_cert_file(MQTT_CERT_PATH);
+
+    cfg_get_mqtt_attr(&mqtt);
+    strcpy(mqtt.certName, "");
+    cfg_set_mqtt_attr(&mqtt);
+
+    http_send_json_response(req, RES_OK);
+    
+return ESP_OK;
+}
+
+static esp_err_t delete_mqtt_key_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    mqttAttr_t mqtt;
+    delete_cert_file(MQTT_KEY_PATH);
+
+    cfg_get_mqtt_attr(&mqtt);
+    strcpy(mqtt.keyName, "");
+    cfg_set_mqtt_attr(&mqtt);
+
+    http_send_json_response(req, RES_OK);
+    
+return ESP_OK;
+}
+
 /**
  * MJPEG stream handler
  * @param req HTTP request handle
@@ -1116,6 +1705,92 @@ static esp_err_t get_jpeg_stream_handle(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t get_webhook_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    webhookAttr_t webhook;
+    clear_timeout();
+
+    httpd_resp_set_type(req, "application/json");
+    cfg_get_webhook_attr(&webhook);
+
+    s2j_create_json_obj(json_obj);
+    s2j_json_set_basic_element(json_obj, &webhook, string, url);
+    s2j_json_set_basic_element(json_obj, &webhook, string, header);
+    char *str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    s2j_delete_json_obj(json_obj);
+    return ESP_OK;
+}
+
+esp_err_t set_webhook_param_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        s2j_create_struct_obj(webhook, webhookAttr_t);
+        cJSON *json = cJSON_Parse(content);
+        cfg_get_webhook_attr(webhook);
+        s2j_struct_get_basic_element(webhook, json, string, url);
+        s2j_struct_get_basic_element(webhook, json, string, header);
+        http_send_json_response(req, RES_OK);
+        cfg_set_webhook_attr(webhook);
+        s2j_delete_struct_obj(webhook);
+        s2j_delete_json_obj(json);
+        http_free_content(content);
+        if (wifi_sta_is_connected() || netModule_is_cat1()) {
+            push_restart();
+        }
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+esp_err_t get_push_mode_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    httpd_resp_set_type(req, "application/json");
+
+    uint8_t mode = 0;
+    cfg_get_u8(KEY_PUSH_MODE, &mode, 0);
+
+    cJSON *json_obj = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json_obj, "mode", mode);
+    char *str = cJSON_PrintUnformatted(json_obj);
+    httpd_resp_sendstr(req, str);
+    cJSON_free(str);
+    cJSON_Delete(json_obj);
+    return ESP_OK;
+}
+
+esp_err_t set_push_mode_handle(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "%s", req->uri);
+    clear_timeout();
+
+    char *content = http_get_content_from_req(req);
+    if (content) {
+        cJSON *json = cJSON_Parse(content);
+        cJSON *mode_item = cJSON_GetObjectItem(json, "mode");
+        if (mode_item && cJSON_IsNumber(mode_item)) {
+            uint8_t mode = (uint8_t)mode_item->valueint;
+            cfg_set_u8(KEY_PUSH_MODE, mode);
+            http_send_json_response(req, RES_OK);
+        } else {
+            http_send_json_response(req, RES_FAIL);
+        }
+        cJSON_Delete(json);
+        http_free_content(content);
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
 static const httpd_uri_t g_webHandlers[] = {
     {
         .uri = "/",
@@ -1166,6 +1841,26 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/capture/getCapParam",
         .method = HTTP_GET,
         .handler = get_cap_param_handle,
+    },
+    {
+        .uri = "/api/v1/capture/setUploadParam",
+        .method = HTTP_POST,
+        .handler = set_upload_param_handle,
+    },
+    {
+        .uri = "/api/v1/capture/getUploadParam",
+        .method = HTTP_GET,
+        .handler = get_upload_param_handle,
+    },
+    {
+        .uri = "/api/v1/capture/getTriggerParam",
+        .method = HTTP_GET,
+        .handler = get_trigger_param_handle,
+    },
+    {
+        .uri = "/api/v1/capture/setTriggerParam",
+        .method = HTTP_POST,
+        .handler = set_trigger_param_handle,
     },
     {
         .uri = "/api/v1/network/getWifiParam",
@@ -1233,6 +1928,11 @@ static const httpd_uri_t g_webHandlers[] = {
         .handler = get_cellular_status_handle,
     },
     {
+        .uri = "/api/v1/network/pingTest",
+        .method = HTTP_POST,
+        .handler = ping_test_handle,
+    },
+    {
         .uri = "/api/v1/system/getDevInfo",
         .method = HTTP_GET,
         .handler = get_dev_info_handle,
@@ -1266,6 +1966,82 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/api/v1/system/setDevUpgrade",
         .method = HTTP_POST,
         .handler = set_dev_upgrade_handle,
+    },
+    {
+        .uri = "/api/v1/system/setDevNtpSync",
+        .method = HTTP_POST,
+        .handler = set_dev_ntp_sync_handle,
+    },
+    {
+        .uri = "/api/v1/system/getDevNtpSync",
+        .method = HTTP_GET,
+        .handler = get_dev_ntp_sync_handle,
+    },
+    {
+        .uri = "/api/v1/system/exportSessionLog",
+        .method = HTTP_GET,
+        .handler = export_session_log_handle,
+    },
+    {
+        .uri = "/api/v1/system/exportConfig",
+        .method = HTTP_GET,
+        .handler = export_config_handle,
+    },
+    {
+        .uri = "/api/v1/system/importConfig",
+        .method = HTTP_POST,
+        .handler = import_config_handle,
+    },
+    // certificate upload (three static paths, directly write to LittleFS)
+    {
+        .uri = "/api/v1/network/uploadMqttCa",
+        .method = HTTP_POST,
+        .handler = set_upload_mqtt_ca_handle,
+    },
+    {
+        .uri = "/api/v1/network/uploadMqttCert",
+        .method = HTTP_POST,
+        .handler = set_upload_mqtt_cert_handle,
+    },
+    {
+        .uri = "/api/v1/network/uploadMqttKey",
+        .method = HTTP_POST,
+        .handler = set_upload_mqtt_key_handle,
+    },
+    {
+        .uri = "/api/v1/network/deleteMqttCa",
+        .method = HTTP_POST,
+        .handler = delete_mqtt_ca_handle,
+    },
+    {
+        .uri = "/api/v1/network/deleteMqttCert",
+        .method = HTTP_POST,
+        .handler = delete_mqtt_cert_handle,
+    },
+    {
+        .uri = "/api/v1/network/deleteMqttKey",
+        .method = HTTP_POST,
+        .handler = delete_mqtt_key_handle,
+    },
+    {
+        .uri = "/api/v1/network/getWebhookParam",
+        .method = HTTP_GET,
+        .handler = get_webhook_param_handle,
+    },
+    {
+        .uri = "/api/v1/network/setWebhookParam",
+        .method = HTTP_POST,
+        .handler = set_webhook_param_handle,
+    },
+    {
+        .uri = "/api/v1/network/getPushMode",
+        .method = HTTP_GET,
+        .handler = get_push_mode_handle,
+    },
+    {
+        .uri = "/api/v1/network/setPushMode",
+        .method = HTTP_POST,
+        .handler = set_push_mode_handle,
     },
 };
 
@@ -1372,6 +2148,7 @@ esp_err_t http_open(void)
     web_server_start(80);
     stream_server_start(8080);
     http_timer_start();
+    sleep_set_event_bits(SLEEP_NO_DEBUG_BIT);
     return ESP_OK;
 }
 
@@ -1397,4 +2174,12 @@ esp_err_t http_close(void)
 bool http_hasClient(void)
 {
     return g_http.hasClient;
+}
+
+/**
+ * Clear web timeout counter
+ */
+void http_clear_timeout(void)
+{
+    g_http.webTimeoutSeconds = 0;
 }

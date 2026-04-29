@@ -11,15 +11,17 @@
 extern "C" {
 #endif
 
-#define CAPTURE_ERROR_THRESHOLD_S 1 // The allowed capture error time value, in seconds
+#define CAPTURE_ERROR_THRESHOLD_S 60 // The allowed capture error time value, in seconds
 /**
  * System operation modes
  */
 typedef enum modeSel {
+    MODE_UNDEFINED = -1, ///< Undefined mode
     MODE_SLEEP = 0,    ///< Low-power sleep mode
-    MODE_WORK,         ///< Active work mode (capturing images)
+    MODE_SNAPSHOT,     ///< Snapshot mode
     MODE_CONFIG,       ///< Configuration mode
     MODE_SCHEDULE,     ///< Scheduled tasks mode
+    MODE_UPLOAD,       ///< Upload mode
 } modeSel_e;
 
 /**
@@ -39,6 +41,8 @@ typedef enum snapType {
     SNAP_TIMER = 'T',      ///< Timer-triggered snapshot
     SNAP_BUTTON = 'B',     ///< Button-triggered snapshot
     SNAP_ALARMIN = 'A',    ///< Alarm-triggered snapshot
+    SNAP_PIR = 'P',        ///< PIR-triggered snapshot
+    SNAP_DEBUG = 'D',      ///< Debug-triggered snapshot
 } snapType_e;
 
 /**
@@ -65,7 +69,6 @@ typedef struct queueNode {
     snapType_e type;           ///< Snapshot type
     cameaFrom_e from;          ///< Data source
     uint64_t pts;              ///< Timestamp in milliseconds
-    void *context;             ///< Context pointer
     void (*free_handler)(struct queueNode *node, nodeEvent_e event); ///< Cleanup handler
     void *data;                ///< Data pointer
     size_t len;                ///< Data length
@@ -79,6 +82,13 @@ typedef struct timeAttr {
     char tz[64];       ///< Timezone in POSIX format
     uint64_t ts;       ///< UTC timestamp in seconds
 } timeAttr_t;
+
+/**
+ * NTP synchronization attributes structure
+ */
+typedef struct ntpSync {
+    uint8_t enable;
+} ntpSync_t;
 
 extern modeSel_e main_mode;
 /**
@@ -114,9 +124,10 @@ esp_err_t system_set_timezone(const char *tz);
 
 /**
  * Sync time with NTP server
+ * @param force_sync If true, force synchronization even if NTP synchronization is disabled  
  * @return ESP_OK on success, error code otherwise
  */
-esp_err_t system_ntp_time(void);
+esp_err_t system_ntp_time(bool force_sync);
 
 /**
  * Get firmware version string
@@ -151,6 +162,11 @@ void system_show_meminfo();
 void system_schedule_todo();
 
 /**
+ * Execute upload tasks
+ */
+void system_upload_todo();
+
+/**
  * Add ping command to console
  */
 void add_ping_cmd(void);
@@ -160,6 +176,39 @@ void add_ping_cmd(void);
  * @return modeSel_e
  */
 modeSel_e system_get_mode(void);
+
+/**
+ * Set NTP synchronization
+ * @param ntp_sync NTP synchronization attributes
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t system_set_ntp_sync(ntpSync_t *ntp_sync);
+
+/**
+ * Get NTP synchronization
+ * @param ntp_sync NTP synchronization attributes
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t system_get_ntp_sync(ntpSync_t *ntp_sync);
+
+/**
+ * Check if NTP synchronization is enabled
+ * @return true if enabled, false otherwise
+ */
+bool system_is_ntp_sync_enable();
+
+/**
+ * Set temporary mode
+ * @param mode Mode to set
+ */
+void system_set_temporary_mode(modeSel_e mode);
+
+/**
+ * Get temporary mode
+ * @return Temporary mode
+ */
+
+modeSel_e system_get_temporary_mode(void);
 
 #ifdef __cplusplus
 }

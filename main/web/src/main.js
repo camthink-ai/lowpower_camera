@@ -8,9 +8,11 @@ import { timeZoneOptions } from './utils';
 import Image from './view/image';
 import Capture from './view/capture';
 import Mqtt from './view/mqtt';
+import Webhook from './view/webhook';
 import Device from './view/device';
 import Wlan from './view/wlan';
 import Cellular from './view/cellular';
+import Debug from './view/debug';
 
 const App = {
     name: 'App',
@@ -29,27 +31,46 @@ const App = {
             this.showMsg.enable = false;
         }, 5000);
     },
+    /** MJPEG load error tip */
+    alertErrMsg(event) {
+        // avoid onerror infinite loop
+        if (event && event.target) {
+            event.target.onerror = null;
+        }
+        // show network error tip
+        this.showTipsDialog($t('networkError'));
+    },
     /**
      * Init Request Data
-     * 由于应用层目前httpserver无法支持异步，因此视频流独立一个server，其他配置请求独立一个server
-     * 且不能用Promise.all并发请求，容易导致server崩溃
+     * since application layer httpserver currently cannot support async, video stream uses one independent server, other config requests use another independent server
+     * and cannot use Promise.all for concurrent requests, easily causes server crash
      */
     async getInitData() {
-        await this.setDevTime(); // 首先同步时间
-        await this.getDeviceInfo();
-        await this.getImageInfo();
-        await this.getCaptureInfo();
-        await this.getDataReport();
-        if (this.netmod === 'cat1') {
-            await this.getCellularInfo();
-        } else {
-            await this.getWlanInfo();
+        try {
+            await this.setDevTime(); // first sync time
+            await this.getDeviceInfo();
+            await this.getImageInfo();
+            await this.getCaptureInfo(); // This will also call getTriggerInfo internally
+            await this.getUploadInfo();
+            await this.getDataReport();
+            await this.getPushModeInfo();
+            if (this.pushMode === 1) {
+                await this.getWebhookInfo();
+            }
+            if (this.netmod === 'cat1') {
+                await this.getCellularInfo();
+            } else {
+                await this.getWlanInfo();
+            }
+
+            this.justifyAllArea();
+        } catch (e) {
+            console.error('getInitData failed', e);
+            this.alertMessage('error');
         }
-        
-        this.justifyAllArea();
     },
 
-    // 多语言翻译
+    // multi-language translation
     $t(str) {
         return $t(str);
     },
@@ -70,26 +91,46 @@ const App = {
         window.location.reload();
     },
 
-    /** textarea高度自适应 */
+    /** textarea height auto-adapt */
     justifyAllArea() {
         const that = this;
         document.querySelectorAll('textarea').forEach((item) => that.justifyAreaHeight(item));
     },
     justifyAreaHeight($el) {
         $el.style.height = '30px';
-        // 单行时scrollHeight由于border会减小为28,此处优化
+        // when single line, scrollHeight decreases to 28 due to border, optimize here
         $el.style.height = ($el.scrollHeight <= '28' ? '30' : $el.scrollHeight) + 'px';
     },
 
-    /** 数字输入限制 */
+    /** number input limit */
     inputNumLimit(name) {
         const tmpValue = this[name].toString().replace(/[^\d]/g, '');
         nextTick(() => {
             this[name] = tmpValue;
         });
     },
+    /** decimal number input limit */
+    inputDecimalLimit(name) {
+        let tmpValue = this[name].toString();
+        // Remove all non-digit and non-dot characters
+        tmpValue = tmpValue.replace(/[^\d.]/g, '');
+        // Replace multiple dots with single dot
+        tmpValue = tmpValue.replace(/\.{2,}/g, '.');
+        // If starts with dot, add 0 before it
+        if (tmpValue.startsWith('.')) {
+            tmpValue = '0' + tmpValue;
+        }
+        // Remove dots after first one
+        const parts = tmpValue.split('.');
+        if (parts.length > 2) {
+            tmpValue = parts[0] + '.' + parts.slice(1).join('');
+        }
+        nextTick(() => {
+            this[name] = tmpValue;
+        });
+    },
 
-    /** 获取当前浏览器时区的时区代码 */
+    /** get timezone code of current browser timezone */
     getTimeZoneCode() {
         const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         return timeZoneOptions[timeZone];
@@ -97,7 +138,7 @@ const App = {
     async setDevTime() {
         await postData(URL.setDevTime, {
             tz: this.getTimeZoneCode(),
-            ts: Math.floor(Date.now() / 1000),  // 使用秒级时间戳
+            ts: Math.floor(Date.now() / 1000),  // use second-level timestamp
         });
         return;
     },
@@ -111,13 +152,15 @@ const App = {
         });
     },
 
-    // 导入其他功能模块的方法
+    // import methods from other function modules
     ...Image(),
     ...Capture(),
     ...Mqtt(),
+    ...Webhook(),
     ...Device(),
     ...Wlan(),
     ...Cellular(),
+    ...Debug(),
 };
 
 createApp({

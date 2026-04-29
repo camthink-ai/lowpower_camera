@@ -1,10 +1,45 @@
 import { nextTick } from "/src/lib/petite-vue.es.js";
 import { translate as $t } from "../i18n";
 import { getData, postData, postFileBuffer, URL } from "../api";
+
+async function downloadSessionLog() {
+    const res = await fetch(URL.exportSessionLog, { method: "GET" });
+    if (!res.ok) {
+        throw new Error("export failed");
+    }
+    const blob = await res.blob();
+    const objUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = "session_logs.txt";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(objUrl);
+}
+
+async function downloadExportedConfig() {
+    const res = await fetch(URL.exportConfig, { method: "GET" });
+    if (!res.ok) {
+        throw new Error("export config failed");
+    }
+    const blob = await res.blob();
+    const objUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = "ne101_config.ini";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(objUrl);
+}
+
 function Device() {
     return {
         // --Device Maintenance--
-        netmod: "", // 网络模式 wifi cat1 halow
+        netmod: "", // network mode wifi cat1 halow
         deviceName: "",
         macAddress: "",
         sn: "",
@@ -14,10 +49,12 @@ function Device() {
         autoProEnable: true,
         developEnable: true,
         upgradeFile: null,
-        upgradeFilename: "",
+        configImportFile: null,
         countryCode: "",
-        // 模组类型
-        camera: "USB", // "USB" | "CSI"
+        // module type
+        camera: "CSI", // "USB" | "CSI"
+        // NTP sync switch
+        ntpSync: true,
         async getDeviceInfo() {
             const res = await getData(URL.getDevInfo);
             this.netmod = res.netmod;
@@ -29,9 +66,9 @@ function Device() {
             this.countryCode = res.countryCode;
             this.camera = res.camera;
             const softType = Number(res.softVersion.split('.')[1])
-            if (softType === 1) {
+            if (res.softVersion.indexOf("FCC") !== -1) {
                 this.regionOptions = this.regionOptionsForFcc 
-            } else if(softType === 2) {
+            } else if(res.softVersion.indexOf("CE") !== -1) {
                 this.regionOptions = this.regionOptionsForCe // NE_101.2.0.1 CE
             }
             const { freePercent, bBattery } = await getData(URL.getDevBattery);
@@ -40,6 +77,10 @@ function Device() {
             } else {
                 this.battery = $t("sys.typecPowered");
             }
+
+            // get NTP sync switch status
+            const ntpSyncRes = await getData(URL.getDevNtpSync);
+            this.ntpSync = ntpSyncRes.enable ? true : false;
 
             // const iotRes = await getData(URL.getIoTParam);
             // this.autoProEnable = iotRes.autop_enable ? true : false;
@@ -53,10 +94,6 @@ function Device() {
                 try {
                     await postData(URL.setDevInfo, {
                         name: this.deviceName,
-                        mac: this.macAddress,
-                        sn: this.sn,
-                        hardVersion: this.hardwareVer,
-                        softVersion: this.firmwareVer,
                     });
                 } catch (error) {
                     this.alertMessage("error");
@@ -64,48 +101,53 @@ function Device() {
                 
             }
         },
-        handleBrowse() {
-            const file = document.getElementById("file");
-            file.click();
+        async setNtpSync() {
+            try {
+                await postData(URL.setDevNtpSync, {
+                    enable: this.ntpSync ? 1 : 0,
+                });
+            } catch (error) {
+                this.alertMessage("error");
+            }
+        },
+        handleFirmwareUpgradeClick() {
+            const el = document.getElementById("file");
+            if (el) {
+                el.value = "";
+                el.click();
+            }
         },
         fileChange() {
             try {
                 const inputEl = document.getElementById("file");
                 if (inputEl == null || inputEl.files.length == 0) return;
-                this.upgradeFilename = inputEl.files[0].name;
                 this.upgradeFile = inputEl.files[0];
+                this.showTipsDialog(
+                    $t("sys.reallyUpgradeFirmware"),
+                    true,
+                    this.confirmUpgrade
+                );
             } catch (error) {
                 console.debug("choice file err:", error);
             }
-        },
-        handleUpgrade() {
-            if (!this.upgradeFile || this.upgradeFile.name == "") {
-                this.showTipsDialog($t("sys.noFirmSpecified"));
-                return;
-            }
-            this.showTipsDialog(
-                $t("sys.reallyUpgradeFirmware"),
-                true,
-                this.confirmUpgrade
-            );
         },
         showDialogUpgrade: false,
         dialogUpgradeProp: {},
         
         async confirmUpgrade() {
             const that = this;
-            // 等待浏览器加载镜像文件
+            // wait for browser to load image file
             nextTick(() => {
                 that.showUpgradeDialog($t("sys.operateWait"));
             });
-            // 计算文件上传时间
+            // calculate file upload time
             console.time("fileReader");
             const reader = new FileReader();
             reader.readAsArrayBuffer(this.upgradeFile);
             reader.onload = async function () {
                 try {
                     console.timeEnd("fileReader");
-                    // 计算镜像文件传输完成并响应的时间
+                    // calculate time for image file transfer completion and response
                     console.time("postFile");
                     const res = await postFileBuffer(
                         URL.setDevUpgrade,
@@ -113,7 +155,7 @@ function Device() {
                     );
                     console.timeEnd("postFile");
                     if (res.result == 1000) {
-                        // 文件传输成功后，再等待5s设备重置，5S后,弹窗关闭
+                        // after file transfer succeeds, wait 5s for device reset, close dialog after 5s
                         setTimeout(() => {
                             that.dialogVisible = false;
                             nextTick(() => {
@@ -125,7 +167,7 @@ function Device() {
                             });
                         }, 5000);
                     } else if (res.result == 1003) {
-                        // 失败
+                        // failed
                         that.dialogVisible = false;
                         nextTick(() => {
                             that.showTipsDialog(
@@ -148,7 +190,7 @@ function Device() {
                 }
             };
         },
-        // TODO 关闭升级弹窗中断文件上传
+        // TODO close upgrade dialog to interrupt file upload
         // closeUpgrade() {
         //     if (this.reader && this.reader.readyState == 1) {
         //         this.reader.abort();
@@ -157,7 +199,109 @@ function Device() {
         onReload() {
             window.location.reload();
         },
-        /** 移除配置云生态开发者平台相关参数 */
+        async exportSessionLog() {
+            try {
+                await downloadSessionLog();
+            } catch (e) {
+                console.error(e);
+                this.alertMessage("error");
+            }
+        },
+        async exportConfig() {
+            try {
+                await downloadExportedConfig();
+            } catch (e) {
+                console.error(e);
+                this.alertMessage("error");
+            }
+        },
+        handleConfigImportClick() {
+            const el = document.getElementById("configImportFile");
+            if (el) {
+                el.value = "";
+                el.click();
+            }
+        },
+        configFileChange() {
+            try {
+                const inputEl = document.getElementById("configImportFile");
+                if (inputEl == null || inputEl.files.length === 0) return;
+                this.configImportFile = inputEl.files[0];
+                this.showTipsDialog(
+                    $t("sys.reallyImportConfig"),
+                    true,
+                    this.confirmConfigImport
+                );
+            } catch (error) {
+                console.debug("config file choice err:", error);
+            }
+        },
+        async confirmConfigImport() {
+            const that = this;
+            const file = this.configImportFile;
+            if (!file) {
+                this.showTipsDialog($t("sys.noConfigFileSpecified"));
+                return;
+            }
+            nextTick(() => {
+                that.showUpgradeDialog($t("sys.importConfigWait"));
+            });
+            const reader = new FileReader();
+            reader.readAsText(file, "UTF-8");
+            reader.onload = async function () {
+                try {
+                    const text =
+                        typeof reader.result === "string"
+                            ? reader.result
+                            : "";
+                    const res = await fetch(URL.importConfig, {
+                        method: "POST",
+                        mode: "cors",
+                        headers: {
+                            "Content-Type": "text/plain; charset=utf-8",
+                        },
+                        body: text,
+                    });
+                    const data = await res.json();
+                    that.dialogVisible = false;
+                    nextTick(() => {
+                        if (res.ok && data.result === 1000) {
+                            that.showTipsDialog(
+                                $t("sys.importConfigSuccess"),
+                                false,
+                                that.onReload
+                            );
+                        } else {
+                            that.showTipsDialog(
+                                $t("sys.importConfigFailed"),
+                                false,
+                                that.onReload
+                            );
+                        }
+                    });
+                } catch (error) {
+                    that.dialogVisible = false;
+                    nextTick(() => {
+                        that.showTipsDialog(
+                            $t("sys.importConfigFailed"),
+                            false,
+                            that.onReload
+                        );
+                    });
+                }
+            };
+            reader.onerror = function () {
+                that.dialogVisible = false;
+                nextTick(() => {
+                    that.showTipsDialog(
+                        $t("sys.importConfigFailed"),
+                        false,
+                        that.onReload
+                    );
+                });
+            };
+        },
+        /** remove cloud ecosystem developer platform related parameters */
         // async setIotParam() {
         //     try {
         //         await postData(URL.setIotParam, {

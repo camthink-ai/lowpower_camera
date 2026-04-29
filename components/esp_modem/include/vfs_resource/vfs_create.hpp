@@ -14,7 +14,7 @@
             .stop_bits = UART_STOP_BITS_1,          \
             .parity = UART_PARITY_DISABLE,          \
             .flow_control = ESP_MODEM_FLOW_CONTROL_NONE,\
-            .source_clk = UART_SCLK_APB,            \
+            .source_clk = ESP_MODEM_DEFAULT_UART_CLK,   \
             .baud_rate = 115200,                    \
             .tx_io_num = 25,                        \
             .rx_io_num = 26,                        \
@@ -31,7 +31,7 @@
  */
 struct esp_modem_vfs_uart_creator {
     const char *dev_name;                       /*!< VFS device name, e.g. /dev/uart/n */
-    const struct esp_modem_uart_term_config uart;     /*!< UART driver init struct */
+    struct esp_modem_uart_term_config uart;     /*!< UART driver init struct */
 };
 
 /**

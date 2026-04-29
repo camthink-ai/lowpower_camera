@@ -1,5 +1,6 @@
 #include "cat1.h"
 #include "mqtt.h"
+#include "push.h"
 #include "system.h"
 
 #include <string.h>
@@ -13,15 +14,19 @@
 #include "esp_netif_ppp.h"
 #include "esp_modem_api.h"
 #include "iot_mip.h"
+#include "debug.h"
 
 #define TAG "-->CAT1"  // Logging tag for CAT1 module
+
+// Actual modem: Quectel EG915Q (LTE Cat.1 bis). Uses EC800E DCE profile for compatibility
+// (same Quectel AT set: ATD*99***X#, AT+QICSGP, AT+CGDCONT, AT+QNETDEVCTL, etc.)
 
 // CAT1 module configuration
 #define CAT1_BAUD_RATE (921600)  // Default baud rate for CAT1 module
 
 // Timeout constants
 #define CAT1_POWER_ON_TIMEOUT_MS (30000)  // Max time to power on module
-#define CAT1_PPP_CONNECT_TIMEOUT_MS (60000)  // Max time to establish PPP connection
+#define CAT1_PPP_CONNECT_TIMEOUT_MS (90000)  // Max time to establish PPP connection
 
 // Event group bits
 #define CAT1_POWER_ON_BIT BIT(0)  // Module powered on
@@ -53,6 +58,36 @@ typedef struct mdCat1 {
 static mdCat1_t g_cat1 = {0};  // Global CAT1 module state
 
 /**
+ * Check if current operator is Verizon (reference: verizon.c)
+ * Verizon US: IMSI prefix 311480 (MCC 311, MNC 480) or operator name contains "Verizon"
+ */
+static bool is_verizon_network(void)
+{
+    char atResp[256];
+    esp_err_t err;
+
+    /* Check by IMSI: Verizon US uses MCC 311, MNC 480 (IMSI prefix 311480) */
+    memset(atResp, 0, sizeof(atResp));
+    err = esp_modem_get_imsi(g_cat1.dce, atResp);
+    if (err == ESP_OK && strlen(atResp) >= 6) {
+        if (strncmp(atResp, "311480", 6) == 0) {
+            ESP_LOGI(TAG, "Verizon detected by IMSI prefix 311480");
+            return true;
+        }
+    }
+    /* Check by operator name from AT+COPS? */
+    memset(atResp, 0, sizeof(atResp));
+    err = esp_modem_at(g_cat1.dce, "AT+COPS?", atResp, 1000);
+    if (err == ESP_OK && strstr(atResp, "Verizon") != NULL) {
+        ESP_LOGI(TAG, "Verizon detected by operator name");
+        return true;
+    }
+
+
+    return false;
+}
+
+/**
  * PPP state change handler
  * @param arg Unused
  * @param event_base Event base
@@ -66,6 +101,12 @@ static void on_ppp_changed(void *arg, esp_event_base_t event_base, int32_t event
         /* User interrupted event from esp-netif */
         esp_netif_t *netif = event_data;
         ESP_LOGI(TAG, "User interrupted event from netif:%p", netif);
+    }
+    if (event_id == NETIF_PPP_ERRORNONE) {
+        if(system_get_mode() != MODE_SCHEDULE){
+            system_ntp_time(false);
+        }
+        push_start();
     }
 }
 
@@ -111,10 +152,10 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
         if (iot_mip_autop_is_enable()) {
             iot_mip_autop_async_start(NULL);
         }
-        if(system_get_mode() != MODE_SCHEDULE){
-            system_ntp_time();
-        }
-        mqtt_start();
+        // push_start();
+        // if(system_get_mode() != MODE_SCHEDULE){
+        //     system_ntp_time(false);
+        // }
     } else if (event_id == IP_EVENT_PPP_LOST_IP) {
         ESP_LOGI(TAG, "Modem Disconnect from PPP Server");
 
@@ -122,7 +163,7 @@ static void on_ip_event(void *arg, esp_event_base_t event_base, int32_t event_id
         snprintf(g_cat1.status.ipv4Address, sizeof(g_cat1.status.ipv4Address), "%s", "0.0.0.0/0");
         snprintf(g_cat1.status.ipv4Gateway, sizeof(g_cat1.status.ipv4Gateway), "%s", "0.0.0.0");
         snprintf(g_cat1.status.ipv4Dns, sizeof(g_cat1.status.ipv4Dns), "%s", "0.0.0.0");
-        mqtt_stop();
+        push_stop();
     } else if (event_id == IP_EVENT_GOT_IP6) {
         ESP_LOGI(TAG, "GOT IPv6 event!");
 
@@ -236,7 +277,7 @@ static esp_err_t cat1_set_baud_rate(uint32_t baud_rate)
     char atCmd[64];
     char atResp[256];
 
-    // EC800E default baud rate is 115200, needs to be changed to 921600
+    // Quectel (EC800E/EG915Q) default baud rate is 115200, needs to be changed to 921600
     int *baud_rate_array = NULL;
     int baud_rate_len = 0;
     int baud_rate_index = 0;
@@ -453,7 +494,7 @@ static esp_err_t get_status(cellularStatusAttr_t *status)
     snprintf(status->lac, sizeof(status->lac), "%s", "-");
     snprintf(status->cellId, sizeof(status->cellId), "%s", "-");
     memset(atResp, 0, sizeof(atResp));
-    err = esp_modem_at(g_cat1.dce, "AT+CREG?", atResp, 500);
+    err = esp_modem_at_raw(g_cat1.dce, "AT+CREG?\r", atResp, "+CREG", "+CME ERROR", 500);
     ESP_LOGI(TAG, "AT+CREG?=>%s", atResp);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(AT+CREG?) failed with %d(%s)", err, atResp);
@@ -514,7 +555,7 @@ static esp_err_t get_status(cellularStatusAttr_t *status)
     // ICCID，{+QCCID: 89861121206083099081}
     snprintf(status->iccid, sizeof(status->iccid), "%s", "-");
     memset(atResp, 0, sizeof(atResp));
-    err = esp_modem_at(g_cat1.dce, "AT+QCCID", atResp, 500);
+    err = esp_modem_at_raw(g_cat1.dce, "AT+QCCID\r", atResp, "+QCCID", "+CME ERROR", 500);
     ESP_LOGI(TAG, "AT+QCCID=>%s", atResp);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(AT+QCCID) failed with %d(%s)", err, atResp);
@@ -564,7 +605,7 @@ static esp_err_t get_status(cellularStatusAttr_t *status)
     // {+QNWINFO: "FDD LTE","46011","LTE BAND 1",100}
     snprintf(status->networkType, sizeof(status->networkType), "%s", "-");
     memset(atResp, 0, sizeof(atResp));
-    err = esp_modem_at(g_cat1.dce, "AT+QNWINFO", atResp, 500);
+    err = esp_modem_at_raw(g_cat1.dce, "AT+QNWINFO\r", atResp, "+QNWINFO", "+CME ERROR", 500);
     ESP_LOGI(TAG, "AT+QNWINFO=>%s", atResp);
     if (err == ESP_OK && simCardReady) {
         char delimiters[] = ",\"";
@@ -679,7 +720,8 @@ static esp_err_t check_baud_rate()
     esp_modem_dce_config_t dce_config = ESP_MODEM_DCE_DEFAULT_CONFIG(g_cat1.param.apn);
     esp_netif_config_t netif_ppp_config = ESP_NETIF_DEFAULT_PPP();
     g_cat1.esp_netif = esp_netif_new(&netif_ppp_config);
-    g_cat1.dce = esp_modem_new_dev(ESP_MODEM_DCE_EC800E, &dte_config, &dce_config, g_cat1.esp_netif);
+    /* Use EG91X profile so that data mode uses ATD*99***<cid># based on PDP context */
+    g_cat1.dce = esp_modem_new_dev(ESP_MODEM_DCE_EG91X, &dte_config, &dce_config, g_cat1.esp_netif);
 
     return ESP_OK;
 }
@@ -723,7 +765,7 @@ static esp_err_t check_pin_status()
                 snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "PIN Required");
             } else {
                 memset(atResp, 0, sizeof(atResp));
-                snprintf(atCmd, sizeof(atCmd), "AT+CPIN=%s", g_cat1.param.pin);//兼容EG912U-GL修改
+                snprintf(atCmd, sizeof(atCmd), "AT+CPIN=%s", g_cat1.param.pin);// compatible with EG912U-GL modification
                 err = esp_modem_at(g_cat1.dce, atCmd, atResp, 5000);
                 ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
                 if (err == ESP_OK) {
@@ -763,6 +805,14 @@ static esp_err_t check_pin_status()
 
 /**
  * Establish network connection
+ *
+ * Quectel (EC800E/EG915Q) Verizon compatibility (ref: verizon.c, Quectel LTE TCP/IP App Note):
+ * 1. PDP context 3: Verizon requires context 3 for data (OTA-DM uses ctx1 for attach, ctx3 for bearer)
+ * 2. AT+CGDCONT: define PDP context (APN). Empty APN ok for Verizon auto-provision.
+ * 3. AT+QICSGP: configure TCP/IP context (context_id, protocol, APN, user, pass, auth)
+ * 4. AT+QNETDEVCTL=1,3,1: activate context 3 before dial (in udhcpcd_dialer)
+ * 5. ATD*99***3#: dial using context 3 (via esp_modem pdp context_id)
+ *
  * @return ESP_OK on success
  */
 esp_err_t connect_to_network()
@@ -770,17 +820,56 @@ esp_err_t connect_to_network()
     char atCmd[256];
     char atResp[256];
     esp_err_t err = ESP_OK;
+    int reg_state = 0;
+    int reg_retry = 0;
+    int max_retry = 10; 
+    int context_id = 1;  /* Default context 1; use 3 for Verizon */
 
-    // Set apn related information
-    if (g_cat1.param.apn[0] != '\0') {
+    /* Verizon compatibility: use PDP context 3 when isp_select=verizon or (isp_select=auto/empty and network detected as Verizon) */
+    bool force_verizon = (strcmp(g_cat1.param.isp_select, "verizon") == 0);
+    bool auto_verizon = is_verizon_network();
+    bool is_auto = (g_cat1.param.isp_select[0] == '\0' || strcmp(g_cat1.param.isp_select, "auto") == 0);
+    if (force_verizon || (is_auto && auto_verizon)) {
+        context_id = 3;
+        ESP_LOGI(TAG, "Using PDP context 3 (isp_select=%s, force=%d, auto_detect=%d)",
+                 g_cat1.param.isp_select, (int)force_verizon, (int)auto_verizon);
+
+        /* Verizon: clear context 1 before configuring context 3 (ref: AT+QICSGP=1,3,"","","",0) */
         memset(atResp, 0, sizeof(atResp));
-        snprintf(atCmd, sizeof(atCmd), "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",%d", g_cat1.param.apn, g_cat1.param.user, g_cat1.param.password, g_cat1.param.authentication);
-        err = esp_modem_at(g_cat1.dce, atCmd, atResp, 500);
-        ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
+        err = esp_modem_at(g_cat1.dce, "AT+QICSGP=1,3,\"\",\"\",\"\",0", atResp, 500);
+        ESP_LOGI(TAG, "AT+QICSGP=1,3,\"\",\"\",\"\",0=>%s", atResp);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
-            snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
+            ESP_LOGW(TAG, "AT+QICSGP clear ctx1 failed %d(%s)", err, atResp);
         }
+    }
+
+    /* Configure PDP context (required for Verizon context 3 even when APN is empty)
+     * 1. esp_modem_configure_pdp_context: updates internal pdp context (used by setup_data_mode)
+     * 2. esp_modem_set_pdp_context: sends AT+CGDCONT + sets dial context (ATD*99***X#)
+     * 3. AT+QICSGP: configure TCP/IP context
+     */
+    const char *apn = (g_cat1.param.apn[0] != '\0') ? g_cat1.param.apn : "";
+
+    /* Configure internal PDP context (updates GenericModule::pdp member) */
+    esp_modem_PdpContext_t pdp_ctx = {
+        .context_id = context_id,
+        .protocol_type = "IP",
+        .apn = apn,
+    };
+    err = esp_modem_configure_pdp_context(g_cat1.dce, &pdp_ctx);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_modem_configure_pdp_context failed %d", err);
+        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
+    }
+    /* AT+QICSGP: context_id, protocol_type(1=IPv4), APN, user, pass, auth  */
+    memset(atResp, 0, sizeof(atResp));
+    snprintf(atCmd, sizeof(atCmd), "AT+QICSGP=%d,1,\"%s\",\"%s\",\"%s\",%d",
+             context_id, apn, g_cat1.param.user, g_cat1.param.password, g_cat1.param.authentication);
+    err = esp_modem_at(g_cat1.dce, atCmd, atResp, 500);
+    ESP_LOGI(TAG, "%s=>%s", atCmd, atResp);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
+        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
     }
 
     // Activate roaming service
@@ -801,15 +890,53 @@ esp_err_t connect_to_network()
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_modem_at(%s) failed with %d(%s)", atCmd, err, atResp);
     }
-
-    // CMUX mode dial
-    err = esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_CMUX);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_modem_set_mode(ESP_MODEM_MODE_CMUX) failed with %d", err);
-        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "SIM Card Error");
+    /* Wait for network registration before entering PPP data mode.
+     * When the module is still searching (CREG/CEREG=2 or QENG: "SEARCH"/"NOCONN"),
+     * forcing DATA mode often fails with ESP_FAIL. Here we poll the registration
+     * state for a short period; if it never reaches Registered(1/5), we skip PPP
+     * for this cycle and let upper layers treat it as "no network, save to flash".
+     */
+    while (reg_retry++ < max_retry) {
+        if (esp_modem_get_network_registration_state(g_cat1.dce, &reg_state) == ESP_OK &&
+            (reg_state == 1 || reg_state == 5)) {
+            ESP_LOGI(TAG, "Network registered, state=%d", reg_state);
+            break;
+        }
+        ESP_LOGI(TAG, "Network not registered yet, state=%d, retry=%d/%d",
+                 reg_state, reg_retry, max_retry);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    return err;
+    if (!(reg_state == 1 || reg_state == 5)) {
+        ESP_LOGW(TAG, "Network still not registered, skip PPP dialing this cycle");
+        snprintf(g_cat1.status.modemStatus, sizeof(g_cat1.status.modemStatus), "%s", "Network Searching");
+        return ESP_FAIL;
+    }
+    
+    reg_retry = 0;
+    max_retry = 5;
+    while (reg_retry++ < max_retry) {
+        ESP_LOGI(TAG, "Setting mode, retry=%d/%d", reg_retry, max_retry);
+        if (g_cat1.mode == MODE_CONFIG) {
+            ESP_LOGI(TAG, "Using CMUX mode");
+            err = esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_CMUX);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "CMUX mode enabled successfully");
+                break;
+            }
+        } else {
+            ESP_LOGI(TAG, "Using DATA mode");
+            err = esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_DATA);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "DATA mode enabled successfully");
+                break;
+            } 
+        }
+        esp_modem_set_mode(g_cat1.dce, ESP_MODEM_MODE_UNDEF);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    return ESP_OK;
 }
 
 /**
@@ -874,6 +1001,7 @@ void cat1_init(int mode)
 
     g_cat1.mode = mode;
     g_cat1.event_group = xEventGroupCreate();
+    cat1_cmd_add();
 }
 
 /**
@@ -884,7 +1012,7 @@ void cat1_open()
     xEventGroupClearBits(g_cat1.event_group, CAT1_POWER_ON_BIT);
     xEventGroupClearBits(g_cat1.event_group, CAT1_STA_CONNECT_BIT);
     xEventGroupClearBits(g_cat1.event_group, CAT1_STA_DISCONNECT_BIT);
-    BaseType_t task = xTaskCreatePinnedToCore((TaskFunction_t)task_start_modem, TAG, 8 * 1024, NULL, 4, NULL, 1);
+    BaseType_t task = xTaskCreatePinnedToCore((TaskFunction_t)task_start_modem, TAG, 8 * 1024, NULL, 5, NULL, 0);
     if (task == pdPASS) {
     } else {
         ESP_LOGE(TAG, "xTaskCreatePinnedToCore(task_start_modem) failed");
@@ -903,10 +1031,10 @@ void cat1_wait_open(void)
         ESP_LOGI(TAG, "Connected to PPP server");
     } else {
         ESP_LOGE(TAG, "Failed to connect to PPP server");
-        mqtt_stop();
+        push_stop();
     }
 
-    get_status(&g_cat1.status);
+    // get_status(&g_cat1.status);
 }
 
 /**
@@ -930,7 +1058,7 @@ esp_err_t cat1_restart(void)
     snprintf(g_cat1.status.ipv4Dns, sizeof(g_cat1.status.ipv4Dns), "%s", "0.0.0.0");
 
     ESP_LOGI(TAG, "cat1_restart 1/3");
-    mqtt_stop();
+    push_stop();
     g_cat1.cat1_status = CAT1_STATUS_STOPED;
     esp_modem_destroy(g_cat1.dce);
     g_cat1.dce = NULL;
@@ -972,9 +1100,9 @@ esp_err_t cat1_send_at(const char *at, cellularCommandResp_t *resp)
     }
 
     esp_err_t err = ESP_OK;
-    ESP_LOGI(TAG, "AT command: %s", at);
+    // ESP_LOGI(TAG, "AT command: %s", at);
     resp->result = esp_modem_at(g_cat1.dce, at, resp->message, 500);
-    ESP_LOGI(TAG, "AT response: %s, %d", resp->message, resp->result);
+    // ESP_LOGI(TAG, "AT response: %s, %d", resp->message, resp->result);
     switch (resp->result) {
     case ESP_FAIL:
         snprintf(resp->message, sizeof(resp->message), "%s", "ERROR");
@@ -1064,4 +1192,35 @@ static void task_show_status(void *pvParameters)
 void cat1_show_status(void)
 {
     xTaskCreatePinnedToCore((TaskFunction_t)task_show_status, TAG, 8 * 1024, NULL, 4, NULL, 1);
+}
+
+static int cat1_atsend_cmd(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("invalid argvment, eg: atsend AT+CSQ\n");
+        return ESP_FAIL;
+    }
+    cellularCommandResp_t resp;
+    memset(&resp, 0, sizeof(cellularCommandResp_t));
+    if (cat1_send_at(argv[1], &resp) != ESP_OK) {
+        printf("AT command failed: %s\n", resp.message);
+        return ESP_FAIL;
+    }
+    printf("AT response: %d, %s\n", resp.result, resp.message);
+    return ESP_OK;
+}
+
+static int cat1_restart_cmd(int argc, char **argv)
+{
+    cat1_restart();
+    return ESP_OK;
+}
+static esp_console_cmd_t g_cmd[] = {
+    {"atsend", "atsend [at_command]", NULL, cat1_atsend_cmd, NULL},
+    {"cat1restart", "cat1restart", NULL, cat1_restart_cmd, NULL},
+};
+
+void cat1_cmd_add(void)
+{
+    debug_cmd_add(g_cmd, sizeof(g_cmd) / sizeof(esp_console_cmd_t));
 }

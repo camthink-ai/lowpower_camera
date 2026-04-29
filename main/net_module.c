@@ -10,6 +10,7 @@
 #include "driver/rtc_io.h"
 #include "soc/rtc.h"
 #include "esp_sleep.h"
+#include "session_log.h"
 #include "sleep.h"
 #include "wifi_iperf.h"
 
@@ -116,6 +117,7 @@ void netModule_check(void)
     g_NetModule.check_flag = 1;
 
     esp_sleep_enable_timer_wakeup(100000ULL);
+    session_log_close_for_sleep();
     esp_deep_sleep_start();
 }
 
@@ -150,13 +152,8 @@ void netModule_init(modeSel_e mode)
         netModule_check();
         return;
     }
-    if(g_NetModule.mode == NET_CAT1){
-        ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
-        
-        cat1_init(mode);
-        cat1_open();
-    }
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_LOGI(TAG, "netModule_init mode :%d .", g_NetModule.mode);
 }
 
@@ -176,6 +173,8 @@ void netModule_open(modeSel_e mode)
         if(mode == MODE_CONFIG){
             wifi_open(WIFI_MODE_AP);
         }
+        cat1_init(mode);
+        cat1_open();
         cat1_wait_open();
     }else{
         if(mode == MODE_CONFIG){
