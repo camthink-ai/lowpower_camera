@@ -304,8 +304,12 @@ void ble_advertise(void)
 {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
-    char name[24];
-    snprintf(name, sizeof(name), "NE101_%02X%02X%02X", mac[3], mac[4], mac[5]);
+    deviceInfo_t dev;
+    cfg_get_device_info(&dev);
+    char name[32];
+    snprintf(name, sizeof(name), "%s_%02X%02X%02X%02X%02X%02X",
+             dev.model[0] ? dev.model : "NE101",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     struct ble_hs_adv_fields fields = {0};
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
