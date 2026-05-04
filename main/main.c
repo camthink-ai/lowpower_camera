@@ -43,6 +43,7 @@
 #include "utils.h"
 #include "storage.h"
 #include "session_log.h"
+#include "ble_prov.h"
 
 #define TAG "-->MAIN"
 
@@ -311,7 +312,22 @@ static modeSel_e mode_selector(snapType_e *snapType)
         return handle_power_on_reset();
     }
 
-    // Check for network module flag (has priority over other restart reasons)
+    // Deep sleep wakeup: check wakeup source BEFORE netModule flag.
+    // Button press (EXT0) must always enter config mode regardless of check_flag.
+    if (rst == RST_DEEP_SLEEP) {
+        wakeupType_e type = sleep_wakeup_case();
+        if (type == WAKEUP_BUTTON) {
+            *snapType = SNAP_BUTTON;
+            return MODE_CONFIG;
+        }
+        // For timer/PIR/alarmin wakeup: still honor check_flag for network check
+        if (netModule_is_check_flag()) {
+            return handle_network_check();
+        }
+        return handle_deep_sleep_wakeup(snapType);
+    }
+
+    // Non-deep-sleep: check network module flag
     if (netModule_is_check_flag()) {
         return handle_network_check();
     }
@@ -320,10 +336,6 @@ static modeSel_e mode_selector(snapType_e *snapType)
     switch (rst) {
         case RST_SOFTWARE:
             return MODE_CONFIG;
-            
-        case RST_DEEP_SLEEP:
-            return handle_deep_sleep_wakeup(snapType);
-            
         default:
             ESP_LOGE(TAG, "Unknown restart reason: %d", rst);
             return MODE_SLEEP;
@@ -407,16 +419,59 @@ static void handle_config_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
     ESP_LOGI(TAG, "config mode");
     /* Indicator LED is only effective in CONFIG mode: hold it on. */
     misc_led_able(1);
-    
-    http_open();
-    sleep_reset_wakeup_todo();
-    netModule_open(main_mode);
+
+    /* Init WiFi driver (esp_wifi_init + event handlers, does NOT start WiFi). */
+    wifi_init_driver();
+
+    /* Init NimBLE FIRST — controller (nimble_port_init) must initialize
+     * before esp_wifi_start for reliable coexistence on ESP32-S3. */
+    ble_prov_start();
+
+    /* Open camera BEFORE WiFi — DMA buffer (16KB) needs contiguous
+     * internal DRAM which WiFi consumes. Camera frames go to PSRAM (OK). */
     camera_open(NULL, xQueueMqtt);
+
+    /* Start WiFi APSTA + HTTP — AP visible immediately for web config.
+     * NimBLE uses PSRAM, so BLE + WiFi + Camera coexist without OOM. */
+    wifi_open(WIFI_MODE_APSTA);
+    http_open();
+
     if (snapType == SNAP_BUTTON) {
         camera_snapshot(snapType, 1);
     }
-    sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | 
+
+    /* BLE runs in background — device is fully functional (STA, MQTT, HTTP).
+     * Wait up to 60s for a BLE client to connect. */
+    bool ble_connected = ble_prov_wait_connected(60000);
+
+    if (ble_connected) {
+        /* BLE client connected — wait for provisioning to complete (up to 5min). */
+        bool ble_ok = ble_prov_wait_connect(300000);
+        if (ble_ok) {
+            ESP_LOGI(TAG, "BLE provisioning succeeded");
+            ble_prov_stop();
+            camera_close();
+            misc_flash_led_close();
+            sleep_start();
+            return;
+        }
+        ESP_LOGW(TAG, "BLE connected but provisioning timed out");
+    }
+
+    /* BLE done — stop BLE to free memory, keep WiFi APSTA running. */
+    ESP_LOGI(TAG, "BLE done — stopping BLE, keeping APSTA");
+    ble_prov_stop();
+
+    sleep_reset_wakeup_todo();
+    netModule_open(main_mode);
+
+    /* Keep camera open for stream server and button snapshots during config mode.
+     * Close it when config mode ends (timeout / sleep). */
+    sleep_wait_event_bits(SLEEP_SNAPSHOT_STOP_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT |
                           SLEEP_NO_OPERATION_TIMEOUT_BIT | SLEEP_MIP_DONE_BIT | SLEEP_NO_DEBUG_BIT, true);
+
+    camera_close();
+    misc_flash_led_close();
 }
 
 /**
@@ -425,7 +480,7 @@ static void handle_config_mode(snapType_e snapType, QueueHandle_t xQueueMqtt)
 static void handle_schedule_mode(void)
 {
     ESP_LOGI(TAG, "schedule mode");
-    
+
     netModule_open(main_mode);
     system_schedule_todo();
     sleep_wait_event_bits(SLEEP_SCHEDULE_DONE_BIT | SLEEP_STORAGE_UPLOAD_STOP_BIT | SLEEP_MIP_DONE_BIT, true);
@@ -494,6 +549,11 @@ void app_main(void)
     // Initialize common components
     common_init();
 
+    // NOTE: Do NOT init BT controller here. wifi_prov_mgr_start_provisioning()
+    // initializes the full NimBLE stack internally (controller + host).
+    // Pre-initializing the controller causes ESP_ERR_INVALID_STATE (0x103)
+    // because protocomm_nimble calls nimble_port_init() which re-inits it.
+
     // Determine operating mode and snapshot type
     snapType_e snapType;
     main_mode = mode_selector(&snapType);
@@ -515,6 +575,7 @@ void app_main(void)
 
     // Handle different operational modes
     // main_mode = MODE_CONFIG; //TODO: for test
+
     modeSel_e temp_mode = system_get_temporary_mode();
     if (temp_mode != MODE_UNDEFINED) {
         main_mode = temp_mode;
@@ -524,20 +585,20 @@ void app_main(void)
         case MODE_SNAPSHOT:
             handle_snapshot_mode(snapType, xQueueMqtt, xQueueStorage);
             break;
-            
+
         case MODE_CONFIG:
             handle_config_mode(snapType, xQueueMqtt);
             break;
-            
+
         case MODE_SCHEDULE:
             handle_schedule_mode();
             break;
-            
+
         case MODE_UPLOAD:
             handle_upload_mode();
             break;
-            
-            
+
+
         default:
             ESP_LOGE(TAG, "Unknown mode: %d", main_mode);
             break;
@@ -551,6 +612,6 @@ cleanup:
     if (xQueueStorage) {
         vQueueDelete(xQueueStorage);
     }
-    
+
     ESP_LOGI(TAG, "end main....");
 }

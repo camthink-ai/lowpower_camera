@@ -561,6 +561,10 @@ esp_err_t camera_flash_led_ctrl(lightAttr_t *light)
 esp_err_t camera_snapshot(snapType_e type, uint8_t count)
 {
     mdCamera_t *h = &g_mdCamera;
+    if (!h->bInit || !h->vt) {
+        ESP_LOGW(TAG, "snapshot skipped — camera not initialized");
+        return ESP_FAIL;
+    }
     capAttr_t capture;
     cfg_get_cap_attr(&capture);
     if (type == SNAP_BUTTON && capture.bButtonCap == false) {

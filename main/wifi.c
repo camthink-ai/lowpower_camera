@@ -38,6 +38,7 @@ typedef struct mdWifi {
 } mdWifi_t;
 
 static mdWifi_t g_wifi = {0};  // Global WiFi state
+static bool s_driver_inited = false;
 
 /**
  * WiFi event handler
@@ -421,14 +422,15 @@ static esp_console_cmd_t g_cmd[] = {
 };
 
 /**
- * Initialize WiFi module
- * @param mode WiFi mode (WIFI_MODE_APSTA, WIFI_MODE_AP, WIFI_MODE_STA)
+ * Initialize WiFi driver only (esp_wifi_init + event handlers).
+ * Call this before ble_prov_start() so wifi_prov_mgr can call
+ * esp_wifi_set_mode(). Does NOT set WiFi mode, configure AP/STA,
+ * or start WiFi.
  */
-void wifi_open(wifi_mode_t mode)
+void wifi_init_driver(void)
 {
-    if (g_wifi.bInit) {
-        return;
-    }
+    if (s_driver_inited) return;
+
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     uint8_t mac_hex[6];
     deviceInfo_t device;
@@ -450,6 +452,31 @@ void wifi_open(wifi_mode_t mode)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, &g_wifi));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &ip_event_handler, &g_wifi));
+
+    s_driver_inited = true;
+}
+
+/**
+ * Initialize WiFi module
+ * @param mode WiFi mode (WIFI_MODE_APSTA, WIFI_MODE_AP, WIFI_MODE_STA)
+ */
+void wifi_open(wifi_mode_t mode)
+{
+    if (g_wifi.bInit) {
+        return;
+    }
+
+    // Init driver (no-op if already done by wifi_init_driver)
+    wifi_init_driver();
+
+    uint8_t mac_hex[6];
+    deviceInfo_t device;
+    cfg_get_device_info(&device);
+    if (strlen(device.mac) && is_valid_mac(device.mac)) {
+        mac_str2hex(device.mac, mac_hex);
+    } else {
+        esp_read_mac(mac_hex, ESP_MAC_WIFI_STA);
+    }
 
     if(!netModule_is_mmwifi())
         ESP_ERROR_CHECK(esp_wifi_set_mode(mode));
@@ -486,18 +513,18 @@ void wifi_open(wifi_mode_t mode)
     if (!(mode & WIFI_MODE_AP)) {
         if(netModule_is_mmwifi()){
             xEventGroupWaitBits(g_wifi.eventGroup, WIFI_STA_DISCONNECT_BIT | WIFI_STA_CONNECT_BIT, \
-                                false, false, pdMS_TO_TICKS(WIFI_STA_CHECK_TIMEOUT_MS)); 
+                                false, false, pdMS_TO_TICKS(WIFI_STA_CHECK_TIMEOUT_MS));
         }else{
             int retry_count = 0;
             EventBits_t event_bits;
-            
+
             while (retry_count < WIFI_STA_CONNECT_MAX_RETRIES) {
-                event_bits = xEventGroupWaitBits(g_wifi.eventGroup, 
-                                                WIFI_STA_DISCONNECT_BIT | WIFI_STA_CONNECT_BIT, 
-                                                false, 
-                                                false, 
+                event_bits = xEventGroupWaitBits(g_wifi.eventGroup,
+                                                WIFI_STA_DISCONNECT_BIT | WIFI_STA_CONNECT_BIT,
+                                                false,
+                                                false,
                                                 pdMS_TO_TICKS(WIFI_STA_CHECK_TIMEOUT_MS));
-                                                
+
                 if (event_bits & WIFI_STA_CONNECT_BIT) {
                     // Connected, no need to retry
                     break;
@@ -516,6 +543,34 @@ void wifi_open(wifi_mode_t mode)
         }
     }
     g_wifi.bInit = true;
+}
+
+/**
+ * Switch from AP-only to APSTA mode after BLE frees memory.
+ * Stops WiFi, creates STA netif, sets APSTA mode, configures STA, restarts WiFi.
+ * Push task auto-starts MQTT when STA gets IP.
+ */
+void wifi_switch_to_apsta(void)
+{
+    if (!g_wifi.bInit) {
+        ESP_LOGW(TAG, "WiFi not initialized, cannot switch to APSTA");
+        return;
+    }
+
+    wifiAttr_t wifi;
+    cfg_get_wifi_attr(&wifi);
+
+    if (!wifi.ssid[0]) {
+        ESP_LOGW(TAG, "No SSID configured, staying in AP-only mode");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Switching from AP to APSTA mode");
+    esp_wifi_stop();
+    esp_netif_create_default_wifi_sta();
+    esp_wifi_set_mode(WIFI_MODE_APSTA);
+    wifi_cfg_sta(wifi.ssid, wifi.password);
+    esp_wifi_start();
 }
 
 /**
@@ -543,6 +598,36 @@ esp_err_t wifi_sta_reconnect(const char *ssid, const char *password)
     uxBits = xEventGroupWaitBits(g_wifi.eventGroup, WIFI_STA_CONNECT_BIT, true, true, \
                                  pdMS_TO_TICKS(WIFI_STA_CONNECT_TIMEOUT_MS));
     if (uxBits & WIFI_STA_CONNECT_BIT) {
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
+
+/**
+ * Connect WiFi STA without prior disconnect.
+ * Use this when STA was never connected (first provisioning) to avoid
+ * wifi_sta_reconnect() hanging on the disconnect-wait that never fires.
+ * @param ssid Network SSID
+ * @param password Network password
+ * @return ESP_OK on success, ESP_FAIL on timeout
+ */
+esp_err_t wifi_sta_first_connect(const char *ssid, const char *password)
+{
+    wifi_cfg_sta(ssid, password);
+    if (!netModule_is_mmwifi()) {
+        esp_err_t ret = esp_wifi_connect();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "esp_wifi_connect failed: %s", esp_err_to_name(ret));
+            return ret;
+        }
+    } else {
+        mm_wifi_connect();
+    }
+
+    EventBits_t bits = xEventGroupWaitBits(g_wifi.eventGroup, WIFI_STA_CONNECT_BIT,
+                                            true, true,
+                                            pdMS_TO_TICKS(WIFI_STA_CONNECT_TIMEOUT_MS));
+    if (bits & WIFI_STA_CONNECT_BIT) {
         return ESP_OK;
     }
     return ESP_FAIL;
@@ -580,12 +665,24 @@ esp_err_t wifi_get_list(wifiList_t *list)
     if(netModule_is_cat1()){
         return ESP_FAIL;
     }
+    if (!g_wifi.bInit) {
+        ESP_LOGW(TAG, "wifi_get_list: WiFi not initialized");
+        return ESP_FAIL;
+    }
     if(!netModule_is_mmwifi()){
         wifi_ap_record_t *ap_info = NULL;
         uint16_t ap_count = 0;
 
-        ESP_ERROR_CHECK(esp_wifi_scan_start(NULL, true));
-        ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+        esp_err_t ret = esp_wifi_scan_start(NULL, true);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "wifi_get_list: scan start failed (0x%x)", ret);
+            return ESP_FAIL;
+        }
+        ret = esp_wifi_scan_get_ap_num(&ap_count);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "wifi_get_list: get ap num failed (0x%x)", ret);
+            return ESP_FAIL;
+        }
         ap_info = (wifi_ap_record_t *)calloc(ap_count + 1, sizeof(wifi_ap_record_t));
         if (ap_info == NULL) {
             ESP_LOGE(TAG, "Failed to malloc buffer to print scan results");

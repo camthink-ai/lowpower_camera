@@ -1676,6 +1676,7 @@ static esp_err_t get_jpeg_stream_handle(httpd_req_t *req)
             }
         } else {
             res = ESP_FAIL;
+            break;
         }
 
         if (res == ESP_OK) {
@@ -2062,12 +2063,12 @@ static esp_err_t web_server_start(uint16_t port)
 {
     int i;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_open_sockets = 6;
+    config.max_open_sockets = 3;
     config.max_uri_handlers = sizeof(g_webHandlers) / sizeof(httpd_uri_t);
     config.lru_purge_enable = true;
     config.keep_alive_enable = true;
     config.server_port = port;
-    config.stack_size = 16384;
+    config.stack_size = 8192;
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&g_webServer, &config) == ESP_OK) {
         for (i = 0; i < config.max_uri_handlers; i++) {
