@@ -394,7 +394,9 @@ static uint32_t calculate_capture_wakeup(const capAttr_t *capture, time_t lastCa
         }
 
         // Anchor-aligned scheduling.
-        // - For minutes/hours: daily reset at anchor time (B semantics).
+        // - For minutes/hours: fixed grid every interval_sec within each 24h window
+        //   [period_start, period_start+24h) where period_start is the latest anchor <= now.
+        //   So slots continue across local midnight until the next anchor (e.g. 14:00).
         // - For days: schedule at anchor time every N days based on lastCapTime.
         time_t anchor_today = make_local_anchor_today(now, anchor_hour, anchor_min);
 
@@ -437,24 +439,20 @@ static uint32_t calculate_capture_wakeup(const capAttr_t *capture, time_t lastCa
             return MAX(wait_sec, 1);
         }
 
-        // Minutes/hours: build grid from today's anchor and reset daily.
-        time_t next = 0;
-        if (now < anchor_today) {
-            next = anchor_today;
-        } else {
-            time_t elapsed = now - anchor_today;
-            uint32_t k = (uint32_t)(elapsed / (time_t)interval_sec) + 1;
-            next = anchor_today + (time_t)k * (time_t)interval_sec;
-            // Daily reset: if next crosses to the next day, jump to next day's anchor.
-            if (next >= anchor_today + (24 * 60 * 60)) {
-                next = anchor_today + (24 * 60 * 60);
-            }
+        // Minutes/hours: rolling 24h window aligned to anchor (not calendar midnight).
+        const time_t day_sec = 24 * 60 * 60;
+        time_t period_start = (now >= anchor_today) ? anchor_today : (anchor_today - day_sec);
+        time_t period_end = period_start + day_sec;
+
+        time_t elapsed = now - period_start;
+        uint32_t k = (uint32_t)(elapsed / (time_t)interval_sec) + 1;
+        time_t next = period_start + (time_t)k * (time_t)interval_sec;
+        if (next >= period_end) {
+            next = period_end;
         }
 
-        // Missed window detection (only if today's grid started).
-        if (now >= anchor_today && lastCapTime > 0) {
-            time_t elapsed = now - anchor_today;
-            time_t last_grid = anchor_today + (elapsed / (time_t)interval_sec) * (time_t)interval_sec;
+        if (lastCapTime > 0) {
+            time_t last_grid = period_start + (elapsed / (time_t)interval_sec) * (time_t)interval_sec;
             if (last_grid > 0 && lastCapTime < last_grid) {
                 ESP_LOGI(TAG, "Missed capture window (min/hour anchor), triggering immediate capture");
                 return 1;

@@ -859,7 +859,7 @@
                                         v-model="mqttPlatform.username"
                                         :placeholder="$t('mqtt.username')"
                                         rows="1"
-                                        maxlength="63"
+                                        maxlength="127"
                                         @input="justifyAreaHeight($el)"
                                     ></textarea>
                                 </span>
@@ -874,7 +874,7 @@
                                         v-model="mqttPlatform.password"
                                         :placeholder="$t('mqtt.password')"
                                         rows="1"
-                                        maxlength="63"
+                                        maxlength="127"
                                         @input="justifyAreaHeight($el)"
                                     ></textarea>
                                 </span>
@@ -1352,7 +1352,7 @@
                                 <input
                                     type="text"
                                     v-model="cellParam.user"
-                                    maxlength="63"
+                                    maxlength="127"
                                 />
                             </span>
                         </div>

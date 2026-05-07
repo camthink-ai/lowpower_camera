@@ -3,13 +3,13 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "freertos/task.h"
-#include "esp_system.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-#include "nvs.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#include <esp_system.h>
+#include <esp_log.h>
+#include <nvs_flash.h>
+#include <nvs.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -227,8 +227,8 @@ typedef struct uploadAttr {
 typedef struct mqttAttr {
     char host[MAX_LEN_128];
     char topic[MAX_LEN_128];
-    char user[MAX_LEN_64];
-    char password[MAX_LEN_64];
+    char user[MAX_LEN_128];
+    char password[MAX_LEN_128];
     char clientId[MAX_LEN_128];
     uint32_t port;
     uint8_t qos;
@@ -278,8 +278,8 @@ typedef struct sensingPlatformAttr {
     uint32_t httpPort;
     // non-configurable parameters
     char topic[MAX_LEN_128];
-    char username[MAX_LEN_64];
-    char password[MAX_LEN_64];
+    char username[MAX_LEN_128];
+    char password[MAX_LEN_128];
     char clientId[MAX_LEN_128];
     uint8_t qos;
 } sensingPlatformAttr_t;
@@ -297,8 +297,8 @@ typedef struct mqttPlatformAttr {
     char topic[MAX_LEN_128];
     char clientId[MAX_LEN_128];
     uint8_t qos;
-    char username[MAX_LEN_64];
-    char password[MAX_LEN_64];
+    char username[MAX_LEN_128];
+    char password[MAX_LEN_128];
     uint8_t isConnected;
     uint8_t tlsEnable; // 0: disable, 1: enable
     char caName[MAX_LEN_128];

@@ -53,17 +53,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
         wifi->apUserCount++;
         ESP_LOGI(TAG, "WIFI_EVENT_AP_STACONNECTED count: %d", wifi->apUserCount);
-        if (system_get_mode() == MODE_CONFIG){
-            lightAttr_t light;
-            cfg_get_light_attr(&light);
-            camera_flash_led_ctrl(&light);
-        }
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi->apUserCount--;
         ESP_LOGI(TAG, "WIFI_EVENT_AP_STADISCONNECTED count: %d", wifi->apUserCount);
-        if(wifi->apUserCount == 0){
-            misc_flash_led_close();
-        }
     }
     /* Sta mode */
     if (event_id == WIFI_EVENT_STA_START) {

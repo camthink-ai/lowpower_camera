@@ -580,6 +580,9 @@ esp_err_t camera_snapshot(snapType_e type, uint8_t count)
     lightAttr_t light;
     cfg_get_light_attr(&light);
     camera_flash_led_ctrl(&light);
+    if(type == SNAP_BUTTON){
+        vTaskDelay(pdMS_TO_TICKS(1000)); // wait for button to be stable
+    }
     ESP_LOGI(TAG, "camera_snapshot Start");
     // esp_camera_fb_return(esp_camera_fb_get());
     h->bSnapShot = true;

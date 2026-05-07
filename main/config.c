@@ -771,7 +771,7 @@ esp_err_t cfg_get_device_info(deviceInfo_t *device)
     get_str(g_userHandle, KEY_DEVICE_NAME, device->name, sizeof(device->name), "NE101 Sensing Camera");
     get_str(g_factoryHandle, KEY_DEVICE_MAC, device->mac, sizeof(device->mac), NULL);
     get_str(g_factoryHandle, KEY_DEVICE_SN, device->sn, sizeof(device->sn), NVS_CFG_UNDEFINED);
-    get_str(g_factoryHandle, KEY_DEVICE_HVER, device->hardVersion, sizeof(device->hardVersion), "V1.0");
+    get_str(g_factoryHandle, KEY_DEVICE_HVER, device->hardVersion, sizeof(device->hardVersion), NVS_CFG_UNDEFINED);
     strncpy(device->softVersion, system_get_version(), sizeof(device->softVersion));
     get_str(g_factoryHandle, KEY_DEVICE_MODEL, device->model, sizeof(device->model), "NE101");
     get_str(g_factoryHandle, KEY_DEVICE_SECRETKEY, device->secretKey, sizeof(device->secretKey), NVS_CFG_UNDEFINED);
