@@ -35,6 +35,19 @@ typedef struct wifiList {
 void wifi_open(wifi_mode_t mode);
 
 /**
+ * Initialize WiFi driver only (esp_wifi_init + event handlers).
+ * Call before ble_prov_start() so wifi_prov_mgr can set WiFi mode.
+ * Does NOT set mode, configure AP/STA, or start WiFi.
+ */
+void wifi_init_driver(void);
+
+/**
+ * Switch from AP-only to APSTA mode (called after BLE stops to free DRAM).
+ * Creates STA netif and starts WiFi in APSTA mode. Push task auto-starts MQTT.
+ */
+void wifi_switch_to_apsta(void);
+
+/**
  * Deinitialize WiFi
  */
 void wifi_close(void);
@@ -46,6 +59,15 @@ void wifi_close(void);
  * @return ESP_OK on success, error code otherwise
  */
 esp_err_t wifi_sta_reconnect(const char *ssid, const char *password);
+
+/**
+ * Connect WiFi STA without prior disconnect.
+ * Use when STA was never connected (first provisioning).
+ * @param ssid Network SSID
+ * @param password Network password
+ * @return ESP_OK on success, ESP_FAIL on timeout
+ */
+esp_err_t wifi_sta_first_connect(const char *ssid, const char *password);
 
 /**
  * Scan for available WiFi networks

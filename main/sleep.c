@@ -763,6 +763,7 @@ void sleep_wait_event_bits(sleepBits_e bits, bool bWaitAll)
                                              true, bWaitAll, \
                                              pdMS_TO_TICKS(SLEEP_WAIT_TIMEOUT_MS));
     ESP_LOGI(TAG, "sleep right now, bits=%lu", uxBits);
+
     sleep_start();
 }
 
