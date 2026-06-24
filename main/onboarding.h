@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define ONBOARDING_DEFAULT_HOST    "broker.sample.com"
+#define ONBOARDING_DEFAULT_HOST    "mqtt://provisioncamthink.qa.halow.link"
 #define ONBOARDING_DEFAULT_PORT     1883
 #define ONBOARDING_TOPIC_PREFIX     "camera/"
 #define ONBOARDING_TOPIC_SUFFIX     "/default"
