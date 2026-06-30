@@ -343,6 +343,7 @@ static esp_err_t pcf8563_deinit(void)
         return ret;
     }
     g_is_initialized = false;
+    misc_io_set(CAMERA_POWER_IO,  CAMERA_POWER_OFF);
     return ESP_OK;
 }
 

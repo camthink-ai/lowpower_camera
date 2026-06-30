@@ -424,6 +424,7 @@ static esp_err_t init_camera(mdCamera_t *handle)
 esp_err_t camera_open(QueueHandle_t in, QueueHandle_t out)
 {
     struct mdCamera *handle = &g_mdCamera;
+    misc_io_set(CAMERA_POWER_IO,  CAMERA_POWER_ON);
     if (ESP_OK != init_camera(handle)) {
         sleep_set_event_bits(SLEEP_SNAPSHOT_STOP_BIT); // if no subsequent snapshot tasks, will enter sleep;
         return ESP_FAIL;

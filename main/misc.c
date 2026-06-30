@@ -882,8 +882,8 @@ static void misc_task()
 void misc_open(uint8_t* mode)
 {
     // memset(&g_misc, 0, sizeof(g_misc));
-    misc_io_cfg(SENSOR_POWER_IO, 0, 0);
-    misc_io_set(SENSOR_POWER_IO, 1);
+    misc_io_cfg(FLASH_LED_IO, 0, 0);
+    misc_io_set(FLASH_LED_IO, 1);
     adc_start();
     button_start();
     pwm_config();
@@ -900,6 +900,6 @@ void misc_close(void)
     if(g_misc.isInit ){
         button_stop();
         adc_stop();
-        misc_io_set(SENSOR_POWER_IO, 0);
+        misc_io_set(FLASH_LED_IO, 0);
     }
 }

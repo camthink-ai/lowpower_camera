@@ -8,11 +8,6 @@
 extern "C" {
 #endif
 
-/* Status LED control pins and states */
-#define STATUS_LED_IO       (42)
-#define STATUS_LED_ON       (0)
-#define STATUS_LED_OFF      (1)
-
 /* Flash LED control pins and states */ 
 #define FLASH_LED_IO        (42)
 #define FLASH_LED_ON        (1)
@@ -20,7 +15,7 @@ extern "C" {
 
 /* Light sensor control pins and parameters */
 #define LIGHT_DET_IO        (1)
-#define LIGHT_POWER_IO      (3)//(3)
+#define LIGHT_POWER_IO      (42)
 #define LIGHT_POWER_ON      (1)
 #define LIGHT_POWER_OFF     (0)
 #define LIGHT_MIN_SENS      (0)    /* Minimum light sensor value */
@@ -59,7 +54,6 @@ extern "C" {
 #define CAMERA_POWER_OFF (0)
 
 /* Sensor power and PWM control */
-#define SENSOR_POWER_IO (42)
 #define PWM_IO          (47)      /* PWM output pin */
 #define PWM_FREQ        (20000)   /* PWM frequency in Hz */
 #define PWM_MIN_DUTY    (10)      /* Minimum PWM duty cycle */
