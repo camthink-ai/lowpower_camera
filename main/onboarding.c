@@ -24,6 +24,7 @@
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define TAG "-->ONBOARDING"
 
@@ -170,6 +171,22 @@ static bool json_read_u32(cJSON *item, uint32_t *out)
     return false;
 }
 
+static bool json_read_float(cJSON *item, float *out)
+{
+    if (item == NULL || out == NULL) {
+        return false;
+    }
+    if (cJSON_IsNumber(item)) {
+        *out = (float)item->valuedouble;
+        return true;
+    }
+    if (cJSON_IsString(item) && item->valuestring != NULL) {
+        *out = (float)atof(item->valuestring);
+        return true;
+    }
+    return false;
+}
+
 static uint8_t clamp_u8(uint8_t val, uint8_t min_val, uint8_t max_val)
 {
     if (val < min_val) {
@@ -201,6 +218,39 @@ static uint32_t clamp_u32(uint32_t val, uint32_t min_val, uint32_t max_val)
         return max_val;
     }
     return val;
+}
+
+/* PIR display values (Web UI semantics) -> hardware register values */
+static uint8_t pir_blind_display_to_reg(float display_sec)
+{
+    if (display_sec < 0.5f) {
+        display_sec = 0.5f;
+    } else if (display_sec > 8.0f) {
+        display_sec = 8.0f;
+    }
+    int reg = (int)lroundf((display_sec - 0.5f) * 2.0f);
+    return clamp_u8((uint8_t)reg, 0, 15);
+}
+
+static uint8_t pir_pulse_display_to_reg(int pulse_count)
+{
+    if (pulse_count < 1) {
+        pulse_count = 1;
+    } else if (pulse_count > 4) {
+        pulse_count = 4;
+    }
+    return (uint8_t)(pulse_count - 1);
+}
+
+static uint8_t pir_window_display_to_reg(float display_sec)
+{
+    if (display_sec < 2.0f) {
+        display_sec = 2.0f;
+    } else if (display_sec > 8.0f) {
+        display_sec = 8.0f;
+    }
+    int reg = (int)lroundf((display_sec - 2.0f) / 2.0f);
+    return clamp_u8((uint8_t)reg, 0, 3);
 }
 
 static bool frame_size_is_allowed(uint8_t frame_size)
@@ -293,6 +343,65 @@ static bool parse_light_mode(const char *mode, uint8_t *out)
     return false;
 }
 
+#define CAP_INTERVAL_MAX 999
+
+static bool is_valid_time_hhmm(const char *time_str)
+{
+    if (time_str == NULL || strlen(time_str) != 5 ||
+        time_str[2] != ':' ||
+        time_str[0] < '0' || time_str[0] > '9' ||
+        time_str[1] < '0' || time_str[1] > '9' ||
+        time_str[3] < '0' || time_str[3] > '9' ||
+        time_str[4] < '0' || time_str[4] > '9') {
+        return false;
+    }
+
+    int hour = (time_str[0] - '0') * 10 + (time_str[1] - '0');
+    int minute = (time_str[3] - '0') * 10 + (time_str[4] - '0');
+    return (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59);
+}
+
+static bool is_valid_time_hhmmss(const char *time_str)
+{
+    if (time_str == NULL || strlen(time_str) != 8 ||
+        time_str[2] != ':' || time_str[5] != ':' ||
+        time_str[0] < '0' || time_str[0] > '9' ||
+        time_str[1] < '0' || time_str[1] > '9' ||
+        time_str[3] < '0' || time_str[3] > '9' ||
+        time_str[4] < '0' || time_str[4] > '9' ||
+        time_str[6] < '0' || time_str[6] > '9' ||
+        time_str[7] < '0' || time_str[7] > '9') {
+        return false;
+    }
+
+    int hour = (time_str[0] - '0') * 10 + (time_str[1] - '0');
+    int minute = (time_str[3] - '0') * 10 + (time_str[4] - '0');
+    int second = (time_str[6] - '0') * 10 + (time_str[7] - '0');
+    return (hour >= 0 && hour <= 23 &&
+            minute >= 0 && minute <= 59 &&
+            second >= 0 && second <= 59);
+}
+
+static void sanitize_timed_nodes(timedNode_t *nodes, uint8_t *count, size_t max_nodes)
+{
+    if (nodes == NULL || count == NULL) {
+        return;
+    }
+
+    uint8_t valid = 0;
+    for (uint8_t i = 0; i < *count && valid < max_nodes; i++) {
+        if (!is_valid_time_hhmmss(nodes[i].time)) {
+            ESP_LOGW(TAG, "Invalid timed node time '%s', skipping", nodes[i].time);
+            continue;
+        }
+        if (valid != i) {
+            nodes[valid] = nodes[i];
+        }
+        valid++;
+    }
+    *count = valid;
+}
+
 static void parse_capture_interval(const char *in_str, uint32_t *value, uint8_t *unit)
 {
     *value = 1;
@@ -317,6 +426,8 @@ static void parse_capture_interval(const char *in_str, uint32_t *value, uint8_t 
             *unit = 2;
         }
     }
+
+    *value = clamp_u32(*value, 1, CAP_INTERVAL_MAX);
 }
 
 static void parse_timed_nodes(cJSON *arr, timedNode_t *nodes, uint8_t *count, size_t max_nodes)
@@ -325,30 +436,41 @@ static void parse_timed_nodes(cJSON *arr, timedNode_t *nodes, uint8_t *count, si
         return;
     }
 
+    memset(nodes, 0, max_nodes * sizeof(timedNode_t));
+
     size_t n = cJSON_GetArraySize(arr);
     if (n > max_nodes) {
         n = max_nodes;
     }
-    *count = (uint8_t)n;
 
-    for (size_t i = 0; i < n; i++) {
+    uint8_t parsed = 0;
+    for (size_t i = 0; i < n && parsed < max_nodes; i++) {
         cJSON *item = cJSON_GetArrayItem(arr, i);
         if (item == NULL || !cJSON_IsObject(item)) {
             continue;
         }
         cJSON *day = cJSON_GetObjectItem(item, "day");
         cJSON *time = cJSON_GetObjectItem(item, "time");
+        if (time == NULL || !cJSON_IsString(time) || time->valuestring == NULL) {
+            ESP_LOGW(TAG, "Timed node missing valid time field, skipping");
+            continue;
+        }
+        if (!is_valid_time_hhmmss(time->valuestring)) {
+            ESP_LOGW(TAG, "Invalid timed node time '%s', skipping", time->valuestring);
+            continue;
+        }
+
         if (day != NULL) {
             uint8_t day_val;
             if (json_read_u8(day, &day_val)) {
-                nodes[i].day = clamp_u8(day_val, 0, 7);
+                nodes[parsed].day = clamp_u8(day_val, 0, 7);
             }
         }
-        if (time != NULL && cJSON_IsString(time) && time->valuestring != NULL) {
-            strncpy(nodes[i].time, time->valuestring, sizeof(nodes[i].time) - 1);
-            nodes[i].time[sizeof(nodes[i].time) - 1] = '\0';
-        }
+        strncpy(nodes[parsed].time, time->valuestring, sizeof(nodes[parsed].time) - 1);
+        nodes[parsed].time[sizeof(nodes[parsed].time) - 1] = '\0';
+        parsed++;
     }
+    *count = parsed;
 }
 
 static bool timed_nodes_differs(const timedNode_t *a, const timedNode_t *b, uint8_t count)
@@ -520,6 +642,16 @@ static void sanitize_light_attr(lightAttr_t *light)
     light->lightMode = clamp_u8(light->lightMode, 0, 3);
     light->threshold = clamp_u8(light->threshold, 0, 100);
     light->duty = clamp_u8(light->duty, 0, 100);
+    if (light->startTime[0] != '\0' && !is_valid_time_hhmm(light->startTime)) {
+        ESP_LOGW(TAG, "Invalid light_start_time '%s', resetting to 00:00", light->startTime);
+        strncpy(light->startTime, "00:00", sizeof(light->startTime) - 1);
+        light->startTime[sizeof(light->startTime) - 1] = '\0';
+    }
+    if (light->endTime[0] != '\0' && !is_valid_time_hhmm(light->endTime)) {
+        ESP_LOGW(TAG, "Invalid light_end_time '%s', resetting to 00:00", light->endTime);
+        strncpy(light->endTime, "00:00", sizeof(light->endTime) - 1);
+        light->endTime[sizeof(light->endTime) - 1] = '\0';
+    }
 }
 
 static void apply_light_config(cJSON *root, lightAttr_t *light)
@@ -551,10 +683,17 @@ static void sanitize_capture_attr(capAttr_t *cap)
     cap->bButtonCap = cap->bButtonCap ? 1 : 0;
     cap->scheCapMode = cap->scheCapMode ? 1 : 0;
     cap->intervalUnit = clamp_u8(cap->intervalUnit, 0, 2);
-    if (cap->intervalValue < 1) {
-        cap->intervalValue = 1;
+    cap->intervalValue = clamp_u32(cap->intervalValue, 1, CAP_INTERVAL_MAX);
+    if (cap->intervalAnchorTime[0] != '\0' &&
+        !is_valid_time_hhmm(cap->intervalAnchorTime)) {
+        ESP_LOGW(TAG, "Invalid intervalAnchorTime '%s', resetting to 00:00",
+                 cap->intervalAnchorTime);
+        strncpy(cap->intervalAnchorTime, "00:00", sizeof(cap->intervalAnchorTime) - 1);
+        cap->intervalAnchorTime[sizeof(cap->intervalAnchorTime) - 1] = '\0';
     }
     cap->timedCount = clamp_u8(cap->timedCount, 0, 8);
+    sanitize_timed_nodes(cap->timedNodes, &cap->timedCount,
+                         sizeof(cap->timedNodes) / sizeof(cap->timedNodes[0]));
 }
 
 static void apply_capture_config(cJSON *root, capAttr_t *cap)
@@ -571,12 +710,16 @@ static void apply_capture_config(cJSON *root, capAttr_t *cap)
     }
 
     cJSON *j_cap_interval = json_item_any(root, "capture_interval", NULL);
-    if (j_cap_interval != NULL && cJSON_IsString(j_cap_interval) && j_cap_interval->valuestring != NULL) {
-        uint32_t ivalue;
-        uint8_t iunit;
-        parse_capture_interval(j_cap_interval->valuestring, &ivalue, &iunit);
-        cap->intervalValue = ivalue;
-        cap->intervalUnit = iunit;
+    if (j_cap_interval != NULL) {
+        if (cJSON_IsString(j_cap_interval) && j_cap_interval->valuestring != NULL) {
+            uint32_t ivalue;
+            uint8_t iunit;
+            parse_capture_interval(j_cap_interval->valuestring, &ivalue, &iunit);
+            cap->intervalValue = ivalue;
+            cap->intervalUnit = iunit;
+        } else if (cJSON_IsNumber(j_cap_interval)) {
+            cap->intervalValue = clamp_u32((uint32_t)j_cap_interval->valueint, 1, CAP_INTERVAL_MAX);
+        }
     }
 
     (void)json_apply_u8(root, "bScheCap", NULL, &cap->bScheCap);
@@ -604,6 +747,8 @@ static void sanitize_upload_attr(uploadAttr_t *upload)
 {
     upload->uploadMode = clamp_u8(upload->uploadMode, 0, 1);
     upload->timedCount = clamp_u8(upload->timedCount, 0, 10);
+    sanitize_timed_nodes(upload->timedNodes, &upload->timedCount,
+                         sizeof(upload->timedNodes) / sizeof(upload->timedNodes[0]));
 }
 
 static void apply_upload_config(cJSON *root, uploadAttr_t *upload)
@@ -640,9 +785,10 @@ static void sanitize_trigger_config(uint8_t *trigger_mode, pirAttr_t *pir)
     if (*trigger_mode > TRIGGER_MODE_PIR) {
         *trigger_mode = TRIGGER_MODE_DISABLED;
     }
-    pir->blind &= 0x0F;
-    pir->pulse &= 0x03;
-    pir->window &= 0x03;
+    pir->sens = clamp_u8(pir->sens, 0, 255);
+    pir->blind = clamp_u8(pir->blind & 0x0F, 0, 15);
+    pir->pulse = clamp_u8(pir->pulse & 0x03, 0, 3);
+    pir->window = clamp_u8(pir->window & 0x03, 0, 3);
 }
 
 static void apply_trigger_config(cJSON *root, uint8_t *trigger_mode, pirAttr_t *pir)
@@ -667,23 +813,23 @@ static void apply_trigger_config(cJSON *root, uint8_t *trigger_mode, pirAttr_t *
     }
     cJSON *j_blind = cJSON_GetObjectItem(root, "blind");
     if (j_blind != NULL) {
-        uint8_t val;
-        if (json_read_u8(j_blind, &val)) {
-            pir->blind = val & 0x0F;
+        float display_sec;
+        if (json_read_float(j_blind, &display_sec)) {
+            pir->blind = pir_blind_display_to_reg(display_sec);
         }
     }
     cJSON *j_pulse = cJSON_GetObjectItem(root, "pulse");
     if (j_pulse != NULL) {
-        uint8_t val;
-        if (json_read_u8(j_pulse, &val)) {
-            pir->pulse = val & 0x03;
+        float display_count;
+        if (json_read_float(j_pulse, &display_count)) {
+            pir->pulse = pir_pulse_display_to_reg((int)lroundf(display_count));
         }
     }
     cJSON *j_window = cJSON_GetObjectItem(root, "window");
     if (j_window != NULL) {
-        uint8_t val;
-        if (json_read_u8(j_window, &val)) {
-            pir->window = val & 0x03;
+        float display_sec;
+        if (json_read_float(j_window, &display_sec)) {
+            pir->window = pir_window_display_to_reg(display_sec);
         }
     }
 
@@ -781,6 +927,28 @@ esp_err_t onboarding_handle_config(const char *data, size_t len, bool *mqtt_chan
     trigger_mode = old_trigger_mode;
     memcpy(&pir, &old_pir, sizeof(pir));
     apply_trigger_config(root, &trigger_mode, &pir);
+
+    /* Keep trigger_mode consistent with bAlarmInCap when that field is present */
+    if (json_item_any(root, "bAlarmInCap", NULL) != NULL) {
+        if (!cap.bAlarmInCap) {
+            trigger_mode = TRIGGER_MODE_DISABLED;
+        } else if (json_item_any(root, "trigger_mode", NULL) == NULL &&
+                   trigger_mode == TRIGGER_MODE_DISABLED) {
+            trigger_mode = TRIGGER_MODE_ALARM;
+        }
+        sanitize_trigger_config(&trigger_mode, &pir);
+    }
+
+    /* PIR parameter fields imply PIR mode when trigger_mode is omitted */
+    if (json_item_any(root, "trigger_mode", NULL) == NULL && cap.bAlarmInCap &&
+        (cJSON_GetObjectItem(root, "sens") != NULL ||
+         cJSON_GetObjectItem(root, "blind") != NULL ||
+         cJSON_GetObjectItem(root, "pulse") != NULL ||
+         cJSON_GetObjectItem(root, "window") != NULL)) {
+        trigger_mode = TRIGGER_MODE_PIR;
+        sanitize_trigger_config(&trigger_mode, &pir);
+    }
+
     if (trigger_mode != old_trigger_mode) {
         cfg_set_trigger_mode(trigger_mode);
     }
