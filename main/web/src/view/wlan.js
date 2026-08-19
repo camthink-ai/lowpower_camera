@@ -23,6 +23,7 @@ function Wlan() {
             { value: "AU-revmf", label: "AU-revmf" },
             { value: "EU", label: "EU" },
             { value: "IN", label: "IN" },
+            { value: "JP", label: "JP" },
             { value: "KR", label: "KR" },
             { value: "NZ", label: "NZ" },
             { value: "SG", label: "SG" },

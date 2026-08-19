@@ -2014,8 +2014,8 @@ CONFIG_ESP_MODEM_USE_PPP_MODE=y
 #
 CONFIG_MM_BCF_FILE="bcf_fgh100maamd.mbin"
 CONFIG_MM_BCF_MULTI=y
-CONFIG_MM_BCF_EMBEDDED_LIST="fcc:bcf_fgh100mabmd.mbin,ce:bcf_fgh100maamd.mbin"
-CONFIG_MM_BCF_COUNTRY_MAP="AU=fcc,KR=fcc,NZ=fcc,SG=fcc,US=fcc,EU=ce,IN=ce"
+CONFIG_MM_BCF_EMBEDDED_LIST="fcc:bcf_fgh100mabmd.mbin,ce:bcf_fgh100maamd.mbin,jp:bcf_fgh100mjaamd.mbin"
+CONFIG_MM_BCF_COUNTRY_MAP="AU=fcc,KR=fcc,NZ=fcc,SG=fcc,US=fcc,EU=ce,IN=ce,JP=jp"
 CONFIG_MM_BCF_DEFAULT_ID="ce"
 CONFIG_MM_FW_FILE="mm6108.mbin"
 CONFIG_MMHAL_CHIP_TYPE_MM6108=y
