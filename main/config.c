@@ -323,6 +323,40 @@ static esp_err_t set_i8(nvs_handle_t handle, const char *key, int8_t value)
     return err;
 }
 
+
+static esp_err_t get_u16(nvs_handle_t handle, const char *key, uint16_t *value, uint16_t def)
+{
+    esp_err_t err = ESP_OK;
+    char out_value[32] = {0};
+    size_t len = sizeof(out_value);
+
+    err = nvs_get_str(handle, key, out_value, &len);
+    if (err != ESP_OK) {
+        *value = def;
+    } else {
+        unsigned long parsed = strtoul(out_value, NULL, 10);
+        if (parsed > 65535) {
+            parsed = 65535;
+        }
+        *value = (uint16_t)parsed;
+    }
+    return err;
+}
+
+
+static esp_err_t set_u16(nvs_handle_t handle, const char *key, uint16_t value)
+{
+    esp_err_t err = ESP_OK;
+    char in_value[32] = {0};
+
+    snprintf(in_value, sizeof(in_value), "%u", value);
+    err = nvs_set_str(handle, key, in_value);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set key:%s value:%d failed", key, value);
+    }
+    return err;
+}
+
 static esp_err_t get_str(nvs_handle_t handle, const char *key, char *value, size_t length, const char *def)
 {
     esp_err_t err = ESP_OK;
@@ -894,6 +928,8 @@ esp_err_t cfg_get_image_attr(imgAttr_t *image)
     get_u8(g_userHandle, KEY_IMG_FRAMESIZE, &image->frameSize, 14); // default FRAMESIZE_FHD
     get_u8(g_userHandle, KEY_IMG_QUALITY, &image->quality, 12); // default quality 12 (0-63, higher value means lower quality)
     get_u8(g_userHandle, KEY_IMG_HDR, &image->hdrEnable, 0); // default HDR disabled
+    get_u8(g_userHandle, KEY_IMG_BAEC, &image->bAec, 1); // default 1=auto exposure, never 0 (manual with aecValue 0 = black image)
+    get_u16(g_userHandle, KEY_IMG_AECVALUE, &image->aecValue, 0); // default manual exposure lines
     mutex_unlock();
     return ESP_OK;
 }
@@ -913,6 +949,8 @@ esp_err_t cfg_set_image_attr(imgAttr_t *image)
     set_u8(g_userHandle, KEY_IMG_FRAMESIZE, image->frameSize);
     set_u8(g_userHandle, KEY_IMG_QUALITY, image->quality);
     set_u8(g_userHandle, KEY_IMG_HDR, image->hdrEnable);
+    set_u8(g_userHandle, KEY_IMG_BAEC, image->bAec);
+    set_u16(g_userHandle, KEY_IMG_AECVALUE, image->aecValue);
     commit_cfg(g_userHandle);
     mutex_unlock();
     return ESP_OK;

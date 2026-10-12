@@ -98,6 +98,14 @@ bool camera_is_snapshot_fail();
 const char *camera_get_backend_name();
 
 /**
+ * @brief Get exposure timing info for UI ms conversion (CSI backend only)
+ * @param lineTimeUs  output: one exposure line duration in microseconds, 0 if unknown
+ * @param maxAecValue output: max manual exposure lines = min(1200, VTS)
+ * @return ESP_OK on success, error code otherwise
+ */
+esp_err_t camera_exposure_info(uint32_t *lineTimeUs, uint16_t *maxAecValue);
+
+/**
  * Apply JPEG quality limit based on resolution
  * If resolution > 3MP, ensure jpeg_quality >= 6
  * @param frameSize Frame size enum value

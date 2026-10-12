@@ -82,6 +82,10 @@ typedef struct mdCamera {
 
 static mdCamera_t g_mdCamera = {0};  // Global camera state instance
 
+// Cached exposure timing for web UI ms conversion, valid after CSI init (0 = unknown)
+static uint32_t s_expoLineTimeUs = 0;
+static uint16_t s_expoMaxLines = 1200;
+
 /**
  * Lock camera mutex for thread-safe operations
  */
@@ -270,6 +274,44 @@ static void uvc_camera_deinit(void)
 	uvc_deinit();
 }
 
+// Cache exposure timing (line time in us, max exposure lines) from sensor timing registers.
+// PCLK mirrors the driver's JPEG-mode PLL branches (ov5640.c set_framesize):
+// pclk = xclk/2*mult/4*2/5/4/4, mult is 160/180/200 by framesize branch.
+static void camera_cache_exposure_timing(sensor_t *s)
+{
+    int hts = -1, vts = -1;
+    if (s && s->get_reg) {
+        int hts_h = s->get_reg(s, 0x380c, 0xFF);
+        int hts_l = s->get_reg(s, 0x380d, 0xFF);
+        int vts_h = s->get_reg(s, 0x380e, 0xFF);
+        int vts_l = s->get_reg(s, 0x380f, 0xFF);
+        if (hts_h >= 0 && hts_l >= 0) {
+            hts = (hts_h << 8) | hts_l;
+        }
+        if (vts_h >= 0 && vts_l >= 0) {
+            vts = (vts_h << 8) | vts_l;
+        }
+    }
+    if (hts > 0 && vts > 0 && s->xclk_freq_hz > 0) {
+        uint8_t sys_mul = 200;
+        if (s->status.framesize < FRAMESIZE_QVGA || s->xclk_freq_hz == 16000000) {
+            sys_mul = 160;
+        } else if (s->status.framesize < FRAMESIZE_XGA) {
+            sys_mul = 180;
+        }
+        uint32_t pclk = s->xclk_freq_hz / 2 * sys_mul / 4 * 2 / 5 / 16;
+        if (pclk > 0) {
+            s_expoLineTimeUs = (uint32_t)((uint64_t)hts * 1000000ULL / pclk);
+            s_expoMaxLines = vts > 1200 ? 1200 : (uint16_t)vts;
+            ESP_LOGI(TAG, "exposure timing: HTS=%d VTS=%d pclk=%" PRIu32 " lineTimeUs=%" PRIu32 " maxLines=%u",
+                     hts, vts, pclk, s_expoLineTimeUs, s_expoMaxLines);
+            return;
+        }
+    }
+    s_expoLineTimeUs = 0;
+    s_expoMaxLines = 1200;
+}
+
 static esp_err_t csi_camera_init(void)
 {
     esp_err_t err;
@@ -294,6 +336,13 @@ static esp_err_t csi_camera_init(void)
     }
     sensor_t *s = esp_camera_sensor_get();
 
+    if (image.bAec) {
+        s->set_exposure_ctrl(s, 1);              // auto exposure
+    } else {
+        s->set_exposure_ctrl(s, 0);              // manual: switch mode first
+        uint16_t aec = image.aecValue > 1200 ? 1200 : image.aecValue;
+        s->set_aec_value(s, aec);                // then write exposure lines (driver clamps to VTS)
+    }
     s->set_ae_level(s, image.aeLevel);
     s->set_gain_ctrl(s, 1);
     s->set_gainceiling(s, 0);
@@ -302,6 +351,7 @@ static esp_err_t csi_camera_init(void)
     s->set_contrast(s, image.contrast);
     s->set_saturation(s, image.saturation);
     s->set_brightness(s, image.brightness);
+    camera_cache_exposure_timing(s);
 
     return ESP_OK;
 }
@@ -336,6 +386,16 @@ static esp_err_t csi_camera_set_image(imgAttr_t *image)
     if (current.saturation != image->saturation) {
         s->set_saturation(s, image->saturation);
         ESP_LOGI(TAG, "set_saturation : %d", image->saturation);
+    }
+    if (current.bAec != image->bAec || current.aecValue != image->aecValue) {
+        if (image->bAec) {
+            s->set_exposure_ctrl(s, 1);
+        } else {
+            uint16_t aec = image->aecValue > 1200 ? 1200 : image->aecValue;
+            s->set_exposure_ctrl(s, 0);
+            s->set_aec_value(s, aec);
+        }
+        ESP_LOGI(TAG, "set exposure: mode=%s aecValue=%d", image->bAec ? "auto" : "manual", image->aecValue);
     }
     if (current.frameSize != image->frameSize && image->frameSize < FRAMESIZE_INVALID) {
         if (s && s->set_framesize) {
@@ -460,6 +520,18 @@ esp_err_t camera_close()
         h->vt->deinit();
     }
     misc_io_set(CAMERA_POWER_IO,  CAMERA_POWER_OFF);
+    s_expoLineTimeUs = 0;   // sensor is powered off, cached timing is stale
+    s_expoMaxLines = 1200;
+    return ESP_OK;
+}
+
+esp_err_t camera_exposure_info(uint32_t *lineTimeUs, uint16_t *maxAecValue)
+{
+    if (!lineTimeUs || !maxAecValue) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *lineTimeUs = s_expoLineTimeUs;     // 0 = unknown (camera not opened yet / USB backend)
+    *maxAecValue = s_expoMaxLines;
     return ESP_OK;
 }
 

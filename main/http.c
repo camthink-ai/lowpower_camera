@@ -43,6 +43,8 @@ extern const char js_start[] asm("_binary_index_js_start");
 extern const char js_end[] asm("_binary_index_js_end");
 extern const char css_start[] asm("_binary_index_css_start");
 extern const char css_end[] asm("_binary_index_css_end");
+extern const char exposure_html_start[] asm("_binary_exposure_html_start");
+extern const char exposure_html_end[] asm("_binary_exposure_html_end");
 
 /**
  * HTTP response structure
@@ -192,6 +194,20 @@ static esp_err_t get_css_handler(httpd_req_t *req)
     return ESP_OK;
 }
 /**
+ * Manual exposure tool page GET handler
+ * @param req HTTP request handle
+ * @return ESP_OK on success
+ */
+static esp_err_t get_exposure_html_handler(httpd_req_t *req)
+{
+    const uint32_t len = exposure_html_end - exposure_html_start;
+    clear_timeout();
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    httpd_resp_send(req, (const char *)exposure_html_start, len);
+    return ESP_OK;
+}
+/**
  * 404 Error handler - Redirects to root page
  * @param req HTTP request handle
  * @param err Error code
@@ -243,6 +259,14 @@ esp_err_t get_cam_param_handle(httpd_req_t *req)
     s2j_json_set_basic_element(json_obj, &image, int, bDcw);
     s2j_json_set_basic_element(json_obj, &image, int, bColorbar);
     s2j_json_set_basic_element(json_obj, &image, int, hdrEnable);
+    // extra exposure timing info for UI ms conversion (0 = unknown, hide ms display)
+    {
+        uint32_t lineTimeUs = 0;
+        uint16_t maxAecValue = 1200;
+        camera_exposure_info(&lineTimeUs, &maxAecValue);
+        cJSON_AddNumberToObject(json_obj, "lineTimeUs", lineTimeUs);
+        cJSON_AddNumberToObject(json_obj, "maxAecValue", maxAecValue);
+    }
 
     str = cJSON_PrintUnformatted(json_obj);
     httpd_resp_sendstr(req, str);
@@ -273,6 +297,12 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, frameSize);
         s2j_struct_get_basic_element(image, json, int, quality);
         s2j_struct_get_basic_element(image, json, int, hdrEnable);
+        s2j_struct_get_basic_element(image, json, int, bAec);
+        s2j_struct_get_basic_element(image, json, int, aecValue);
+        image->bAec = image->bAec ? 1 : 0;        // normalize auto/manual switch
+        if (image->aecValue > 1200) {
+            image->aecValue = 1200;                // clamp before NVS write and sensor apply
+        }
 
         // Apply JPEG quality limit for resolutions > 3MP
         if (image->frameSize < FRAMESIZE_INVALID && image->quality <= 63) {
@@ -1655,6 +1685,11 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/",
         .method = HTTP_GET,
         .handler = get_root_handler,
+    },
+    {
+        .uri = "/tools/exposure.html",
+        .method = HTTP_GET,
+        .handler = get_exposure_html_handler,
     },
     {
         .uri = "/favicon.ico",
