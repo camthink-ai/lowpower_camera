@@ -43,8 +43,6 @@ extern const char js_start[] asm("_binary_index_js_start");
 extern const char js_end[] asm("_binary_index_js_end");
 extern const char css_start[] asm("_binary_index_css_start");
 extern const char css_end[] asm("_binary_index_css_end");
-extern const char exposure_html_start[] asm("_binary_exposure_html_start");
-extern const char exposure_html_end[] asm("_binary_exposure_html_end");
 
 /**
  * HTTP response structure
@@ -191,20 +189,6 @@ static esp_err_t get_css_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "text/css");
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     httpd_resp_send(req, (const char *)css_start, len);
-    return ESP_OK;
-}
-/**
- * Manual exposure tool page GET handler
- * @param req HTTP request handle
- * @return ESP_OK on success
- */
-static esp_err_t get_exposure_html_handler(httpd_req_t *req)
-{
-    const uint32_t len = exposure_html_end - exposure_html_start;
-    clear_timeout();
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_send(req, (const char *)exposure_html_start, len);
     return ESP_OK;
 }
 /**
@@ -1685,11 +1669,6 @@ static const httpd_uri_t g_webHandlers[] = {
         .uri = "/",
         .method = HTTP_GET,
         .handler = get_root_handler,
-    },
-    {
-        .uri = "/tools/exposure.html",
-        .method = HTTP_GET,
-        .handler = get_exposure_html_handler,
     },
     {
         .uri = "/favicon.ico",
