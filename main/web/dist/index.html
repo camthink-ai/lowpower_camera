@@ -5,9 +5,9 @@
   var g = function (id) { return document.getElementById(id); };
   var lineTimeUs = 0, maxAec = 1200;
   function fmt(l) {
-    if (lineTimeUs <= 0) { return l + ' 行'; }
+    if (lineTimeUs <= 0) { return ''; }
     var ms = l * lineTimeUs / 1000;
-    return l + ' 行 ≈ ' + (ms >= 100 ? Math.round(ms) : ms.toFixed(1)) + ' ms';
+    return (ms >= 100 ? Math.round(ms) : ms.toFixed(1)) + ' ms';
   }
   function refresh() {
     g('me-exp-val').textContent = fmt(+g('me-exp-slider').value);
@@ -22,7 +22,7 @@
       s.value = Math.min(c.aecValue || 0, maxAec);
       g('me-exp-manual').checked = !c.bAec;
       g('me-exp-hint').textContent = lineTimeUs > 0
-        ? '每行 ' + (lineTimeUs / 1000).toFixed(2) + ' ms，上限 ' + maxAec + ' 行'
+        ? '每行 ' + (lineTimeUs / 1000).toFixed(2) + ' ms，上限 ' + (maxAec * lineTimeUs / 1000000).toFixed(0) + ' ms'
         : '相机未初始化，毫秒换算待生效';
       refresh();
     }).catch(function () { g('me-exp-hint').textContent = '读取配置失败'; });

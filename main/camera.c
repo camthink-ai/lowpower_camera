@@ -86,6 +86,11 @@ static mdCamera_t g_mdCamera = {0};  // Global camera state instance
 static uint32_t s_expoLineTimeUs = 0;
 static uint16_t s_expoMaxLines = 1200;
 
+// Manual exposure time cap for UI/application layer (1000ms+ acts as slow shutter)
+#define CAMERA_MANUAL_EXPOSURE_MAX_MS 100
+// Used before timing is known: ~100ms assuming FHD line time (~0.91ms/line)
+#define CAMERA_MANUAL_EXPOSURE_FALLBACK_MAX_LINES 110
+
 /**
  * Lock camera mutex for thread-safe operations
  */
@@ -302,14 +307,23 @@ static void camera_cache_exposure_timing(sensor_t *s)
         uint32_t pclk = s->xclk_freq_hz / 2 * sys_mul / 4 * 2 / 5 / 16;
         if (pclk > 0) {
             s_expoLineTimeUs = (uint32_t)((uint64_t)hts * 1000000ULL / pclk);
-            s_expoMaxLines = vts > 1200 ? 1200 : (uint16_t)vts;
+            if (s_expoLineTimeUs > 0) {
+                uint32_t cap = 1000UL * CAMERA_MANUAL_EXPOSURE_MAX_MS / s_expoLineTimeUs;   // lines within 100ms
+                uint32_t m = vts > 1200 ? 1200 : (uint32_t)vts;
+                if (cap < m) {
+                    m = cap;
+                }
+                s_expoMaxLines = (uint16_t)m;
+            } else {
+                s_expoMaxLines = 1200;
+            }
             ESP_LOGI(TAG, "exposure timing: HTS=%d VTS=%d pclk=%" PRIu32 " lineTimeUs=%" PRIu32 " maxLines=%u",
                      hts, vts, pclk, s_expoLineTimeUs, s_expoMaxLines);
             return;
         }
     }
     s_expoLineTimeUs = 0;
-    s_expoMaxLines = 1200;
+    s_expoMaxLines = CAMERA_MANUAL_EXPOSURE_FALLBACK_MAX_LINES;
 }
 
 static esp_err_t csi_camera_init(void)
@@ -340,7 +354,7 @@ static esp_err_t csi_camera_init(void)
         s->set_exposure_ctrl(s, 1);              // auto exposure
     } else {
         s->set_exposure_ctrl(s, 0);              // manual: switch mode first
-        uint16_t aec = image.aecValue > 1200 ? 1200 : image.aecValue;
+        uint16_t aec = image.aecValue > s_expoMaxLines ? s_expoMaxLines : image.aecValue;
         s->set_aec_value(s, aec);                // then write exposure lines (driver clamps to VTS)
     }
     s->set_ae_level(s, image.aeLevel);
@@ -391,7 +405,7 @@ static esp_err_t csi_camera_set_image(imgAttr_t *image)
         if (image->bAec) {
             s->set_exposure_ctrl(s, 1);
         } else {
-            uint16_t aec = image->aecValue > 1200 ? 1200 : image->aecValue;
+            uint16_t aec = image->aecValue > s_expoMaxLines ? s_expoMaxLines : image->aecValue;
             s->set_exposure_ctrl(s, 0);
             s->set_aec_value(s, aec);
         }

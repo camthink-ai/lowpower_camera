@@ -284,8 +284,13 @@ esp_err_t set_cam_param_handle(httpd_req_t *req)
         s2j_struct_get_basic_element(image, json, int, bAec);
         s2j_struct_get_basic_element(image, json, int, aecValue);
         image->bAec = image->bAec ? 1 : 0;        // normalize auto/manual switch
-        if (image->aecValue > 1200) {
-            image->aecValue = 1200;                // clamp before NVS write and sensor apply
+        {
+            uint32_t lineTimeUs = 0;
+            uint16_t maxAec = 1200;
+            camera_exposure_info(&lineTimeUs, &maxAec);
+            if (image->aecValue > maxAec) {
+                image->aecValue = maxAec;          // clamp to exposure time cap before NVS write
+            }
         }
 
         // Apply JPEG quality limit for resolutions > 3MP
