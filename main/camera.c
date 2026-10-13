@@ -86,10 +86,10 @@ static mdCamera_t g_mdCamera = {0};  // Global camera state instance
 static uint32_t s_expoLineTimeUs = 0;
 static uint16_t s_expoMaxLines = 1200;
 
-// Manual exposure time cap for UI/application layer (1000ms+ acts as slow shutter)
-#define CAMERA_MANUAL_EXPOSURE_MAX_MS 100
-// Used before timing is known: ~100ms assuming FHD line time (~0.91ms/line)
-#define CAMERA_MANUAL_EXPOSURE_FALLBACK_MAX_LINES 110
+// Manual exposure time cap for UI/application layer
+#define CAMERA_MANUAL_EXPOSURE_MAX_MS 300
+// Used before timing is known: ~300ms assuming FHD line time (~0.91ms/line)
+#define CAMERA_MANUAL_EXPOSURE_FALLBACK_MAX_LINES 330
 
 /**
  * Lock camera mutex for thread-safe operations
