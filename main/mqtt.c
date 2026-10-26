@@ -37,6 +37,7 @@ typedef struct mdMqtt {
     void *sendBuf;
     size_t sendBufSize;
     esp_mqtt_client_config_t cfg;
+    bool useOnboardingDefault;
 } mdMqtt_t;
 
 static mdMqtt_t g_MQ = {0};
@@ -59,17 +60,21 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event, void *hand
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-
-            /* Always subscribe to the default onboarding topic for cloud config updates */
-            char topic[ONBOARDING_TOPIC_MAX_LEN] = {0};
-            if (onboarding_get_default_topic(topic, sizeof(topic)) == ESP_OK) {
-                ESP_LOGI(TAG, "Subscribing to default topic: %s", topic);
-                int msg_id = esp_mqtt_client_subscribe(mqtt->client, topic, 0);
-                if (msg_id < 0) {
-                    ESP_LOGE(TAG, "Failed to subscribe to default topic");
-                } else {
-                    ESP_LOGI(TAG, "Default topic subscription msg_id=%d", msg_id);
+            if (mqtt->useOnboardingDefault) {
+                char topic[ONBOARDING_TOPIC_MAX_LEN] = {0};
+                if (onboarding_get_default_topic(topic, sizeof(topic)) == ESP_OK) {
+                    ESP_LOGI(TAG, "Subscribing to default topic: %s", topic);
+                    int msg_id = esp_mqtt_client_subscribe(mqtt->client, topic, 0);
+                    if (msg_id < 0) {
+                        ESP_LOGE(TAG, "Failed to subscribe to default topic");
+                    } else {
+                        ESP_LOGI(TAG, "Default topic subscription msg_id=%d", msg_id);
+                    }
                 }
+            } else {
+                ESP_LOGI(TAG, "Custom broker, skip onboarding topic subscribe");
+                storage_upload_start();
+                push_ready();
             }
             mqtt->isConnected = true;
             xEventGroupClearBits(mqtt->eventGroup, MQTT_DISCONNECT_BIT);
@@ -240,9 +245,11 @@ static void mqtt_esp_config(mdMqtt_t *m)
     memset(c, 0, sizeof(esp_mqtt_client_config_t));
     cfg_get_mqtt_attr(&m->mqtt);
     /* If no user-defined host, fall back to onboarding defaults */
+    m->useOnboardingDefault = false;
     if (m->mqtt.host[0] == '\0') {
         snprintf(m->mqtt.host, sizeof(m->mqtt.host), "%s", onboarding_get_default_host());
         m->mqtt.port = onboarding_get_default_port();
+        m->useOnboardingDefault = true;
         ESP_LOGI(TAG, "Using default onboarding broker: %s:%lu",
                  m->mqtt.host, (unsigned long)m->mqtt.port);
     }
