@@ -267,7 +267,6 @@ static void mqtt_esp_config(mdMqtt_t *m)
     }
     if (m->mqtt.tlsEnable) {
         if (strlen(m->mqtt.caName)) {
-            c->broker.verification.skip_cert_common_name_check = true;
             c->broker.verification.certificate = filesystem_read(MQTT_CA_PATH);
         } else {
             c->broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
